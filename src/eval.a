@@ -1,0 +1,910 @@
+; B65 BASIC - expression evaluator (after BBC BASIC (Z80) v5 EVAL.Z80)
+; Result: numeric in acc/accx (accx=0: 32-bit integer), etype=0
+;         string in ACCS/slen, etype=$80
+; Precedence (BASIC V): 1 OR EOR, 2 AND, 3 = <> < > <= >= << >> >>>,
+;                       4 + -, 5 * / MOD DIV, 6 ^
+
+OP_OR=0
+OP_EOR=1
+OP_AND=2
+OP_EQ=3
+OP_NE=4
+OP_LT=5
+OP_GT=6
+OP_LE=7
+OP_GE=8
+OP_SHL=9
+OP_ASR=10
+OP_LSR=11
+OP_ADD=12
+OP_SUB=13
+OP_MUL=14
+OP_FDIV=15
+OP_MOD=16
+OP_IDIV=17
+OP_POW=18
+
+; ---- helpers ----
+expri:  jsr expr
+        jmp toint
+itemi:  jsr item
+toint:  lda etype
+        bpl +
+        lda #6
+        jmp error
++       lda accx
+        beq +
+        jmp sfix
++       rts
+exprn:  jsr expr
+        lda etype
+        bpl +
+        lda #6
+        jmp error
++       rts
+exprs:  jsr expr
+        lda etype
+        bmi +
+        lda #6
+        jmp error
++       rts
+
+comma:  jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        rts
++       lda #5
+        jmp error
+braket: jsr nxt
+        cmp #')'
+        bne +
+        inw tp
+        rts
++       lda #27
+        jmp error
+
+; ---- EXPR ----
+!zone expr
+expr:   lda #1
+exprp:  pha                     ; minimum precedence
+        jsr item
+.loop   jsr nxt
+        jsr getop               ; A = prec (Z: none), X = op, Y = length
+        beq .done
+        sta tmp0
+        pla
+        pha
+        cmp tmp0
+        beq .ok
+        bcs .done               ; minprec > prec
+.ok     tya                     ; consume operator
+        clc
+        adc tp
+        sta tp
+        bcc +
+        inc tp+1
++       phx                     ; op
+        lda tmp0
+        pha                     ; prec
+        jsr pushval
+        lda tmp0                ; next minprec = prec+1 (left-assoc)
+        inc
+        jsr exprp
+        jsr popval              ; left operand -> arg/argx or STRBUF/tmp6, tmp5 = type
+        pla                     ; prec
+        plx                     ; op
+        jsr binop
+        bra .loop
+.done   pla
+        rts
+
+; push current value: numeric acc(4),accx,etype ; string bytes,len,etype
+!zone pushval
+pushval:
+        pla                     ; return address
+        sta tmpw
+        pla
+        sta tmpw+1
+        lda etype
+        bmi .s
+        lda acc
+        pha
+        lda acc+1
+        pha
+        lda acc+2
+        pha
+        lda acc+3
+        pha
+        lda accx
+        pha
+        lda #0
+        pha
+        bra .r
+.s      ldx slen
+        beq +
+-       dex
+        lda ACCS,x
+        pha
+        cpx #0
+        bne -
++       lda slen
+        pha
+        lda #$80
+        pha
+.r      lda tmpw+1
+        pha
+        lda tmpw
+        pha
+        rts
+
+!zone popval
+popval: pla
+        sta tmpw
+        pla
+        sta tmpw+1
+        pla
+        sta tmp5                ; type of left operand
+        bmi .s
+        pla
+        sta argx
+        pla
+        sta arg+3
+        pla
+        sta arg+2
+        pla
+        sta arg+1
+        pla
+        sta arg
+        bra .r
+.s      pla
+        sta tmp6                ; length
+        ldx #0
+-       cpx tmp6
+        beq .r
+        pla
+        sta STRBUF,x
+        inx
+        bra -
+.r      lda tmpw+1
+        pha
+        lda tmpw
+        pha
+        rts
+
+; ---- GETOP: recognise binary operator at tp ----
+!zone getop
+getop:  ldy #0
+        lda (tp),y
+        cmp #TOR
+        bne +
+        ldx #OP_OR
+        lda #1
+        lbra .l1
++       cmp #TEOR
+        bne +
+        ldx #OP_EOR
+        lda #1
+        lbra .l1
++       cmp #TAND
+        bne +
+        ldx #OP_AND
+        lda #2
+        lbra .l1
++       cmp #'+'
+        bne +
+        ldx #OP_ADD
+        bra .p4
++       cmp #'-'
+        bne +
+        ldx #OP_SUB
+.p4     lda #4
+        bra .l1
++       cmp #'*'
+        bne +
+        ldx #OP_MUL
+        bra .p5
++       cmp #'/'
+        bne +
+        ldx #OP_FDIV
+        bra .p5
++       cmp #TMOD
+        bne +
+        ldx #OP_MOD
+        bra .p5
++       cmp #TDIV
+        bne +
+        ldx #OP_IDIV
+.p5     lda #5
+        bra .l1
++       cmp #'^'
+        bne +
+        ldx #OP_POW
+        lda #6
+        bra .l1
++       cmp #'='
+        bne +
+        ldx #OP_EQ
+        iny
+        lda (tp),y
+        cmp #'='                ; '==' synonym
+        beq .p3b
+        bra .p3
++       cmp #'<'
+        bne .gt
+        iny
+        lda (tp),y
+        ldx #OP_LE
+        cmp #'='
+        beq .p3b
+        ldx #OP_NE
+        cmp #'>'
+        beq .p3b
+        ldx #OP_SHL
+        cmp #'<'
+        beq .p3b
+        ldx #OP_LT
+        bra .p3
+.gt     cmp #'>'
+        bne .none
+        iny
+        lda (tp),y
+        ldx #OP_GE
+        cmp #'='
+        beq .p3b
+        cmp #'>'
+        bne .gt1
+        iny
+        lda (tp),y
+        ldx #OP_LSR
+        cmp #'>'
+        beq .p3b
+        ldx #OP_ASR
+        bra .p3
+.gt1    ldx #OP_GT
+        bra .p3
+.p3b    iny
+.p3     lda #3
+        bra .ret
+.l1     ldy #1
+.ret    cmp #0
+        rts
+.none   lda #0
+        rts
+
+; ---- BINOP: arg/argx (or STRBUF) OP acc -> acc; X = op, tmp5 = left type ----
+!zone binop
+binop:  lda tmp5
+        eor etype
+        bpl +
+        lda #6                  ; Type mismatch
+        jmp error
++       lda etype
+        bpl .num
+        ; strings
+        cpx #OP_ADD
+        bne +
+        jmp sconcat
++       cpx #OP_EQ
+        bcc .mis
+        cpx #OP_GE+1
+        bcs .mis
+        jsr scomp               ; A = -1/0/1 (left vs right)
+        jmp cmpres
+.mis    lda #6
+        jmp error
+.num    lda argx
+        ora accx
+        beq .int
+        jmp fpbinop
+.int    txa
+        asl
+        tax
+        jmp (opstab,x)
+
+opstab: !word i_or, i_eor, i_and, i_cmp, i_cmp, i_cmp, i_cmp, i_cmp, i_cmp
+        !word i_shl, i_asr, i_lsr, i_add, i_sub, i_mul, i_fdiv, i_mod, i_idiv, i_pow
+
+i_or:   ldq arg
+        orq acc
+        stq acc
+        rts
+i_eor:  ldq arg
+        eorq acc
+        stq acc
+        rts
+i_and:  ldq arg
+        andq acc
+        stq acc
+        ldz #0
+        rts
+
+
+; integer add/sub with overflow check
+!zone iaddsub
+i_sub:  jsr ineg
+i_add:
+        lda arg+3
+        sta tmp4
+        lda acc+3
+        sta tmp3
+        clc
+        ldq arg
+        adcq acc
+        stq acc
+        ldz #0
+        lda tmp4
+        eor tmp3
+        bmi .ok                 ; different signs never overflow
+        lda tmp4
+        eor acc+3
+        bpl .ok
+        lda #20                 ; Too big (no FP yet to promote into)
+        jmp error
+.ok     rts
+
+i_shl:  lda acc
+        and #31
+        tax
+        ldq arg
+        cpx #0
+        beq +
+-       aslq
+        dex
+        bne -
++       stq acc
+        ldz #0
+        rts
+i_lsr:  lda acc
+        and #31
+        tax
+        beq +
+-       lsr arg+3
+        ror arg+2
+        ror arg+1
+        ror arg
+        dex
+        bne -
++       jmp argtoacc
+i_asr:  lda acc
+        and #31
+        tax
+        beq +
+-       lda arg+3
+        asl
+        ror arg+3
+        ror arg+2
+        ror arg+1
+        ror arg
+        dex
+        bne -
++       jmp argtoacc
+
+argtoacc:
+        ldq arg
+        stq acc
+        ldz #0
+        lda #0
+        sta accx
+        rts
+
+; comparisons (integer): signed compare arg vs acc
+i_cmp:  txa
+        lsr
+        tax                     ; op index
+        lda arg+3
+        eor #$80
+        sta arg+3
+        lda acc+3
+        eor #$80
+        sta acc+3
+        ldy #3
+-       lda arg,y
+        cmp acc,y
+        bne .ne
+        dey
+        bpl -
+        lda #0
+        bra cmpres
+.ne     bcc +
+        lda #1
+        bra cmpres
++       lda #$ff
+; CMPRES: A = -1/0/1 (left<,=,> right), X = op -> acc = TRUE/FALSE
+cmpres: sta tmp0
+        ldy #0                  ; result false
+        cpx #OP_EQ
+        bne +
+        lda tmp0
+        bne .set
+        bra .t
++       cpx #OP_NE
+        bne +
+        lda tmp0
+        beq .set
+        bra .t
++       cpx #OP_LT
+        bne +
+        lda tmp0
+        bpl .set
+        bra .t
++       cpx #OP_GT
+        bne +
+        lda tmp0
+        cmp #1
+        bne .set
+        bra .t
++       cpx #OP_LE
+        bne +
+        lda tmp0
+        cmp #1
+        beq .set
+        bra .t
++       lda tmp0                ; GE
+        bmi .set
+.t      ldy #$ff
+.set    sty acc
+        sty acc+1
+        sty acc+2
+        sty acc+3
+        lda #0
+        sta accx
+        sta etype
+        rts
+
+; multiply using the MEGA65 hardware multiplier
+!zone imul
+i_mul:  lda arg+3
+        eor acc+3
+        sta tmp4                ; sign of result
+        jsr absacc
+        jsr absarg
+        ldq arg
+        stq $d770
+        ldq acc
+        stq $d774
+        ldz #0
+        lda $d77c
+        ora $d77d
+        ora $d77e
+        ora $d77f
+        bne .big
+        ldq $d778
+        stq acc
+        ldz #0
+        lda acc+3
+        bmi .big
+        lda tmp4
+        bpl +
+        jmp ineg
++       rts
+.big    lda #20
+        jmp error
+
+absacc: lda acc+3
+        bpl +
+        jmp ineg
++       rts
+absarg: lda arg+3
+        bpl +
+        lda #0
+        sec
+        sbc arg
+        sta arg
+        lda #0
+        sbc arg+1
+        sta arg+1
+        lda #0
+        sbc arg+2
+        sta arg+2
+        lda #0
+        sbc arg+3
+        sta arg+3
++       rts
+; INEG: acc = -acc (integer)
+ineg:   lda #0
+        sec
+        sbc acc
+        sta acc
+        lda #0
+        sbc acc+1
+        sta acc+1
+        lda #0
+        sbc acc+2
+        sta acc+2
+        lda #0
+        sbc acc+3
+        sta acc+3
+        rts
+
+; DIV / MOD (truncating, remainder takes sign of dividend)
+!zone idiv
+i_idiv: lda arg+3
+        eor acc+3
+        sta tmp4
+        jsr udivmod
+        ldq arg                 ; quotient
+        stq acc
+        ldz #0
+        lda tmp4
+        bpl +
+        jmp ineg
++       rts
+i_mod:  lda arg+3
+        sta tmp4
+        jsr udivmod
+        ldq saveacc             ; remainder
+        stq acc
+        ldz #0
+        lda tmp4
+        bpl +
+        jmp ineg
++       rts
+; |arg| / |acc| -> arg = quotient, saveacc = remainder
+udivmod:
+        lda acc
+        ora acc+1
+        ora acc+2
+        ora acc+3
+        bne +
+        lda #18                 ; Division by zero
+        jmp error
++       jsr absacc
+        jsr absarg
+        lda #0
+        sta saveacc
+        sta saveacc+1
+        sta saveacc+2
+        sta saveacc+3
+        ldx #32
+.l      asl arg
+        rol arg+1
+        rol arg+2
+        rol arg+3
+        rol saveacc
+        rol saveacc+1
+        rol saveacc+2
+        rol saveacc+3
+        sec
+        lda saveacc
+        sbc acc
+        sta tmp0
+        lda saveacc+1
+        sbc acc+1
+        sta tmp1
+        lda saveacc+2
+        sbc acc+2
+        sta tmp2
+        lda saveacc+3
+        sbc acc+3
+        bcc +
+        sta saveacc+3
+        lda tmp2
+        sta saveacc+2
+        lda tmp1
+        sta saveacc+1
+        lda tmp0
+        sta saveacc
+        inc arg
++       dex
+        bne .l
+        lda #0
+        sta accx
+        rts
+
+i_fdiv:
+i_pow:
+fpbinop:
+        jmp nofp
+sfix:   lda accx
+        bne nofp
+        rts
+nofp:   lda #<msg_nofp
+        sta errtxt
+        lda #>msg_nofp
+        sta errtxt+1
+        lda #254
+        jmp exterr
+msg_nofp: !text "Floating point not implemented yet",0
+msg_noimp: !text "Not implemented yet",0
+noimp:  lda #<msg_noimp
+        sta errtxt
+        lda #>msg_noimp
+        sta errtxt+1
+        lda #254
+        jmp exterr
+
+; ---- strings ----
+!zone sconcat
+sconcat:
+        lda tmp6
+        clc
+        adc slen
+        bcc +
+        lda #19                 ; String too long
+        jmp error
++       sta tmp0
+        ; move ACCS[0..slen) up by tmp6
+        ldx slen
+        beq .cp
+-       dex
+        lda ACCS,x
+        phx
+        pha
+        txa
+        clc
+        adc tmp6
+        tax
+        pla
+        sta ACCS,x
+        plx
+        cpx #0
+        bne -
+.cp     ldx #0
+-       cpx tmp6
+        beq +
+        lda STRBUF,x
+        sta ACCS,x
+        inx
+        bra -
++       lda tmp0
+        sta slen
+        rts
+
+; compare STRBUF(tmp6) with ACCS(slen) -> A = -1/0/1
+scomp:  ldy #0
+.l      cpy tmp6
+        beq .lend
+        cpy slen
+        beq .gt
+        lda STRBUF,y
+        cmp ACCS,y
+        bne .ne
+        iny
+        bra .l
+.lend   cpy slen
+        beq .eq
+        lda #$ff
+        rts
+.eq     lda #0
+        rts
+.ne     bcc +
+.gt     lda #1
+        rts
++       lda #$ff
+        rts
+
+; ---- ITEM ----
+!zone item
+item:   jsr nxt
+        cmp #'0'
+        bcc +
+        cmp #'9'+1
+        bcs +
+        jmp number
++       cmp #'.'
+        bne +
+        jmp number
++       cmp #'"'
+        bne +
+        jmp strlit
++       cmp #'('
+        bne +
+        inw tp
+        jsr expr
+        jmp braket
++       cmp #'-'
+        bne +
+        inw tp
+        jsr item
+        jsr chknum
+        lda accx
+        beq .negi
+        jmp nofp
+.negi   jmp ineg
++       cmp #'+'
+        bne +
+        inw tp
+        jmp item
++       cmp #'&'
+        bne +
+        jmp hexnum
++       cmp #'%'
+        bne +
+        jmp binnum
++       cmp #$80
+        bcs .tok
+        cmp #$20
+        bcc .tok
+        ; variable
+        jsr getvar
+        bcs .mist
+        beq .found
+        lda #26                 ; No such variable
+        jmp error
+.found  lda vtype
+        bmi +
+        jmp loadn
++       jmp loads
+.mist   lda #16                 ; Syntax error
+        jmp error
+.tok    inw tp
+        sta tmp0
+        ldx #0
+-       lda functab,x
+        beq .unk
+        cmp tmp0
+        beq .fnd
+        inx
+        inx
+        inx
+        bra -
+.fnd    jmp (functab+1,x)
+.unk    lda #16
+        jmp error
+
+chknum: lda etype
+        bpl +
+        lda #6
+        jmp error
++       rts
+
+; number constant: decimal integer (floats not yet)
+!zone number
+number: lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+.l      lda (tp),z
+        cmp #'.'
+        beq .fp
+        cmp #'E'
+        beq .fp
+        sec
+        sbc #'0'
+        bcc .x
+        cmp #10
+        bcs .x
+        sta tmp0
+        inw tp
+        ; acc = acc*10 + digit, unsigned, error if > 2^31 (FP later)
+        ldq acc
+        stq arg
+        ldz #0
+        ldx #2
+-       asl acc
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        bcs .big
+        dex
+        bne -
+        clc
+        ldq acc
+        adcq arg
+        stq acc
+        ldz #0
+        bcs .big
+        asl acc
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        bcs .big
+        lda acc
+        clc
+        adc tmp0
+        sta acc
+        bcc .l
+        inc acc+1
+        bne .l
+        inc acc+2
+        bne .l
+        inc acc+3
+        bne .l
+.big    jmp nofp
+.fp     jmp nofp
+.x      lda acc+3
+        bmi .big
+        rts
+
+!zone hexnum
+hexnum: inw tp
+        lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+        sta tmp1                ; digit count
+.l      lda (tp),z
+        cmp #'a'
+        bcc +
+        sbc #$20
++       sec
+        sbc #'0'
+        bcc .x
+        cmp #10
+        bcc .d
+        sbc #7
+        cmp #10
+        bcc .x
+        cmp #16
+        bcs .x
+.d      sta tmp0
+        inw tp
+        inc tmp1
+        ldx #4
+-       asl acc
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        dex
+        bne -
+        lda acc
+        ora tmp0
+        sta acc
+        bra .l
+.x      lda tmp1
+        bne +
+        lda #28                 ; Bad hex or binary
+        jmp error
++       rts
+
+!zone binnum
+binnum: inw tp
+        lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+        sta tmp1
+.l      lda (tp),z
+        sec
+        sbc #'0'
+        bcc .x
+        cmp #2
+        bcs .x
+        lsr
+        rol acc
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        inc tmp1
+        inw tp
+        bra .l
+.x      lda tmp1
+        bne +
+        lda #28
+        jmp error
++       rts
+
+!zone strlit
+strlit: inw tp
+        ldx #0
+.l      lda (tp),z
+        cmp #CR
+        beq .miss
+        inw tp
+        cmp #'"'
+        bne .c
+        lda (tp),z
+        cmp #'"'
+        bne .end
+        inw tp
+.c      sta ACCS,x
+        inx
+        bne .l
+        lda #19
+        jmp error
+.end    stx slen
+        lda #$80
+        sta etype
+        rts
+.miss   lda #9                  ; Missing "
+        jmp error

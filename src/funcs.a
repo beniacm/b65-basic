@@ -1,0 +1,851 @@
+; B65 BASIC - built-in functions (after BBC BASIC (Z80) v5 EVAL.Z80)
+
+functab:
+        !byte TTRUE   : !word f_true
+        !byte TFALSE  : !word f_false
+        !byte TNOT    : !word f_not
+        !byte TABS    : !word f_abs
+        !byte TSGN    : !word f_sgn
+        !byte TRND    : !word f_rnd
+        !byte TLEN    : !word f_len
+        !byte TASC    : !word f_asc
+        !byte TCHRS   : !word f_chrs
+        !byte TSTRS   : !word f_strs
+        !byte TLEFTS  : !word f_lefts
+        !byte TRIGHTS : !word f_rights
+        !byte TMIDS   : !word f_mids
+        !byte TSTRINGS: !word f_strings
+        !byte TVAL    : !word f_val
+        !byte TINSTR  : !word f_instr
+        !byte TGET    : !word f_get
+        !byte TGETS   : !word f_gets
+        !byte TINKEY  : !word f_inkey
+        !byte TINKEYS : !word f_inkeys
+        !byte TTIME   : !word f_time
+        !byte TPAGE   : !word f_page
+        !byte TLOMEM  : !word f_lomem
+        !byte THIMEM  : !word f_himem
+        !byte TTO     : !word f_top
+        !byte TERR    : !word f_err
+        !byte TERL    : !word f_erl
+        !byte TPOS    : !word f_pos
+        !byte TVPOS   : !word f_vpos
+        !byte TCOUNT  : !word f_count
+        !byte TEVAL   : !word f_eval
+        !byte TINT    : !word f_int
+        !byte TEND    : !word f_end
+        !byte TFN     : !word fn_call
+        !byte $95     : !word nofp      ; ACS
+        !byte $98     : !word nofp      ; ASN
+        !byte $99     : !word nofp      ; ATN
+        !byte $9b     : !word nofp      ; COS
+        !byte $9d     : !word nofp      ; DEG
+        !byte $a1     : !word nofp      ; EXP
+        !byte $aa     : !word nofp      ; LN
+        !byte $ab     : !word nofp      ; LOG
+        !byte TPI     : !word nofp
+        !byte $b2     : !word nofp      ; RAD
+        !byte $b5     : !word nofp      ; SIN
+        !byte $b6     : !word nofp      ; SQR
+        !byte $b7     : !word nofp      ; TAN
+        !byte 0
+
+; set acc to small integer A (sign-extended) as numeric result
+setint8:
+        sta acc
+        ldx #0
+        cmp #$80
+        bcc +
+        dex
++       stx acc+1
+        stx acc+2
+        stx acc+3
+setnum: lda #0
+        sta accx
+        sta etype
+        rts
+setw:   sta acc                 ; A/X = 16-bit unsigned
+        stx acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        bra setnum
+
+f_true: lda #$ff
+        jmp setint8
+f_false:
+        lda #0
+        jmp setint8
+f_not:  jsr itemi
+        lda acc
+        eor #$ff
+        sta acc
+        lda acc+1
+        eor #$ff
+        sta acc+1
+        lda acc+2
+        eor #$ff
+        sta acc+2
+        lda acc+3
+        eor #$ff
+        sta acc+3
+        ldz #0
+        rts
+f_abs:  jsr item
+        jsr chknum
+        lda accx
+        beq +
+        lda acc+3               ; float: clear sign bit
+        and #$7f
+        sta acc+3
+        rts
++       jmp absacc
+f_sgn:  jsr item
+        jsr chknum
+        lda acc
+        ora acc+1
+        ora acc+2
+        ora acc+3
+        beq .z
+        lda acc+3
+        bmi .m
+        lda #1
+        jmp setint8
+.m      lda #$ff
+        jmp setint8
+.z      lda #0
+        jmp setint8
+
+; RND: 32-bit xorshift
+!zone rnd
+f_rnd:  lda (tp),z
+        cmp #'('
+        beq .arg
+        jsr rndstep
+        ldq seed
+        stq acc
+        ldz #0
+        jmp setnum
+.arg    inw tp
+        jsr expri
+        jsr braket
+        lda acc+3
+        bmi .seed
+        ora acc+2
+        ora acc+1
+        bne .range
+        lda acc
+        beq .last
+        cmp #1
+        bne .range
+        jmp nofp                ; RND(1) -> float
+.last   ldq seed
+        stq acc
+        ldz #0
+        jmp setnum
+.seed   ldq acc
+        stq seed
+        ldz #0
+        rts
+.range  ldq acc
+        stq saveacc+0           ; n (saveacc is also used by udivmod; copy)
+        stq tmpw                ; tmpw,tmpw2 = n
+        ldz #0
+        jsr rndstep
+        ldq seed
+        stq arg
+        ldz #0
+        lda arg+3
+        and #$7f
+        sta arg+3
+        ldq tmpw
+        stq acc
+        ldz #0
+        jsr udivmod             ; saveacc = arg mod n
+        ldq saveacc
+        stq acc
+        ldz #0
+        inc acc
+        bne +
+        inc acc+1
+        bne +
+        inc acc+2
+        bne +
+        inc acc+3
++       jmp setnum
+rndstep:
+        lda seed
+        ora seed+1
+        ora seed+2
+        ora seed+3
+        bne +
+        lda #$5a
+        sta seed
+        sta seed+2
++       ; x ^= x << 13
+        ldq seed
+        stq arg
+        ldz #0
+        ldx #13
+-       asl arg
+        rol arg+1
+        rol arg+2
+        rol arg+3
+        dex
+        bne -
+        jsr .x
+        ; x ^= x >> 17
+        ldq seed
+        stq arg
+        ldz #0
+        ldx #17
+-       lsr arg+3
+        ror arg+2
+        ror arg+1
+        ror arg
+        dex
+        bne -
+        jsr .x
+        ; x ^= x << 5
+        ldq seed
+        stq arg
+        ldz #0
+        ldx #5
+-       asl arg
+        rol arg+1
+        rol arg+2
+        rol arg+3
+        dex
+        bne -
+.x      ldq seed
+        eorq arg
+        stq seed
+        ldz #0
+        rts
+
+f_len:  jsr item
+        jsr chkstr
+        lda slen
+        ldx #0
+        jmp setw
+f_asc:  jsr item
+        jsr chkstr
+        lda slen
+        bne +
+        lda #$ff
+        jmp setint8
++       lda ACCS
+        ldx #0
+        jmp setw
+chkstr: lda etype
+        bmi +
+        lda #6
+        jmp error
++       rts
+setstr: lda #$80
+        sta etype
+        rts
+
+f_chrs: jsr itemi
+        lda acc
+        sta ACCS
+        lda #1
+        sta slen
+        jmp setstr
+
+f_strs: lda (tp),z
+        cmp #'~'
+        bne +
+        inw tp
+        jsr itemi
+        lda #1
+        bra .s
++       jsr item
+        jsr chknum
+        lda #0
+.s      jsr numstr              ; -> NUMBUF, X = length
+        stx slen
+        dex
+        bmi +
+-       lda NUMBUF,x
+        sta ACCS,x
+        dex
+        bpl -
++       jmp setstr
+
+; LEFT$(s$[,n])  RIGHT$(s$[,n])
+!zone lefts
+f_lefts:
+        jsr exprs
+        jsr nxt
+        cmp #')'
+        bne +
+        inw tp                  ; LEFT$(s$) = all but last char
+        lda slen
+        beq .x
+        dec slen
+.x      jmp setstr
++       jsr strarg              ; save string, get n -> A (0..255)
+        cmp slen
+        bcs .x
+        sta slen
+        bra .x
+f_rights:
+        jsr exprs
+        jsr nxt
+        cmp #')'
+        bne +
+        inw tp
+        lda #1
+        bra .r
++       jsr strarg
+.r      cmp slen
+        bcs .x
+        sta tmp0                ; keep last n chars
+        lda slen
+        sec
+        sbc tmp0
+        tax
+        ldy #0
+-       cpy tmp0
+        beq +
+        lda ACCS,x
+        sta ACCS,y
+        inx
+        iny
+        bra -
++       lda tmp0
+        sta slen
+        bra .x
+
+; strarg: string in ACCS; parse ",n)" keeping the string; A = n clamped to 0..255
+strarg: jsr pushval
+        jsr comma
+        jsr expri
+        jsr braket
+        jsr clampn
+        sta tmp3
+        jsr popval              ; string -> STRBUF/tmp6
+        ldx #0
+-       cpx tmp6
+        beq +
+        lda STRBUF,x
+        sta ACCS,x
+        inx
+        bra -
++       stx slen
+        lda #$80
+        sta etype
+        lda tmp3
+        rts
+clampn: lda acc+3               ; acc -> 0..255
+        bmi .z
+        ora acc+2
+        ora acc+1
+        bne .f
+        lda acc
+        rts
+.z      lda #0
+        rts
+.f      lda #255
+        rts
+
+; MID$(s$,p[,n])
+!zone mids
+f_mids: jsr exprs
+        jsr pushval
+        jsr comma
+        jsr expri
+        jsr clampn
+        sta tmp3                ; position (1-based)
+        lda #255
+        sta tmp2                ; count
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        lda tmp3
+        pha
+        jsr expri
+        jsr clampn
+        sta tmp2
+        pla
+        sta tmp3
++       jsr braket
+        jsr popval
+        ldx tmp3
+        beq +
+        dex
++       ldy #0                  ; copy STRBUF[x..] up to tmp2 chars
+-       cpx tmp6
+        bcs +
+        cpy tmp2
+        beq +
+        lda STRBUF,x
+        sta ACCS,y
+        inx
+        iny
+        bra -
++       sty slen
+        jmp setstr
+
+; STRING$(n,s$)
+f_strings:
+        jsr expri
+        jsr clampn
+        pha
+        jsr comma
+        jsr exprs
+        jsr braket
+        pla
+        sta tmp3
+        lda slen
+        sta tmp6
+        ldx #0
+-       cpx tmp6
+        beq +
+        lda ACCS,x
+        sta STRBUF,x
+        inx
+        bra -
++       ldy #0
+.l      lda tmp3
+        beq .x
+        ldx #0
+-       cpx tmp6
+        beq .n
+        lda STRBUF,x
+        sta ACCS,y
+        iny
+        beq .long
+        inx
+        bra -
+.n      dec tmp3
+        bra .l
+.x      sty slen
+        jmp setstr
+.long   lda #19
+        jmp error
+
+; VAL(s$): integer only for now
+f_val:  jsr item
+        jsr chkstr
+        ldx slen
+        lda #CR
+        sta ACCS,x
+        lda tp
+        pha
+        lda tp+1
+        pha
+        lda #<ACCS
+        sta tp
+        lda #>ACCS
+        sta tp+1
+        jsr nxt
+        ldx #0
+        cmp #'-'
+        bne +
+        dex
+        inw tp
+        bra ++
++       cmp #'+'
+        bne ++
+        inw tp
+++      phx
+        jsr number
+        plx
+        beq +
+        jsr ineg
++       pla
+        sta tp+1
+        pla
+        sta tp
+        jmp setnum
+
+; INSTR(a$,b$[,start])
+!zone instr
+f_instr:
+        jsr exprs
+        jsr pushval             ; a$
+        jsr comma
+        jsr exprs               ; b$ in ACCS
+        lda #1
+        sta tmp3
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr pushval
+        jsr expri
+        jsr clampn
+        sta tmp3
+        jsr popval              ; b$ -> STRBUF
+        jsr strbuf2accs
++       jsr braket
+        ; ACCS = b$ ; a$ on stack -> STRBUF via popval (moves b$ out of the way)
+        ldx slen
+        stx tmp4
+-       dex
+        bmi +
+        lda ACCS,x
+        sta NUMBUF,x
+        bra -
++       jsr popval              ; a$ -> STRBUF, len tmp6
+        lda tmp3
+        beq +
+        dec tmp3                ; 0-based start
++       ldx tmp3
+.try    txa                     ; x + len(b$) <= len(a$) ?
+        clc
+        adc tmp4
+        bcs .nf
+        cmp tmp6
+        beq +
+        bcs .nf
++       ldy #0
+.cmp    cpy tmp4
+        beq .found
+        stx tmp0
+        tya
+        clc
+        adc tmp0
+        tax
+        lda STRBUF,x
+        cmp NUMBUF,y
+        php
+        ldx tmp0
+        plp
+        bne .next
+        iny
+        bra .cmp
+.found  inx
+        txa
+        ldx #0
+        jmp setw
+.next   inx
+        bra .try
+.nf     lda #0
+        tax
+        jmp setw
+
+strbuf2accs:
+        ldx #0
+-       cpx tmp6
+        beq +
+        lda STRBUF,x
+        sta ACCS,x
+        inx
+        bra -
++       stx slen
+        lda #$80
+        sta etype
+        rts
+
+f_get:  jsr osrdch
+        ldx #0
+        jmp setw
+f_gets: jsr osrdch
+        sta ACCS
+        lda #1
+        sta slen
+        jmp setstr
+; INKEY(n): wait up to n centiseconds (approx, by frames), -1 if none
+!zone inkey
+f_inkey:
+        jsr inkeyw
+        bcc +
+        lda #$ff
+        jmp setint8
++       ldx #0
+        jmp setw
+f_inkeys:
+        jsr inkeyw
+        bcc +
+        lda #0
+        sta slen
+        jmp setstr
++       sta ACCS
+        lda #1
+        sta slen
+        jmp setstr
+inkeyw: jsr itemi
+        bit testmode
+        bpl .k
+        jsr osrdch              ; script supplies keys
+        clc
+        rts
+.k      lda acc+3
+        bmi .none               ; negative INKEY: key scan, not supported
+.l      jsr kbpoll
+        bne .got
+        lda acc
+        ora acc+1
+        beq .none
+        jsr wait1cs
+        lda acc
+        bne +
+        dec acc+1
++       dec acc
+        bra .l
+.got    clc
+        rts
+.none   sec
+        rts
+wait1cs:                        ; ~1/100 s: two raster lines wraps... use frame/2
+        ldx #4
+--      lda $d012
+-       cmp $d012
+        beq -
+        dex
+        bne --
+        rts
+
+; TIME (centiseconds) from CIA1 TOD (tenths) - placeholder accuracy 0.1s
+!zone time
+f_time: jsr readtime
+        jmp setnum
+readtime:                       ; acc = centiseconds since TIME base
+        lda $dc0b               ; hours (reading latches the clock)
+        and #$1f
+        jsr bcd2bin
+        sta arg
+        lda #0
+        sta arg+1
+        sta arg+2
+        sta arg+3
+        lda $dc0a
+        jsr bcd2bin
+        sta tmp1
+        lda $dc09
+        jsr bcd2bin
+        sta tmp2
+        lda $dc08               ; tenths (unlatches)
+        and #$0f
+        sta tmp3
+        lda #60
+        jsr mulsmall
+        lda tmp1
+        jsr addsmall
+        lda #60
+        jsr mulsmall
+        lda tmp2
+        jsr addsmall
+        lda #10
+        jsr mulsmall
+        lda tmp3
+        jsr addsmall
+        lda #10
+        jsr mulsmall
+        sec
+        ldq arg
+        sbcq timebase
+        stq acc
+        ldz #0
+        rts
+mulsmall:                       ; arg *= A (hardware multiplier)
+        sta $d774
+        lda #0
+        sta $d775
+        sta $d776
+        sta $d777
+        ldq arg
+        stq $d770
+        ldq $d778
+        stq arg
+        ldz #0
+        rts
+addsmall:
+        clc
+        adc arg
+        sta arg
+        bcc +
+        inc arg+1
+        bne +
+        inc arg+2
+        bne +
+        inc arg+3
++       rts
+zero32: !32 0
+timebase: !32 0
+bcd2bin:
+        pha
+        and #$0f
+        sta tmp6
+        pla
+        lsr
+        lsr
+        lsr
+        lsr
+        tax
+        lda tmp6
+-       cpx #0
+        beq +
+        clc
+        adc #10
+        dex
+        bra -
++       rts
+f_page: lda page
+        ldx page+1
+        jmp setw
+f_lomem:
+        lda lomem
+        ldx lomem+1
+        jmp setw
+f_himem:
+        lda himem
+        ldx himem+1
+        jmp setw
+f_top:  lda (tp),z                ; TO P
+        cmp #'P'
+        beq +
+        lda #16
+        jmp error
++       inw tp
+        jsr gettop
+        lda ptr2
+        ldx ptr2+1
+        jmp setw
+f_end:  lda free
+        ldx free+1
+        jmp setw
+f_err:  lda errnum
+        ldx #0
+        jmp setw
+f_erl:  lda erl
+        ldx erl+1
+        jmp setw
+f_pos:  lda ccol
+        ldx #0
+        jmp setw
+f_vpos: lda crow
+        ldx #0
+        jmp setw
+f_count:
+        lda count
+        ldx #0
+        jmp setw
+f_int:  jsr item
+        jsr chknum
+        lda accx
+        beq +
+        jmp nofp
++       rts
+
+; EVAL(s$): tokenise into EVBUF and evaluate
+EVBUF = $0700
+f_eval: jsr item
+        jsr chkstr
+        ldx slen
+        lda #CR
+        sta ACCS,x
+        lda tp
+        pha
+        lda tp+1
+        pha
+        lda lexmode
+        pha
+        lda #<ACCS
+        sta tp
+        lda #>ACCS
+        sta tp+1
+        lda #<EVBUF
+        sta ptr2
+        lda #>EVBUF
+        sta ptr2+1
+        lda #0
+        sta lexmode
+        jsr lexan2
+        ldy #0
+        lda #CR
+        sta (ptr2),y
+        lda #<EVBUF
+        sta tp
+        lda #>EVBUF
+        sta tp+1
+        jsr expr
+        pla
+        sta lexmode
+        pla
+        sta tp+1
+        pla
+        sta tp
+        rts
+
+; ---- NUMSTR: acc -> NUMBUF (X = length). A=0 decimal, A<>0 hex ----
+!zone numstr
+numstr: sta tmp5
+        lda accx
+        beq +
+        jmp nofp
++       ldq acc
+        stq arg
+        ldz #0
+        ldx #0                  ; digits produced (reversed in STRBUF)
+        lda tmp5
+        bne .hex
+        lda arg+3
+        sta tmp4                ; sign
+        bpl .d
+        jsr absarg
+.d      jsr div10               ; arg /= 10, A = remainder
+        ora #'0'
+        sta STRBUF,x
+        inx
+        lda arg
+        ora arg+1
+        ora arg+2
+        ora arg+3
+        bne .d
+        lda tmp4
+        bpl .rev
+        lda #'-'
+        sta STRBUF,x
+        inx
+        bra .rev
+.hex    lda arg
+        and #$0f
+        cmp #10
+        bcc +
+        adc #6
++       adc #'0'
+        sta STRBUF,x
+        inx
+        ldy #4
+-       lsr arg+3
+        ror arg+2
+        ror arg+1
+        ror arg
+        dey
+        bne -
+        lda arg
+        ora arg+1
+        ora arg+2
+        ora arg+3
+        bne .hex
+.rev    stx tmp0
+        ldy #0
+-       dex
+        lda STRBUF,x
+        sta NUMBUF,y
+        iny
+        cpx #0
+        bne -
+        ldx tmp0
+        rts
+
+; arg := arg / 10 (unsigned), A = remainder
+div10:  lda #0
+        ldy #32
+-       asl arg
+        rol arg+1
+        rol arg+2
+        rol arg+3
+        rol
+        cmp #10
+        bcc +
+        sbc #10
+        inc arg
++       dey
+        bne -
+        rts

@@ -1,0 +1,474 @@
+; B65 BASIC - MEGA65 host layer (replaces BBC BASIC Z80 CMOS.Z80 / AMOS.Z80)
+; Direct hardware access: VIC-IV 80x25 text screen, $D610 ASCII keyboard queue.
+; No KERNAL is used; ROMs are mapped out.
+
+!zone hwinit
+hw_init:
+        sei
+        cld
+        lda #$47                ; VIC-IV knock
+        sta $d02f
+        lda #$53
+        sta $d02f
+        lda #0
+        sta $d030               ; no C65 ROM banking
+        tax
+        tay
+        taz
+        map                     ; clear MAP
+        eom
+        lda #$2f
+        sta $00
+        lda #$35                ; RAM everywhere except I/O at $D000
+        sta $01
+        lda #$40                ; 40 MHz
+        tsb $d031
+        tsb $d054
+        ; video: 80x25 text at SCREEN, lowercase char ROM
+        lda #0
+        sta $d020
+        sta $d021
+        lda #$1b
+        sta $d011
+        lda #$c8
+        sta $d016
+        lda #$80                ; H640
+        tsb $d031
+        lda #$08                ; V400 off, attributes off
+        trb $d031
+        lda #$01                ; CHR16 off
+        trb $d054
+        lda #<SCREEN
+        sta $d060
+        lda #>SCREEN
+        sta $d061
+        lda #0
+        sta $d062
+        lda $d063
+        and #$f0
+        sta $d063
+        lda #$00
+        sta $d068
+        lda #$18                ; $1800 = lowercase set in char WOM
+        sta $d069
+        lda #$00
+        sta $d06a
+        lda #SCRW
+        sta $d058
+        lda #0
+        sta $d059
+        lda #SCRW
+        sta $d05e
+        lda #0
+        sta $d064               ; colour RAM offset 0
+        sta $d065
+        lda #$80                ; HOTREG off so VIC-II writes don't clobber the above
+        trb $d05d
+        ; colour RAM ($FF80000) = white, 2048 bytes
+        lda #$00
+        sta fptr
+        lda #$00
+        sta fptr+1
+        lda #$f8
+        sta fptr+2
+        lda #$0f
+        sta fptr+3
+        ldx #8
+.c1     ldz #0
+        lda #1
+.c2     sta [fptr],z
+        inz
+        bne .c2
+        inc fptr+1
+        dex
+        bne .c1
+        ; vectors (RAM) -> rti
+        lda #<irq_rti
+        sta $fffa
+        sta $fffe
+        lda #>irq_rti
+        sta $fffb
+        sta $ffff
+        ldz #0
+        rts
+irq_rti:
+        rti
+
+; ---------------- test mode support ----------------
+; In test mode the input comes from a script in bank 1 and every output byte
+; is also appended to a transcript; when the script ends, Xemu is told to exit
+; (only works with xemu -testing: $D6CF := $42).
+!zone testinit
+test_init:
+        lda #0
+        sta testmode
+        lda #<TSTMAGIC
+        sta tsp
+        lda #>TSTMAGIC
+        sta tsp+1
+        lda #^TSTMAGIC
+        sta tsp+2
+        lda #0
+        sta tsp+3
+        ldz #0
+        lda [tsp],z
+        cmp #'B'
+        bne .no
+        inz
+        lda [tsp],z
+        cmp #'6'
+        bne .no
+        inz
+        lda [tsp],z
+        cmp #'5'
+        bne .no
+        inz
+        lda [tsp],z
+        cmp #'T'
+        bne .no
+        lda #4
+        sta tsp
+        lda #$ff
+        sta testmode
+        lda #<TRANSCR
+        sta twp
+        lda #>TRANSCR
+        sta twp+1
+        lda #^TRANSCR
+        sta twp+2
+        lda #0
+        sta twp+3
+.no     ldz #0
+        rts
+
+test_exit:                      ; A = exit status
+        sta $d6cf
+        lda #$42
+        sta $d6cf
+-       jmp -
+
+; ---------------- character output ----------------
+; OSWRCH: A = character (VDU code). Preserves A,X,Y.
+!zone oswrch
+oswrch:
+        pha
+        phx
+        phy
+        bit testmode
+        bpl .notest
+        ldz #0
+        sta [twp],z
+        inw twp
+        bne .notest
+        inw twp+2
+.notest ldx vduq
+        bne .param
+        cmp #32
+        bcc .ctrl
+        cmp #127
+        beq .del
+        jsr putglyph
+        lbra .done
+.param  ldy vduq                ; store parameter
+        sta vdup-1,y
+        dec vduq
+        bne .done
+        lda vducmd
+        cmp #31
+        bne .done
+        ; VDU 31,x,y  (params stored: vdup+1 = x, vdup = y)
+        lda vdup+1
+        cmp #SCRW
+        bcs .done
+        sta ccol
+        lda vdup
+        cmp #SCRH
+        bcs .done
+        sta crow
+        jsr setscrp
+        bra .done
+.del    jsr curleft
+        lda #' '
+        jsr putglyph
+        jsr curleft
+        bra .done
+.ctrl   cmp #13
+        bne +
+        lda #0
+        sta ccol
+        bra .done
++       cmp #10
+        bne +
+        jsr linefeed
+        bra .done
++       cmp #8
+        bne +
+        jsr curleft
+        bra .done
++       cmp #9
+        bne +
+        jsr curright
+        bra .done
++       cmp #11
+        bne +
+        lda crow
+        beq .done
+        dec crow
+        jsr setscrp
+        bra .done
++       cmp #12
+        bne +
+        jsr cls
+        bra .done
++       cmp #30
+        bne +
+        lda #0
+        sta ccol
+        sta crow
+        jsr setscrp
+        bra .done
++       ; codes taking parameters: 17(1) 18(2) 19(5) 22(1) 23(9) 24(8) 25(5) 28(4) 29(4) 31(2)
+        tax
+        lda vdulen,x
+        beq .done
+        sta vduq
+        stx vducmd
+.done   ply
+        plx
+        pla
+        rts
+
+vdulen: !byte 0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,1,2,5,0,0,1,9,8,5,0,0,4,4,0,2
+
+; ASCII -> screen code (C64 lowercase charset)
+putglyph:
+        tax
+        lda asc2scr-32,x
+        ldy ccol
+        sta (scrp),y
+curright:
+        inc ccol
+        lda ccol
+        cmp #SCRW
+        bcc +
+        lda #0
+        sta ccol
+        jmp linefeed
++       rts
+
+curleft:
+        lda ccol
+        beq +
+        dec ccol
+        rts
++       lda crow
+        beq +
+        dec crow
+        lda #SCRW-1
+        sta ccol
+        jmp setscrp
++       rts
+
+linefeed:
+        lda crow
+        cmp #SCRH-1
+        bcs scroll
+        inc crow
+        ; fall through
+setscrp:                        ; scrp = SCREEN + crow*80
+        lda crow
+        sta $d770
+        lda #0
+        sta $d771
+        sta $d772
+        sta $d773
+        sta $d775
+        sta $d776
+        sta $d777
+        lda #SCRW
+        sta $d774
+        lda $d778
+        clc
+        adc #<SCREEN
+        sta scrp
+        lda $d779
+        adc #>SCREEN
+        sta scrp+1
+        rts
+
+scroll: lda #<SCREEN
+        sta ptr3
+        lda #>SCREEN
+        sta ptr3+1
+        ldx #SCRH-1
+.s1     ldy #SCRW
+        ldz #0
+.s2     lda (ptr3),y
+        sta (ptr3),z
+        iny
+        inz
+        cpz #SCRW
+        bne .s2
+        lda ptr3
+        clc
+        adc #SCRW
+        sta ptr3
+        bcc +
+        inc ptr3+1
++       dex
+        bne .s1
+        ldz #0
+        ldy #SCRW-1
+        lda #' '
+-       sta (ptr3),y
+        dey
+        bpl -
+        rts
+
+cls:    lda #<SCREEN
+        sta ptr3
+        lda #>SCREEN
+        sta ptr3+1
+        ldx #8
+        ldy #0
+        lda #' '
+-       sta (ptr3),y
+        iny
+        bne -
+        inc ptr3+1
+        dex
+        bne -
+        lda #0
+        sta ccol
+        sta crow
+        sta count
+        jmp setscrp
+
+; ASCII 32..126 -> screen codes (lowercase charset)
+asc2scr:
+        !for c, 32, 63 { !byte c }
+        !byte 0                 ; @
+        !for c, 1, 26 { !byte c+64 }    ; A-Z -> 65..90
+        !byte 27,77,29,30,100   ; [ \ ] ^ _
+        !byte 74                ; `
+        !for c, 1, 26 { !byte c }       ; a-z -> 1..26
+        !byte 115,93,107,94     ; { | } ~
+        !byte 102               ; 127
+
+; ---------------- character input ----------------
+; OSRDCH: returns A = character (BBC codes: 127 delete, 136-139 cursor)
+!zone osrdch
+osrdch:
+        bit testmode
+        bpl .kbd
+        ldz #0
+        lda [tsp],z
+        beq .eos
+        inw tsp
+        cmp #10                 ; script uses LF line ends
+        bne +
+        lda #13
++       rts
+.eos    lda #0
+        jmp test_exit
+.kbd    phy
+        ldy ccol                ; show cursor
+        lda (scrp),y
+        pha
+        ora #$80
+        sta (scrp),y
+-       lda $d610
+        beq -
+        sta $d610               ; dequeue
+        tax
+        pla
+        sta (scrp),y
+        ply
+        txa
+        cmp #$14                ; DEL
+        bne +
+        lda #127
+        rts
++       cmp #$9d
+        bne +
+        lda #136
+        rts
++       cmp #$1d
+        bne +
+        lda #137
+        rts
++       cmp #$11
+        bne +
+        lda #138
+        rts
++       cmp #$91
+        bne +
+        lda #139
+        rts
++       cmp #$03                ; RUN/STOP -> ESC
+        bne +
+        lda #27
++       rts
+
+; INKEY-style poll: returns A=char or 0, no wait
+kbpoll: bit testmode
+        bmi +
+        lda $d610
+        beq +
+        sta $d610
++       rts
+
+; ESCAPE check (Z80: TRAP). Called once per statement.
+!zone trap
+trap:   bit testmode
+        bmi .r
+        lda $d610
+        cmp #$03
+        beq .esc
+        cmp #$1b
+        bne .r
+.esc    sta $d610
+        lda #17
+        jmp error
+.r      rts
+
+; OSLINE: read line into ACCS, terminated by CR. Echoes.
+!zone osline
+osline:
+        ldx #0
+.l      jsr osrdch
+        cmp #13
+        beq .cr
+        cmp #27
+        beq .esc
+        cmp #127
+        beq .bs
+        cmp #21                 ; ctrl-U
+        beq .kill
+        cmp #32
+        bcc .l
+        cmp #127
+        bcs .l
+        cpx #255
+        beq .l
+        sta ACCS,x
+        inx
+        jsr oswrch
+        bra .l
+.bs     cpx #0
+        beq .l
+        dex
+        jsr oswrch
+        bra .l
+.kill   cpx #0
+        beq .l
+        dex
+        lda #127
+        jsr oswrch
+        bra .kill
+.cr     sta ACCS,x
+        jsr crlf
+        rts
+.esc    lda #17
+        jmp error

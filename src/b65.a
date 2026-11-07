@@ -1,0 +1,18 @@
+; B65 BASIC for the MEGA65 - top level build file
+; An altered (45GS02) version of BBC BASIC (Z80) v5 by R.T. Russell.
+; See LICENSE and docs/DESIGN.md.
+!cpu m65
+!to "build/b65.prg", cbm
+!sl "build/b65.sym"
+!src "src/zp.a"
+!src "src/main.a"
+!src "src/exec.a"
+!src "src/eval.a"
+!src "src/funcs.a"
+!src "src/vars.a"
+!src "src/os.a"
+!src "src/tables.a"
+code_end:
+        !align 255, 0
+prog_start:
+!if prog_start > $9000 { !error "interpreter too large" }

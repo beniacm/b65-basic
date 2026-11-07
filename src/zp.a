@@ -1,0 +1,88 @@
+; B65 BASIC - zero page and fixed memory map
+; Derived from BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+
+; ---------------- fixed areas (bank 0) ----------------
+ACCS    = $0200         ; string accumulator (256 bytes, like Z80 ACCS)
+BUFFER  = $0300         ; tokenised line buffer (256 bytes)
+STAVAR  = $0400         ; @%,A%..Z% (27*4 bytes)
+DYNVAR  = $0470         ; list heads, 2 bytes * 58 ('A'..'z')
+FNPTR   = DYNVAR+116    ; FN list head
+PROPTR  = FNPTR+2       ; PROC list head
+DYNEND  = PROPTR+2
+STRBUF  = $0500         ; scratch string buffer (comparisons etc)
+NUMBUF  = $0600         ; number formatting buffer
+SCREEN  = $0800         ; 80x25 text screen
+SCRW    = 80
+SCRH    = 25
+HIMEM0  = $CF00         ; default HIMEM (stack grows down from here)
+
+; test-script / transcript (bank 1, accessed with 32-bit pointers)
+TSTMAGIC = $00010000    ; "B65T" magic, script follows at +4
+TRANSCR  = $00018000    ; transcript of all output (testing only)
+
+; ---------------- zero page ----------------
+tp      = $02   ; text pointer (Z80: IY)
+acc     = $04   ; 4 bytes: integer / mantissa
+accx    = $08   ; exponent (0 = integer)
+arg     = $09   ; 4 bytes second operand
+argx    = $0d
+etype   = $0e   ; expression type: 0 numeric, $80 string
+slen    = $0f   ; length of string in ACCS
+vptr    = $10   ; variable pointer
+vtype   = $12   ; variable type (0 byte-ind,1 byte,4 int,5 float,$80 $-ind,$81 string)
+ptr1    = $13
+ptr2    = $15
+ptr3    = $17
+tmp0    = $19
+tmp1    = $1a
+tmp2    = $1b
+tmp3    = $1c
+tmp4    = $1d
+tmp5    = $1e
+tmp6    = $1f
+spz     = $20   ; copy of SP for stack-frame access
+page    = $22
+top     = $24
+lomem   = $26
+free    = $28
+himem   = $2a
+curlin  = $2c
+errtrp  = $2e
+onersp  = $30
+errnum  = $32
+erl     = $33
+errtxt  = $35
+count   = $37
+width   = $38
+listo   = $39
+crow    = $3a
+ccol    = $3b
+scrp    = $3c   ; pointer to start of cursor row
+datptr  = $3e
+tsp     = $40   ; 32-bit test script pointer
+twp     = $44   ; 32-bit transcript pointer
+testmode= $48
+lexmode = $49   ; LEXAN mode bits (Z80: C)
+autono  = $4a
+increm  = $4c
+tracen  = $4e
+seed    = $50   ; 5 bytes
+fptr    = $55   ; 32-bit general far pointer
+lnum    = $59   ; 2 bytes line number
+indent  = $5b
+listflg = $5c
+vduq    = $5d   ; VDU queue: bytes still expected
+vducmd  = $5e
+vdup    = $5f   ; 2 param bytes $5f,$60
+prflag  = $61   ; PRINT flags
+hexflg  = $62
+nlen    = $63   ; name length
+nfirst  = $64   ; first char of name
+tmpw    = $65   ; 2 bytes
+tmpw2   = $67
+fnlev   = $69
+saveacc = $6a   ; 5 bytes save area
+cnt     = $6f
+lnum2   = $70
+optr    = $72
+NBUF    = $80   ; up to 40 bytes variable name buffer ($80-$a7)

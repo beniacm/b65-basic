@@ -1,0 +1,1609 @@
+; B65 BASIC - commands and common module (port of BBC BASIC (Z80) v5 MAIN.Z80)
+; Original (C) R.T. Russell 1981-2025, zlib licence. This is an altered
+; version: re-implemented in 45GS02 assembly for the MEGA65.
+
+CR = 13
+LF = 10
+
+; token values not in the generated table
+TAND    = $80
+TDIV    = $81
+TEOR    = $82
+TMOD    = $83
+TOR     = $84
+TSTEP   = $88
+TSPC    = $89
+TTAB    = $8a
+TPTR    = $8f
+TPAGE   = $90
+TTIME   = $91
+TLOMEM  = $92
+THIMEM  = $93
+TABS    = $94
+TASC    = $97
+TCOUNT  = $9c
+TERL    = $9e
+TERR    = $9f
+TEVAL   = $a0
+TFALSE  = $a3
+TGET    = $a5
+TINKEY  = $a6
+TINSTR  = $a7
+TINT    = $a8
+TLEN    = $a9
+TNOT    = $ac
+TPI     = $af
+TPOS    = $b1
+TRND    = $b3
+TSGN    = $b4
+TTRUE   = $b9
+TUSR    = $ba
+TVAL    = $bb
+TVPOS   = $bc
+TCHRS   = $bd
+TGETS   = $be
+TINKEYS = $bf
+TLEFTS  = $c0
+TMIDS   = $c1
+TRIGHTS = $c2
+TSTRS   = $c3
+TSTRINGS= $c4
+TDEF    = $dd
+TEND    = $e0
+TENDPROC= $e1
+TINPUT  = $e8
+TPRINT  = $f1
+TREPORT = $f6
+TRETURN = $f8
+TRUN    = $f9
+TSTOP   = $fa
+TWIDTH  = $fe
+TQUIT   = $06
+TSWAP   = $08
+TCMD    = $c0
+NCMD    = $51       ; number of entries in CMDTAB ($C0..$10)
+
+; ---------------- entry points ----------------
+* = $2001
+        !word .bend, 10
+        !byte $fe, $02, '0', ':', $9e   ; BANK0:SYS
+        !text "8212"
+        !byte 0
+.bend   !word 0
+        !fill $2014 - *, 0
+        jmp cold_prg            ; $2014 - normal start (from BASIC 65)
+        jmp cold_test           ; $2017 - start from test boot stub
+
+cold_prg:
+        sei
+        lda #0                  ; make sure no stale test magic is honoured
+        sta fptr
+        sta fptr+1
+        sta fptr+3
+        lda #1
+        sta fptr+2
+        ldz #0
+        sta [fptr],z
+cold_test:
+        sei
+        cld
+        see                     ; 8-bit stack while we set up
+        ldx #$ff
+        txs
+        ldy #1
+        tys
+        jsr hw_init
+        jsr test_init
+        ; 16-bit stack from HIMEM down
+        lda #<HIMEM0
+        sta himem
+        lda #>HIMEM0
+        sta himem+1
+        jsr resetsp_jsr
+        ; scratchpad
+        ldx #0
+        lda #0
+-       sta STAVAR,x
+        sta STAVAR+$100,x
+        inx
+        bne -
+        lda #<($90a)            ; @% = &90A
+        sta STAVAR
+        lda #>($90a)
+        sta STAVAR+1
+        lda #$80                ; seed
+        sta seed+4
+        lda #$37
+        sta listo
+        lda #<notice
+        sta errtxt
+        lda #>notice
+        sta errtxt+1
+        lda #80
+        sta width
+        lda #0
+        sta vduq
+        sta tracen
+        sta tracen+1
+        sta autono
+        sta autono+1
+        lda #<prog_start
+        sta page
+        lda #>prog_start
+        sta page+1
+        jsr cls
+        jsr newit
+        jsr tell
+vermsg: !text "B65 BASIC (45GS02) for MEGA65 - 0.1",CR,LF
+        !text "Derived from BBC BASIC (Z80) v5",CR,LF
+notice: !text "(C) Copyright R.T.Russell 2025",CR,LF,0
+        jsr crlf
+        jmp clopp
+
+; resetsp_jsr: set 16-bit SP to HIMEM-1 and return to caller
+resetsp_jsr:
+        pla
+        sta tmpw
+        pla
+        sta tmpw+1
+        jsr resetsp
+        lda tmpw+1
+        pha
+        lda tmpw
+        pha
+        rts
+; resetsp: set SP := HIMEM-1 (16 bit), discards everything. NOT callable (jmp only use)
+resetsp:
+        pla                     ; keep own return address
+        sta tmpw2
+        pla
+        sta tmpw2+1
+        cle
+        lda himem
+        sec
+        sbc #1
+        tax
+        lda himem+1
+        sbc #0
+        tay
+        txs
+        tys
+        lda tmpw2+1
+        pha
+        lda tmpw2
+        pha
+        rts
+
+; ---------------- WARM / CLOOP ----------------
+warm:
+clopp:
+        jsr resetsp_jsr
+        lda #'>'
+        jsr outchr
+        lda listo
+        and #$0f
+        ora #$30
+        sta listo
+        lda #0
+        sta errtrp
+        sta errtrp+1
+        sta onersp
+        sta onersp+1
+        sta curlin
+        sta curlin+1
+        lda autono
+        ora autono+1
+        beq .noauto
+        lda autono
+        sta lnum
+        ldx autono+1
+        stx lnum+1
+        jsr pbcd
+        lda autono
+        clc
+        adc increm
+        sta autono
+        bcc +
+        inc autono+1
++       lda #' '
+        jsr outchr
+.noauto jsr osline
+        lda #0
+        sta count
+        lda #<ACCS
+        sta tp
+        lda #>ACCS
+        sta tp+1
+        lda autono
+        ora autono+1
+        bne .notcmd             ; in AUTO: everything is a program line
+        jsr nxt
+        lda #<COMNDS
+        sta ptr1
+        lda #>COMNDS
+        sta ptr1+1
+        jsr lex0
+        bne .notcmd
+        sec
+        sbc #$80
+        asl
+        tax
+        inw tp
+        jsr nxt
+        jmp (cmdtab,x)
+.notcmd lda #<ACCS
+        sta tp
+        lda #>ACCS
+        sta tp+1
+        lda #0
+        sta lnum
+        sta lnum+1
+        lda autono
+        ora autono+1
+        bne .gotln
+        jsr linnum
+        bra .ln2
+.gotln  lda autono              ; AUTO line number was printed already (autono advanced)
+        sec
+        sbc increm
+        sta lnum
+        lda autono+1
+        sbc #0
+        sta lnum+1
+.ln2    jsr nxt
+        lda #<BUFFER
+        sta ptr2
+        lda #>BUFFER
+        sta ptr2+1
+        lda #1                  ; left mode
+        sta lexmode
+        jsr lexan2              ; tokenise ACCS(tp) -> BUFFER(ptr2)
+        ldy #0
+        lda #CR
+        sta (ptr2),y
+        iny
+        lda #0
+        sta (ptr2),y            ; zero next (end-of-immediate marker)
+        lda ptr2                ; length of tokenised text (without CR)
+        sec
+        sbc #<BUFFER
+        sta tmp4
+        lda lnum
+        ora lnum+1
+        bne .store
+        lda #<BUFFER            ; direct mode
+        sta tp
+        lda #>BUFFER
+        sta tp+1
+        jmp xeq
+.store  jsr findl
+        bne +
+        jsr del                 ; delete existing line
++       lda tmp4
+        bne +
+        lda autono              ; empty line: delete only (and stop AUTO)
+        ora autono+1
+        beq clopp2
+        lda #0
+        sta autono
+        sta autono+1
+        bra clopp2
++       jsr insline
+        jsr clean
+clopp2: jmp clopp
+
+; insert line: ptr1 = insertion point (from findl), lnum, BUFFER (tmp4 bytes + CR)
+!zone insline
+insline:
+        lda tmp4
+        clc
+        adc #4
+        sta tmp5                ; total length
+        jsr gettop              ; ptr2 = TOP
+        ; check room: TOP + len + 256 < SP
+        lda ptr2
+        clc
+        adc tmp5
+        sta ptr3
+        lda ptr2+1
+        adc #1
+        sta ptr3+1
+        tsx
+        stx tmpw
+        tsy
+        sty tmpw+1
+        lda ptr3
+        cmp tmpw
+        lda ptr3+1
+        sbc tmpw+1
+        bcc .room
+        lda #0
+        jmp error               ; No room
+.room   ; move [ptr1, TOP) up by tmp5 bytes, from the top down
+        lda ptr2
+        sec
+        sbc ptr1
+        sta tmpw                ; count
+        lda ptr2+1
+        sbc ptr1+1
+        sta tmpw+1
+        ; src end = ptr2-1, dst end = ptr2-1+len
+        lda ptr2
+        sta ptr3
+        lda ptr2+1
+        sta ptr3+1
+        ldy #0
+.mv     lda tmpw
+        ora tmpw+1
+        beq .moved
+        lda ptr3
+        bne +
+        dec ptr3+1
++       dec ptr3
+        lda (ptr3),y
+        phy
+        ldy tmp5
+        sta (ptr3),y
+        ply
+        lda tmpw
+        bne +
+        dec tmpw+1
++       dec tmpw
+        bra .mv
+.moved  ldy #0
+        lda tmp5
+        sta (ptr1),y
+        iny
+        lda lnum
+        sta (ptr1),y
+        iny
+        lda lnum+1
+        sta (ptr1),y
+        ldx #0
+.cp     lda BUFFER,x
+        iny
+        sta (ptr1),y
+        inx
+        cmp #CR
+        bne .cp
+        rts
+
+; ---------------- immediate commands ----------------
+cmdtab: !word auto, delete, list, load, new, old, renum, save
+
+load:
+save:   jsr tell
+        !text "LOAD/SAVE not implemented yet",CR,LF,0
+        jmp clopp
+
+new:    jsr newit
+        jmp clopp
+
+old:    ldy #0                  ; OLD: undo NEW if possible
+        lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+        ldy #1                  ; NEW only zeroed the first length byte; find the CR
+-       iny
+        beq .bad
+        lda (ptr1),y
+        cmp #CR
+        bne -
+        iny
+        tya
+        ldy #0
+        sta (ptr1),y
+        jsr clean
+        jmp clopp
+.bad    jmp bad
+
+auto:   jsr pair
+        lda lnum
+        sta autono
+        lda lnum+1
+        sta autono+1
+        lda lnum2
+        sta increm
+        jmp clopp
+
+; DELETE a,b
+delete: jsr dlpair
+.d1     ldy #0
+        lda (ptr1),y
+        beq .dx
+        iny
+        lda (ptr1),y
+        sta tmpw
+        iny
+        lda (ptr1),y
+        sta tmpw+1
+        lda lnum2
+        cmp tmpw
+        lda lnum2+1
+        sbc tmpw+1
+        bcc .dx                 ; line > high
+        jsr del
+        bra .d1
+.dx     jsr clean
+        jmp clopp
+
+; RENUMBER [start[,step]]
+!zone renum
+renum:  jsr pair
+        ; pass 1: build table old->new in the free area
+        jsr clear
+        lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+        lda free
+        sta ptr2
+        lda free+1
+        sta ptr2+1
+        lda lnum
+        sta tmpw
+        lda lnum+1
+        sta tmpw+1
+.p1     ldy #0
+        lda (ptr1),y
+        beq .p1x
+        tax
+        iny                     ; table entry: old lo, old hi, new lo, new hi
+        lda (ptr1),y
+        ldy #0
+        sta (ptr2),y
+        ldy #2
+        lda (ptr1),y
+        ldy #1
+        sta (ptr2),y
+        lda tmpw
+        ldy #2
+        sta (ptr2),y
+        lda tmpw+1
+        iny
+        sta (ptr2),y
+        lda tmpw                ; set new number in line
+        ldy #1
+        sta (ptr1),y
+        lda tmpw+1
+        iny
+        sta (ptr1),y
+        lda tmpw
+        clc
+        adc lnum2
+        sta tmpw
+        bcc +
+        inc tmpw+1
+        beq .toobig
++       txa
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +
+        inc ptr1+1
++       lda ptr2
+        clc
+        adc #4
+        sta ptr2
+        bcc .p1
+        inc ptr2+1
+        bra .p1
+.toobig lda #20
+        jmp error
+.p1x    lda ptr2                ; end of table
+        sta ptr3
+        lda ptr2+1
+        sta ptr3+1
+        ; pass 2: fix TLINO references
+        lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+.p2     ldy #0
+        lda (ptr1),y
+        lbeq .done
+        ldy #3
+.p2c    lda (ptr1),y
+        cmp #CR
+        beq .p2n
+        cmp #'"'
+        bne +
+-       iny                     ; skip string
+        lda (ptr1),y
+        cmp #CR
+        beq .p2n
+        cmp #'"'
+        bne -
+        iny
+        bra .p2c
++       cmp #TLINO
+        beq .fix
+        iny
+        bra .p2c
+.fix    sty tmp6
+        tya
+        clc
+        adc ptr1
+        sta tp
+        lda ptr1+1
+        adc #0
+        sta tp+1
+        inw tp
+        jsr decode0             ; lnum = referenced line
+        ; look up in table
+        lda free
+        sta ptr2
+        lda free+1
+        sta ptr2+1
+.lk     lda ptr2
+        cmp ptr3
+        bne +
+        lda ptr2+1
+        cmp ptr3+1
+        beq .nf
++       ldy #0
+        lda (ptr2),y
+        cmp lnum
+        bne .lkn
+        iny
+        lda (ptr2),y
+        cmp lnum+1
+        bne .lkn
+        iny
+        lda (ptr2),y
+        sta lnum
+        iny
+        lda (ptr2),y
+        sta lnum+1
+        ldy tmp6                ; re-encode in place
+        jsr encodey
+        bra .cont
+.lkn    lda ptr2
+        clc
+        adc #4
+        sta ptr2
+        bcc .lk
+        inc ptr2+1
+        bra .lk
+.nf     ; leave unchanged
+.cont   ldy tmp6
+        iny
+        iny
+        iny
+        iny
+        bra .p2c
+.p2n    ldy #0
+        lda (ptr1),y
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +
+        inc ptr1+1
++       jmp .p2
+.done   jsr clear
+        jmp clopp
+
+; encode lnum at (ptr1),y (4 bytes: TLINO + 3)
+encodey:
+        lda #TLINO
+        sta (ptr1),y
+        iny
+        jsr enc3
+        sta (ptr1),y
+        iny
+        lda lnum
+        and #$3f
+        ora #$40
+        sta (ptr1),y
+        iny
+        lda lnum+1
+        and #$3f
+        ora #$40
+        sta (ptr1),y
+        rts
+enc3:   lda lnum+1              ; Z80 ENCODE: ((D&C0)>>2 | (E&C0)) >> 2 ^ $54
+        and #$c0
+        lsr
+        lsr
+        sta tmp0
+        lda lnum
+        and #$c0
+        ora tmp0
+        lsr
+        lsr
+        eor #$54
+        rts
+
+; ---------------- LIST ----------------
+!zone list
+list:   cmp #'O'
+        bne .l0
+        inw tp                  ; LISTO n
+        jsr expri
+        lda acc
+        sta listo
+        jmp clopp
+.l0     jsr dlpair
+        lda #0
+        sta indent
+.l1     ldy #0
+        lda (ptr1),y
+        beq .lx
+        iny
+        lda (ptr1),y
+        sta lnum
+        iny
+        lda (ptr1),y
+        sta lnum+1
+        lda lnum2
+        cmp lnum
+        lda lnum2+1
+        sbc lnum+1
+        bcc .lx
+        jsr trap
+        jsr listit
+        ldy #0
+        lda (ptr1),y
+        clc
+        adc ptr1
+        sta ptr1
+        bcc .l1
+        inc ptr1+1
+        bra .l1
+.lx     jmp clopp
+
+; LISTIT: list line at ptr1 (lnum = number). Uses indent.
+!zone listit
+listit:
+        jsr pbcd
+        ldy #3
+        lda (ptr1),y
+        jsr insub_q             ; outdent tokens at line start
+        lda listo
+        and #1
+        beq +
+        lda #' '
+        jsr outchr
++       lda listo
+        and #2
+        beq +
+        lda indent
+        asl
+        jsr spaces
++       ldy #3
+        lda (ptr1),y
+        jsr inadd_q
+        lda #0
+        sta tmp6                ; quote flag
+        ldy #3
+.l8     lda (ptr1),y
+        iny
+        cmp #CR
+        beq .l9
+        sta tmp5                ; last char
+        cmp #'"'
+        bne +
+        lda tmp6
+        eor #1
+        sta tmp6
+        lda #'"'
++       ldx tmp6
+        bne .lit
+        cmp #TLINO
+        bne .tok
+        phy                     ; line number reference
+        tya
+        clc
+        adc ptr1
+        sta tp
+        lda ptr1+1
+        adc #0
+        sta tp+1
+        lda lnum
+        pha
+        lda lnum+1
+        pha
+        jsr decode0
+        jsr pbcdl
+        pla
+        sta lnum+1
+        pla
+        sta lnum
+        ply
+        iny
+        iny
+        iny
+        bra .l8
+.tok    sty tmp4
+        jsr out
+        ldy tmp4
+        cpy #4                  ; first token was handled at line start
+        beq .l8
+        ; tokens that change indent mid-line
+        lda tmp5
+        ldx #3
+-       cmp TOKSUB-1,x
+        beq .sub
+        dex
+        bne -
+        ldx #4
+-       cmp TOKADD-1,x
+        beq .add
+        dex
+        bne -
+        bra .l8
+.sub    jsr indsub
+        bra .l8
+.add    jsr indadd
+        bra .l8
+.lit    jsr outchr
+        bra .l8
+.l9     lda tmp5
+        cmp #TTHEN              ; multi-line IF
+        bne +
+        lda tmp6
+        bne +
+        jsr indadd
++       jmp crlf
+
+insub_q:
+        ldx #LENSUB
+-       cmp TOKSUB-1,x
+        beq indsub
+        dex
+        bne -
+        rts
+inadd_q:
+        ldx #LENADD
+-       cmp TOKADD-1,x
+        beq indadd
+        dex
+        bne -
+        rts
+indsub: lda indent
+        beq +
+        dec indent
++       rts
+indadd: inc indent
+        rts
+
+spaces: tax
+        beq +
+-       lda #' '
+        jsr outchr
+        dex
+        bne -
++       rts
+
+; DLPAIR: parse "[a][,b]" -> ptr1 = first line >= a, lnum2 = b (default 65535)
+!zone dlpair
+dlpair: jsr linnum
+        lda lnum
+        sta tmpw
+        lda lnum+1
+        sta tmpw+1
+        lda #$ff
+        sta lnum2
+        sta lnum2+1
+        jsr nxt
+        cmp #','
+        bne .one
+        inw tp
+        jsr nxt
+        jsr linnum
+        lda lnum
+        ora lnum+1
+        beq .two
+        lda lnum
+        sta lnum2
+        lda lnum+1
+        sta lnum2+1
+        bra .two
+.one    lda tmpw                ; single number: a..a
+        ora tmpw+1
+        beq .two
+        lda tmpw
+        sta lnum2
+        lda tmpw+1
+        sta lnum2+1
+.two    lda tmpw
+        sta lnum
+        lda tmpw+1
+        sta lnum+1
+        jsr findl
+        rts
+
+; PAIR: "[a][,b]" defaults 10,10 -> lnum, lnum2
+pair:   jsr linnum
+        lda lnum
+        ora lnum+1
+        bne +
+        lda #10
+        sta lnum
++       lda lnum
+        sta tmpw
+        lda lnum+1
+        sta tmpw+1
+        lda #10
+        sta lnum2
+        lda #0
+        sta lnum2+1
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr nxt
+        jsr linnum
+        lda lnum
+        ora lnum+1
+        beq +
+        lda lnum
+        sta lnum2
+        lda lnum+1
+        sta lnum2+1
++       lda tmpw
+        sta lnum
+        lda tmpw+1
+        sta lnum+1
+        rts
+
+; ---------------- ERROR ----------------
+; A = error number. Finds message in ERRWDS.
+!zone error
+error:  sta errnum
+        lda #<ERRWDS
+        sta errtxt
+        lda #>ERRWDS
+        sta errtxt+1
+        ldx errnum
+        beq error1
+        ldy #0
+.e0     lda (errtxt),y
+        inw errtxt
+        cmp #0
+        bne .e0
+        dex
+        bne .e0
+        bra error1
+; EXTERR: A = error number, errtxt already set
+exterr: sta errnum
+error1: lda curlin              ; ERL
+        sta ptr1
+        lda curlin+1
+        sta ptr1+1
+        jsr setlin              ; -> erl
+        lda errnum
+        beq error2              ; fatal
+        lda errtrp
+        ora errtrp+1
+        beq error2
+        lda onersp              ; ON ERROR LOCAL: restore SP
+        ora onersp+1
+        beq .gl
+        ldx onersp
+        ldy onersp+1
+        cle
+        txs
+        tys
+        bra .go
+.gl     jsr resetsp_jsr
+.go     lda errtrp
+        sta tp
+        lda errtrp+1
+        sta tp+1
+        jmp xeq
+error2: jsr resetsp_jsr
+        lda #0
+        sta autono
+        sta autono+1
+        sta tracen
+        sta tracen+1
+        sta vduq
+        jsr crlf
+        jsr report
+        lda erl
+        ldx erl+1
+        jsr sayln
+        jsr crlf
+        jmp clopp
+
+; REPORT text
+report: lda errtxt
+        sta ptr3
+        lda errtxt+1
+        sta ptr3+1
+text:   ldy #0
+-       lda (ptr3),y
+        beq +
+        phy
+        cmp #LF
+        bne .o
+        jsr outchr
+        bra .n
+.o      jsr out
+.n      ply
+        iny
+        bra -
++       rts
+
+; TELL: print zero-terminated text following the JSR
+tell:   pla
+        sta ptr3
+        pla
+        sta ptr3+1
+        inw ptr3
+        jsr text
+        tya                     ; ptr3 + y + 1 -> continue after the zero
+        sec
+        adc ptr3
+        sta ptr3
+        bcc +
+        inc ptr3+1
++       jmp (ptr3)
+
+; SAYLN: A/X = line number; prints " at line n" if non-zero
+sayln:  sta lnum
+        stx lnum+1
+        ora lnum+1
+        beq +
+        jsr tell
+        !text " at line ",0
+        jmp pbcdl
++       rts
+
+bad:    jsr tell
+        !text "Bad program",CR,LF,0
+        jsr newit
+        jmp clopp
+
+; SETLIN: ptr1 = address; erl := number of line containing it (0 if none)
+!zone setlin
+setlin: lda #0
+        sta erl
+        sta erl+1
+        lda ptr1
+        cmp page
+        lda ptr1+1
+        sbc page+1
+        bcc .x
+        lda page
+        sta ptr2
+        lda page+1
+        sta ptr2+1
+.s1     ldy #0
+        lda (ptr2),y
+        beq .x
+        clc
+        adc ptr2
+        sta ptr3
+        lda ptr2+1
+        adc #0
+        sta ptr3+1
+        lda ptr1                ; ptr1 < ptr3 ?
+        cmp ptr3
+        lda ptr1+1
+        sbc ptr3+1
+        bcc .found
+        lda ptr3
+        sta ptr2
+        lda ptr3+1
+        sta ptr2+1
+        bra .s1
+.found  ldy #1
+        lda (ptr2),y
+        sta erl
+        iny
+        lda (ptr2),y
+        sta erl+1
+.x      rts
+
+; ---------------- LEX ----------------
+; LEX: search keyword table. ptr1 = table, tp = text.
+; Out: Z set if found, A = token, tp -> last char of keyword (or '.').
+;      Z clear: not found, A = (tp), tp unchanged.
+!zone lex
+lex:    lda #<KEYWDS
+        sta ptr1
+        lda #>KEYWDS
+        sta ptr1+1
+lex0:   ldy #0
+.l0     tya                     ; normalise: ptr1 -> entry, y = 0
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +
+        inc ptr1+1
++       ldy #0
+        lda (ptr1),y            ; token
+        sta tmp0
+        iny
+        lda (tp),z
+        cmp (ptr1),y
+        beq .l2
+        bcc .fail               ; table is sorted by first letter
+.l1     iny                     ; skip rest of entry
+        bne +
+        inc ptr1+1
++       lda (ptr1),y
+        cmp #$20
+        bcc .l0
+        cmp #$80
+        bcc .l1
+        bra .l0
+.fail   lda (tp),z
+        cmp #$ff                ; NZ (text never holds $ff here)
+        rts
+.l2     ; first char matched; y -> keyword char 1st. compare rest
+        sty tmp1
+        ldz #0                  ; z = text offset
+.l3     iny
+        lda (ptr1),y
+        cmp #$20
+        bcc .found
+        cmp #$80
+        bcs .found
+        inz
+        lda (tp),z
+        cmp (ptr1),y
+        bne .l7
+        cmp #$20                ; matched space marker: delimiter check below
+        bne .l3
+.l7     lda (tp),z
+        cmp #'.'
+        beq .found
+        jsr range1
+        bcc .l4                 ; text char is alphanumeric -> no match
+        lda (ptr1),y
+        cmp #' '
+        bne .l4
+        dez
+        bra .found
+.l4     ldz #0
+        ldy tmp1
+        bra .l1
+.found  tza                     ; advance tp by z (to last char / '.')
+        ldz #0
+        clc
+        adc tp
+        sta tp
+        bcc +
+        inc tp+1
++       lda tmp0
+        ldy #0
+        cmp tmp0                ; Z set
+        rts
+
+; RANGE: is (tp) valid in a variable name? carry set if not.
+range:  lda (tp),z
+range0: cmp #'$'
+        bcc .rx
+        cmp #'&'+1
+        bcs +
+        clc                     ; $ % &
+        rts
++       cmp #'('
+        bne range1
+        clc
+        rts
+range1: cmp #'0'
+        bcc .rx
+        cmp #'9'+1
+        bcc .rok
+        cmp #'@'
+        beq .rok
+range2: cmp #'A'
+        bcc .rx
+        cmp #'Z'+1
+        bcc .rok
+        cmp #'_'
+        bcc .rx
+        cmp #'z'+1
+        bcc .rok
+.rx     sec
+        rts
+.rok    clc
+        rts
+
+; ---------------- LEXAN ----------------
+; Tokenise from tp into (ptr2); lexmode: bit0 left, bit3 hex, bit4 lineno,
+; bit5 in variable, bit6 in REM/DATA/*, bit7 in quotes.
+!zone lexan
+lexan1: ldy #0
+        sta (ptr2),y
+        inw ptr2
+        inw tp
+lexan2: lda ptr2
+        sec
+        sbc #<BUFFER
+        cmp #252
+        bcc +
+        lda #19
+        jmp error
++       lda (tp),z
+        cmp #CR
+        bne +
+        rts
++       jsr range1
+        bcc +
+        lda #$28                ; reset bits 5,3
+        trb lexmode
++       lda (tp),z
+        cmp #' '
+        beq lexan1
+        cmp #','
+        beq lexan1
+        cmp #'G'
+        bcc +
+        pha
+        lda #$08
+        trb lexmode
+        pla
++       cmp #'"'
+        bne +
+        pha
+        lda lexmode
+        eor #$80
+        sta lexmode
+        pla
++       ; line number expected?
+        bit lexmode
+        pha
+        lda lexmode
+        and #$10
+        beq .n6
+        lda #$10
+        trb lexmode
+        pla
+        jsr linnum
+        lda lnum
+        ora lnum+1
+        beq lexan2
+        jsr encode
+        bra lexan2
+.n6     pla
+        ldx lexmode
+        cpx #1
+        beq .left
+        cpx #0
+        bne lexan1
+        cmp #$80
+        bcs .l8
+        jsr lex
+        bra .l8
+.left   lda #0
+        sta lexmode
+        lda (tp),z
+        cmp #'*'
+        beq .l9
+        cmp #$80
+        bcs +
+        jsr lex
++       cmp #TDATA
+        beq .l9
+        cmp #TOKLO
+        bcc .l8
+        cmp #TOKHI+1
+        bcs .l8
+        clc
+        adc #$cf-TOKLO          ; left version
+.l8     cmp #TREM
+        bne .la
+.l9     pha
+        lda #$40
+        tsb lexmode
+        pla
+.la     cmp #TFN
+        beq .lb
+        cmp #TPROC
+        beq .lb
+        jsr range2
+        bcs .lc
+.lb     pha
+        lda #$20
+        tsb lexmode
+        pla
+.lc     cmp #'&'
+        bne .ld
+        pha
+        lda #$08
+        tsb lexmode
+        pla
+.ld     ldx #5
+-       cmp lexlst1,x
+        beq .le
+        dex
+        bpl -
+        bra .lf
+.le     pha
+        lda #$10
+        tsb lexmode
+        pla
+.lf     ldx #4
+-       cmp lexlst2,x
+        beq .lg
+        dex
+        bpl -
+        jmp lexan1
+.lg     pha
+        lda #$01
+        tsb lexmode
+        pla
+        jmp lexan1
+
+lexlst1: !byte TGOTO, TGOSUB, TRESTORE, TTRACE
+lexlst2: !byte TTHEN, TELSE, TREPEAT, TERROR, ':'
+
+; ENCODE lnum at ptr2, set bit 4
+encode: lda #$10
+        tsb lexmode
+        lda ptr1
+        pha
+        lda ptr1+1
+        pha
+        lda ptr2
+        sta ptr1
+        lda ptr2+1
+        sta ptr1+1
+        ldy #0
+        jsr encodey
+        lda ptr2
+        clc
+        adc #4
+        sta ptr2
+        bcc +
+        inc ptr2+1
++       pla
+        sta ptr1+1
+        pla
+        sta ptr1
+        rts
+
+; DECODE: tp -> byte after TLINO; lnum = line number; tp += 3
+decode0:
+        ldy #0
+        lda (tp),y
+        asl
+        asl
+        eor #$54<<2 & $ff
+        sta tmp0                ; bits: b7,b6 = lo bits 7,6 ; b5,b4 = hi bits 7,6
+        iny
+        lda (tp),y
+        and #$3f
+        sta lnum
+        lda tmp0
+        and #$c0
+        ora lnum
+        sta lnum
+        iny
+        lda (tp),y
+        and #$3f
+        sta lnum+1
+        lda tmp0
+        asl
+        asl
+        and #$c0
+        ora lnum+1
+        sta lnum+1
+        lda tp
+        clc
+        adc #3
+        sta tp
+        bcc +
+        inc tp+1
++       rts
+
+; LINNUM: parse decimal line number at tp -> lnum
+!zone linnum
+linnum: jsr nxt
+        lda #0
+        sta lnum
+        sta lnum+1
+.l1     lda (tp),z
+        sec
+        sbc #'0'
+        bcc .x
+        cmp #10
+        bcs .x
+        sta tmp0
+        inw tp
+        lda lnum                ; *10
+        sta tmpw
+        lda lnum+1
+        sta tmpw+1
+        asl lnum
+        rol lnum+1
+        bcs .big
+        asl lnum
+        rol lnum+1
+        bcs .big
+        lda lnum
+        clc
+        adc tmpw
+        sta lnum
+        lda lnum+1
+        adc tmpw+1
+        sta lnum+1
+        bcs .big
+        asl lnum
+        rol lnum+1
+        bcs .big
+        lda lnum
+        clc
+        adc tmp0
+        sta lnum
+        bcc .l1
+        inc lnum+1
+        bne .l1
+.big    lda #20
+        jmp error
+.x      rts
+
+; ---------------- program store helpers ----------------
+; FINDL: lnum = line number. ptr1 -> line (or next higher / end). Z set if found.
+!zone findl
+findl:  lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+.f1     ldy #0
+        lda (ptr1),y
+        beq .nf
+        ldy #1
+        lda (ptr1),y
+        cmp lnum
+        iny
+        lda (ptr1),y
+        sbc lnum+1
+        bcs .chk                ; line >= lnum
+        ldy #0
+        lda (ptr1),y
+        clc
+        adc ptr1
+        sta ptr1
+        bcc .f1
+        inc ptr1+1
+        bra .f1
+.chk    ldy #1
+        lda (ptr1),y
+        cmp lnum
+        bne .nf
+        iny
+        lda (ptr1),y
+        cmp lnum+1
+        rts                     ; Z if equal
+.nf     lda #1                  ; NZ
+        rts
+
+; DEL: delete line at ptr1
+!zone del
+del:    jsr gettop              ; ptr2 = TOP
+        ldy #0
+        lda (ptr1),y
+        sta tmp0
+        ; copy [ptr1+len, TOP) down to ptr1
+        lda ptr1
+        sta ptr3
+        lda ptr1+1
+        sta ptr3+1
+        ldy tmp0
+.d1     lda ptr3
+        clc
+        adc tmp0
+        tax
+        lda ptr3+1
+        adc #0
+        cpx ptr2
+        bne +
+        cmp ptr2+1
+        beq .dx
++       ldy tmp0
+        lda (ptr3),y
+        ldy #0
+        sta (ptr3),y
+        inw ptr3
+        bra .d1
+.dx     rts
+
+; GETTOP: ptr2 = TOP (address after the 0,FF,FF end marker)
+!zone gettop
+gettop: lda page
+        sta ptr2
+        lda page+1
+        sta ptr2+1
+.g1     ldy #0
+        lda (ptr2),y
+        beq .g2
+        tay
+        dey
+        lda (ptr2),y
+        cmp #CR
+        beq +
+        jmp bad
++       iny
+        tya
+        clc
+        adc ptr2
+        sta ptr2
+        bcc .g1
+        inc ptr2+1
+        bra .g1
+.g2     lda ptr2
+        clc
+        adc #3
+        sta ptr2
+        bcc +
+        inc ptr2+1
++       rts
+
+; CLEAN: write end marker &FFFF and CLEAR
+clean:  jsr gettop
+        ldy #$fe                ; TOP-2, TOP-1 := $FF
+        lda ptr2
+        sec
+        sbc #2
+        sta ptr3
+        lda ptr2+1
+        sbc #0
+        sta ptr3+1
+        ldy #0
+        lda #$ff
+        sta (ptr3),y
+        iny
+        sta (ptr3),y
+        jmp clear
+
+newit:  lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+        ldy #0
+        tya
+        sta (ptr1),y
+        iny
+        lda #$ff
+        sta (ptr1),y
+        iny
+        sta (ptr1),y
+; CLEAR: clear dynamic variables, LOMEM=FREE=TOP
+clear:  jsr gettop
+        lda ptr2
+        sta lomem
+        sta free
+        sta top
+        lda ptr2+1
+        sta lomem+1
+        sta free+1
+        sta top+1
+        ldx #DYNEND-DYNVAR-1
+        lda #0
+-       sta DYNVAR,x
+        dex
+        bpl -
+        rts
+
+; ---------------- output ----------------
+crlf:   lda #CR
+        jsr outchr
+        lda #LF
+outchr: jsr oswrch
+        cmp #CR
+        beq .carret
+        bcc .np
+        inc count
+        pha
+        lda count
+        cmp width
+        pla
+        bcc .np
+        jsr crlf
+.np     rts
+.carret pha
+        lda #0
+        sta count
+        pla
+        rts
+
+; OUT: output character or expand token
+!zone out
+out:    cmp #$20
+        bcc .tok
+        cmp #$80
+        bcs .tok
+        jmp outchr
+.tok    sta tmp0
+        lda #<KEYWDS
+        sta optr
+        lda #>KEYWDS
+        sta optr+1
+        ldy #0
+.s      lda (optr),y
+        cmp tmp0
+        beq .f
+        iny
+        bne +
+        inc optr+1
++       tya                     ; end of table? -> plain character
+        clc
+        adc optr
+        tax
+        lda optr+1
+        adc #0
+        cmp #>(KEYWDS+KEYWDL)
+        bne .s
+        cpx #<(KEYWDS+KEYWDL)
+        bne .s
+        lda tmp0
+        jmp outchr
+.f      ldx #$a0                ; B=160 for $11..$1F (print spaces)
+        lda tmp0
+        cmp #$11
+        bcc +
+        cmp #$20
+        bcc .t1
++       ldx #$a1
+.t1     iny
+        bne +
+        inc optr+1
++       lda (optr),y
+        cmp #$20
+        bcc .x
+        cmp #$80
+        bcs .x
+        cpx #$a1
+        bne +
+        cmp #$20
+        beq .x
++       phx
+        phy
+        jsr outchr
+        ply
+        plx
+        bra .t1
+.x      rts
+
+; PBCD: print lnum as 5-wide decimal (leading spaces); PBCDL: no padding
+!zone pbcd
+pbcd:   lda #' '
+        bra +
+pbcdl:  lda #0
++       sta tmp2
+        ldx #4
+.d      ldy #0
+.s      lda lnum
+        sec
+        sbc p10lo,x
+        sta tmp0
+        lda lnum+1
+        sbc p10hi,x
+        bcc .o
+        sta lnum+1
+        lda tmp0
+        sta lnum
+        iny
+        bra .s
+.o      tya
+        bne .dig
+        cpx #0
+        beq .dig
+        lda tmp2
+        beq .nx
+        jsr outchr
+        bra .nx
+.dig    ora #'0'
+        jsr outchr
+        lda #'0'
+        sta tmp2
+.nx     dex
+        bpl .d
+        rts
+p10lo:  !byte <1, <10, <100, <1000, <10000
+p10hi:  !byte >1, >10, >100, >1000, >10000
+
+; NXT: skip spaces, A = (tp)
+nxt:    lda (tp),z
+        cmp #' '
+        bne +
+        inw tp
+        bra nxt
++       rts

@@ -1,0 +1,690 @@
+; B65 BASIC - variables (port of GETVAR/LOCATE/CREATE from BBC BASIC (Z80) v5)
+; Variable entry: [link lo,hi][name chars after 1st][0][value...]
+; Types: 0 = ?-indirection byte, 1 = byte var (&), 4 = integer, 5 = variant
+;        (5 bytes: 4 bytes mantissa/integer + exponent, exp 0 = integer),
+;        $80 = $-indirection string, $81 = string variable (descriptor:
+;        addr lo, addr hi, length, allocated)
+
+; ---- GETNAME: scan variable name at tp into nfirst/NBUF/nlen ----
+; carry set if (tp) cannot start a variable name (tp unchanged)
+!zone getname
+getname:
+        lda (tp),z
+        cmp #'@'
+        beq .ok1
+        cmp #'A'
+        bcc .bad
+        cmp #'Z'+1
+        bcc .ok1
+        cmp #'_'
+        bcc .bad
+        cmp #'z'+1
+        bcs .bad
+.ok1    sta nfirst
+        inw tp
+        ldx #0
+.l      lda (tp),z
+        jsr range0
+        bcs .end
+        sta NBUF,x
+        inx
+        inw tp
+        cpx #38
+        bcs .end
+        jsr range1
+        bcc .l                  ; alphanumeric: continue
+        cmp #'('
+        beq .end
+        lda (tp),z                ; $ % & : only '(' may follow
+        cmp #'('
+        beq .l
+.end    stx nlen
+        clc
+        rts
+.bad    sec
+        rts
+
+; type from name suffix -> A
+nametype:
+        ldx nlen
+        beq .f
+        lda NBUF-1,x
+        cmp #'('
+        bne +
+        dex
+        beq .f
+        lda NBUF-1,x
++       cmp #'$'
+        bne +
+        lda #$81
+        rts
++       cmp #'%'
+        bne +
+        lda #4
+        rts
++       cmp #'&'
+        bne .f
+        lda #1
+        rts
+.f      lda #5
+        rts
+
+isarray:                        ; Z set if name ends with '('
+        ldx nlen
+        beq +
+        lda NBUF-1,x
+        cmp #'('
+        rts
++       lda #1
+        rts
+
+; ---- LOCATE: find name (nfirst/NBUF/nlen). ----
+; out: carry set = illegal first char ('@' non-static).
+;      Z set = found, vptr -> value, vtype = type.
+;      Z clear = not found; ptr3 -> last link field (for CREATE).
+!zone locate
+locate:
+        lda nfirst
+        cmp #'['
+        bcs .dyn
+        ldx nlen                ; static A%..Z%, @% ?
+        cpx #1
+        bne .dyn0
+        ldx NBUF
+        cpx #'%'
+        bne .dyn0
+        sec
+        sbc #'@'
+        asl
+        asl
+        clc
+        adc #<STAVAR
+        sta vptr
+        lda #>STAVAR
+        adc #0
+        sta vptr+1
+        lda #4
+        sta vtype
+        clc
+        lda #0                  ; Z
+        rts
+.dyn0   lda nfirst
+        cmp #'@'
+        bne .dyn
+        sec                     ; '@' only as @%
+        rts
+.dyn    sec
+        sbc #'A'
+        asl
+        clc
+        adc #<DYNVAR
+        sta ptr3
+        lda #>DYNVAR
+        adc #0
+        sta ptr3+1
+locate_list:                    ; entry: ptr3 -> list head
+.walk   ldy #0
+        lda (ptr3),y
+        sta ptr1
+        iny
+        lda (ptr3),y
+        sta ptr1+1
+        ora ptr1
+        beq .nf
+        ; compare name at ptr1+2
+        ldy #2
+        ldx #0
+.cmp    cpx nlen
+        beq .end
+        lda (ptr1),y
+        cmp NBUF,x
+        bne .next
+        iny
+        inx
+        bra .cmp
+.end    lda (ptr1),y
+        bne .next
+        iny                     ; found: value at ptr1+y
+        tya
+        clc
+        adc ptr1
+        sta vptr
+        lda ptr1+1
+        adc #0
+        sta vptr+1
+        jsr nametype
+        sta vtype
+        clc
+        lda #0
+        rts
+.next   lda ptr1
+        sta ptr3
+        lda ptr1+1
+        sta ptr3+1
+        bra .walk
+.nf     clc
+        lda #1                  ; NZ
+        rts
+
+; ---- CREATE: append new entry (after failed LOCATE), zero value ----
+!zone create
+create: lda free
+        ldy #0
+        sta (ptr3),y
+        lda free+1
+        iny
+        sta (ptr3),y
+        lda free
+        sta ptr1
+        lda free+1
+        sta ptr1+1
+        lda #0
+        ldy #0
+        sta (ptr1),y
+        iny
+        sta (ptr1),y
+        ldx #0
+.n      cpx nlen
+        beq .ne
+        lda NBUF,x
+        iny
+        sta (ptr1),y
+        inx
+        bra .n
+.ne     lda #0
+        iny
+        sta (ptr1),y
+        iny
+        tya
+        clc
+        adc ptr1
+        sta vptr
+        lda ptr1+1
+        adc #0
+        sta vptr+1
+        jsr nametype
+        sta vtype
+        ldx #2                  ; array: 2-byte pointer
+        jsr isarray
+        beq +
+        ldx #4
+        lda vtype
+        bmi +
+        tax                     ; 1, 4 or 5
++       stx tmp0
+        ldy #0
+        lda #0
+-       sta (vptr),y
+        iny
+        dex
+        bne -
+        lda vptr
+        clc
+        adc tmp0
+        sta free
+        lda vptr+1
+        adc #0
+        sta free+1
+        jmp check
+
+; CHECK: error "No room" if FREE+256 >= SP
+check:  tsx
+        stx tmpw
+        tsy
+        sty tmpw+1
+        lda free+1
+        clc
+        adc #1
+        cmp tmpw+1
+        bcs .full
+        rts
+.full   lda #0
+        jmp error
+
+; ---- GETVAR ----
+; out: carry set = not a variable (illegal), tp unchanged
+;      Z set = found: vptr, vtype
+;      Z clear = not found (name scanned; call PUTVAR to create)
+!zone getvar
+getvar: lda (tp),z
+        cmp #'!'
+        beq .ind4
+        cmp #'?'
+        beq .ind1
+        cmp #'$'
+        beq .inds
+        cmp #'|'
+        beq .ind5
+        jsr getname
+        bcc +
+        rts
++       jsr locate
+        bcc +
+        rts
++       bne .nf
+        jsr isarray
+        bne .post
+        jmp subscr
+.nf     clc                     ; NZ, no carry
+        lda #1
+        rts
+.ind4   lda #4
+        bra .ind
+.ind1   lda #0
+        bra .ind
+.ind5   lda #5
+        bra .ind
+.inds   lda #$80
+.ind    pha
+        inw tp
+        jsr itemi
+        lda acc
+        sta vptr
+        lda acc+1
+        sta vptr+1
+        pla
+        sta vtype
+        clc
+        lda #0
+        rts
+.post   ; binary indirection: var?n  var!n
+getvpost:
+        lda (tp),z
+        cmp #'?'
+        beq +
+        cmp #'!'
+        beq +
+        clc
+        lda #0
+        rts
++       lda vtype
+        bmi .ok                 ; string: not applicable
+        jsr loadn
+        jsr sfix
+        lda (tp),z
+        ldx #0
+        cmp #'?'
+        beq +
+        ldx #4
++       phx
+        lda acc
+        pha
+        lda acc+1
+        pha
+        inw tp
+        jsr itemi
+        pla
+        sta tmpw+1
+        pla
+        clc
+        adc acc
+        sta vptr
+        lda tmpw+1
+        adc acc+1
+        sta vptr+1
+        pla
+        sta vtype
+.ok     clc
+        lda #0
+        rts
+
+; PUTVAR: create variable after GETVAR returned NZ
+putvar: jsr create
+        jsr isarray
+        bne +
+        lda #14                 ; Bad use of array
+        jmp error
++       clc
+        lda #0
+        rts
+
+; ---- array subscript ----
+; vptr -> array pointer field; tp after '('
+!zone subscr
+subscr: ldy #0
+        lda (vptr),y
+        sta ptr2
+        iny
+        lda (vptr),y
+        sta ptr2+1
+        ora ptr2
+        bne +
+        lda #14                 ; Bad use of array (not DIMmed)
+        jmp error
++       lda vtype
+        pha
+        lda ptr2
+        pha
+        lda ptr2+1
+        pha
+        ldy #0
+        lda (ptr2),y            ; number of dimensions
+        pha                     ; dims left
+        lda #0
+        pha                     ; index lo
+        pha                     ; index hi
+        lda #1                  ; dim pointer offset
+        pha
+.sub    jsr expri               ; subscript -> acc
+        ; stack (top first): dimoff, idxhi, idxlo, dims, arrhi, arrlo, type
+        tsx
+        stx spz
+        tsy
+        sty spz+1
+        ldy #5
+        lda (spz),y
+        sta ptr2+1
+        iny
+        lda (spz),y
+        sta ptr2
+        ldy #1
+        lda (spz),y             ; dim offset
+        tay
+        lda (ptr2),y            ; size of this dimension
+        sta arg
+        iny
+        lda (ptr2),y
+        sta arg+1
+        ; check 0 <= sub < size
+        lda acc+3
+        ora acc+2
+        bne .range
+        lda acc
+        cmp arg
+        lda acc+1
+        sbc arg+1
+        bcs .range
+        ; index = index*size + sub
+        ldy #3
+        lda (spz),y
+        sta $d770
+        ldy #2
+        lda (spz),y
+        sta $d771
+        lda #0
+        sta $d772
+        sta $d773
+        sta $d776
+        sta $d777
+        lda arg
+        sta $d774
+        lda arg+1
+        sta $d775
+        lda $d778
+        clc
+        adc acc
+        ldy #3
+        sta (spz),y
+        lda $d779
+        adc acc+1
+        ldy #2
+        sta (spz),y
+        ldy #1
+        lda (spz),y
+        clc
+        adc #2
+        sta (spz),y
+        ldy #4                  ; dims--
+        lda (spz),y
+        sec
+        sbc #1
+        sta (spz),y
+        beq .last
+        jsr comma
+        jmp .sub
+.range  lda #15                 ; Bad subscript
+        jmp error
+.last   jsr braket
+        pla                     ; dimoff -> header size
+        sta tmp0
+        pla
+        sta tmpw+1              ; index hi
+        pla
+        sta tmpw                ; index lo
+        pla                     ; dims
+        pla
+        sta ptr2+1
+        pla
+        sta ptr2
+        pla
+        sta vtype
+        jsr elsize              ; A = element size
+        sta $d774
+        lda #0
+        sta $d775
+        sta $d776
+        sta $d777
+        sta $d772
+        sta $d773
+        lda tmpw
+        sta $d770
+        lda tmpw+1
+        sta $d771
+        lda $d778
+        clc
+        adc tmp0
+        sta tmpw
+        lda $d779
+        adc #0
+        sta tmpw+1
+        lda ptr2
+        clc
+        adc tmpw
+        sta vptr
+        lda ptr2+1
+        adc tmpw+1
+        sta vptr+1
+        jmp getvpost
+
+elsize: lda vtype
+        bpl +
+        lda #4
+        rts
++       rts                     ; 1,4,5 are their own sizes
+
+; ---- load numeric variable into acc ----
+!zone loadn
+loadn:  ldy #0
+        lda vtype
+        beq .b
+        cmp #1
+        beq .b
+        cmp #4
+        beq .i
+        cmp #5
+        beq .f
+        lda #6                  ; Type mismatch
+        jmp error
+.b      lda (vptr),y
+        sta acc
+        lda #0
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+        rts
+.i      lda (vptr),y
+        sta acc
+        iny
+        lda (vptr),y
+        sta acc+1
+        iny
+        lda (vptr),y
+        sta acc+2
+        iny
+        lda (vptr),y
+        sta acc+3
+        lda #0
+        sta accx
+        sta etype
+        rts
+.f      jsr .i
+        ldy #4
+        lda (vptr),y
+        sta accx
+        rts
+
+; ---- store acc into numeric variable ----
+!zone storen
+storen: lda etype
+        beq +
+        lda #6
+        jmp error
++       ldy #0
+        lda vtype
+        beq .b
+        cmp #1
+        beq .b
+        cmp #4
+        beq .i
+        cmp #5
+        beq .f
+        lda #6
+        jmp error
+.b      lda accx
+        beq +
+        jsr sfix
++       lda acc
+        sta (vptr),y
+        rts
+.i      lda accx
+        beq +
+        jsr sfix
++       lda acc
+        sta (vptr),y
+        iny
+        lda acc+1
+        sta (vptr),y
+        iny
+        lda acc+2
+        sta (vptr),y
+        iny
+        lda acc+3
+        sta (vptr),y
+        rts
+.f      lda acc
+        sta (vptr),y
+        iny
+        lda acc+1
+        sta (vptr),y
+        iny
+        lda acc+2
+        sta (vptr),y
+        iny
+        lda acc+3
+        sta (vptr),y
+        iny
+        lda accx
+        sta (vptr),y
+        rts
+
+; ---- strings ----
+; LOADS: string var/indirection -> ACCS, slen
+!zone loads
+loads:  lda #$80
+        sta etype
+        lda vtype
+        cmp #$81
+        beq .var
+        cmp #$80
+        beq .ind
+        lda #6
+        jmp error
+.var    ldy #0
+        lda (vptr),y
+        sta ptr1
+        iny
+        lda (vptr),y
+        sta ptr1+1
+        iny
+        lda (vptr),y
+        sta slen
+        tax
+        ldy #0
+-       cpy slen
+        beq +
+        lda (ptr1),y
+        sta ACCS,y
+        iny
+        bra -
++       rts
+.ind    ldy #0
+-       lda (vptr),y
+        cmp #CR
+        beq +
+        sta ACCS,y
+        iny
+        bne -
++       sty slen
+        rts
+
+; STORES: ACCS/slen -> string variable or $-indirection
+!zone stores
+stores: lda etype
+        bmi +
+        lda #6
+        jmp error
++       lda vtype
+        cmp #$81
+        beq .var
+        cmp #$80
+        beq .ind
+        lda #6
+        jmp error
+.ind    ldy #0
+-       cpy slen
+        beq +
+        lda ACCS,y
+        sta (vptr),y
+        iny
+        bra -
++       lda #CR
+        sta (vptr),y
+        rts
+.var    ldy #3
+        lda (vptr),y            ; allocated
+        cmp slen
+        bcs .fits
+        ; allocate new block at FREE (length rounded up to 8)
+        lda slen
+        clc
+        adc #7
+        bcc +
+        lda #$ff
++       and #$f8
+        bne +
+        lda #$ff
++       sta tmp0
+        ldy #3
+        sta (vptr),y
+        ldy #0
+        lda free
+        sta (vptr),y
+        iny
+        lda free+1
+        sta (vptr),y
+        lda free
+        clc
+        adc tmp0
+        sta free
+        bcc +
+        inc free+1
++       jsr check
+.fits   ldy #2
+        lda slen
+        sta (vptr),y
+        ldy #0
+        lda (vptr),y
+        sta ptr1
+        iny
+        lda (vptr),y
+        sta ptr1+1
+        ldy #0
+-       cpy slen
+        beq +
+        lda ACCS,y
+        sta (ptr1),y
+        iny
+        bra -
++       rts
