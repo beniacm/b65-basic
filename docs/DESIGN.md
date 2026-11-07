@@ -362,7 +362,8 @@ Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
 | `$0800`-`$0FCF` | text screen, or the 16-bit character map in MODE 1 |
 | `$1000`-`$1BFF` | PARBUF: 6 parameter slots; during file writes also FAT/dir sector buffers and FAT state (`$1000`-`$147F`) |
 | `$1C00`-`$1DFF` | sound queues, envelopes, graphics argument buffer |
-| `$1E00`-`$1FFF` | FN result slot |
+| `$1E00`-`$1EFF` | FN result slot |
+| `$1F00`-`$1FA3` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries |
 | `$2001`-`$86FF` | PRG stub + resident interpreter |
 | `$8700`-`$CEFF` | PAGE..HIMEM (program, variables, CPU stack from the top) |
 | `$E000`-`$FFFF` | overlay window (MAP) |

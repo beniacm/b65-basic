@@ -7,17 +7,24 @@
 ;   amp  -15..0 volume, or 1..16 envelope number
 ;   pitch 0..255 quarter semitones (89 = 440 Hz), duration in 1/20 s
 ; ENVELOPE n, t, pi1,pi2,pi3, pn1,pn2,pn3, aa,ad,as,ar, ala,ald
-;   mapped to a SID ADSR (pitch envelopes are not supported)
+;   amplitude part mapped to a SID ADSR; the pitch part (t, pi1-3, pn1-3)
+;   is played from the interrupt: every t cs the pitch changes by pi_k for
+;   pn_k steps, sections 1-3, repeated unless t has bit 7 set
 ; ADVAL(-5-c) = free slots in the queue of channel c
 
 SNDQ    = $1c00         ; PARBUF slot 6: queues (4 channels x 8 entries x 8 bytes)
 QLEN    = 8
-; entry: freq lo, freq hi, AD, SR, wave, frames lo, frames hi, (unused)
+; entry: pitch, (unused), AD, SR, wave, frames lo, frames hi, envelope (1-16, 0 none)
 snd_head = SNDQ+256     ; 4 bytes
 snd_tail = SNDQ+260
 snd_left = SNDQ+264     ; 4 x 2 bytes: frames left of the playing note (0 = idle)
 snd_wave = SNDQ+272     ; 4 bytes: waveform of the playing note
 envtab  = SNDQ+288      ; 16 envelopes x 2 bytes (AD, SR)
+PENV    = $1f00         ; 16 pitch envelopes x 8: t, pi1, pi2, pi3, pn1, pn2, pn3, -
+PCH     = $1f80         ; 4 channels x 8: active, env offset, section, left, timer, pitch
+snd_f   = $1fa0         ; 2 (interrupt)
+snd_s   = $1fa2
+snd_g   = $1fa3
 
 sidbase: !byte $20, $00, $07, $0e   ; channel 0: SID 2 voice 1 (noise), 1-3: SID 1 voices
 
@@ -31,6 +38,11 @@ sndinit:
         sta $d40b
         sta $d412
         sta $d424
+        ldx #0                  ; no pitch envelopes
+-       sta PENV,x
+        inx
+        cpx #$a4
+        bne -
         lda #$0f
         sta $d418               ; master volume
         sta $d438
@@ -106,34 +118,15 @@ sound:  jsr expri               ; channel
         lda #0
         sta snd_left+1,y
         cli
-+       ; frequency
-        lda tmp4
-        ldx #0
--       cmp #48
-        bcc +
-        sbc #48
-        inx
-        bra -
-+       asl
-        tay
-        lda sidpitch,y
-        sta acc
-        lda sidpitch+1,y
-        sta acc+1
--       dex
-        bmi +
-        asl acc
-        rol acc+1
-        bcc -
-        lda #$ff                ; above the SID range: clamp
-        sta acc
-        sta acc+1
-+       ; ADSR
-        lda tmp5
++       lda #0
+        sta acc+1               ; (envelope number)
+        lda tmp5                ; ADSR
         bmi .vol
         beq .vol
         dec                     ; envelope 1..16
         and #15
+        sta acc+1
+        inc acc+1
         asl
         tay
         lda envtab,y
@@ -181,10 +174,10 @@ sound:  jsr expri               ; channel
         clc
         adc tmp0
         tay
-        lda acc
-        sta SNDQ,y
+        lda tmp4
+        sta SNDQ,y              ; pitch
         lda acc+1
-        sta SNDQ+1,y
+        sta SNDQ+7,y            ; envelope
         lda acc+2
         sta SNDQ+2,y
         lda acc+3
@@ -219,6 +212,19 @@ envelope:
         lda acc
         sta NUMBUF,x            ; NUMBUF[13..1]: t, pi1..pn3, aa, ad, as, ar, ala, ald
         dex
+        bne -
+        pla
+        pha
+        asl                     ; pitch part -> PENV + n*8
+        asl
+        asl
+        tay
+        ldx #13
+-       lda NUMBUF,x
+        sta PENV,y
+        iny
+        dex
+        cpx #6
         bne -
         pla
         asl
@@ -301,8 +307,10 @@ sndirq: ldx #3
         dec
         sta snd_left,y
         ora snd_left+1,y
-        bne .next
-        ; note finished: gate off
+        beq +
+        jsr pstep               ; still playing: pitch envelope
+        bra .next
++       ; note finished: gate off
         lda sidbase,x
         tay
         lda snd_wave,x
@@ -325,14 +333,11 @@ sndirq: ldx #3
         clc
         adc snd_tmp
         sta snd_tmp             ; entry offset
+        jsr pstart              ; pitch envelope state, frequency
         phx
         lda sidbase,x
         tax                     ; X = SID register offset
         ldy snd_tmp
-        lda SNDQ,y
-        sta $d400,x
-        lda SNDQ+1,y
-        sta $d401,x
         lda #$00                ; pulse width 50%
         sta $d402,x
         lda #$08
@@ -365,5 +370,142 @@ sndirq: ldx #3
         lbpl .c
         rts
 snd_tmp = SNDQ+352
+
+; PSTART: X = channel, snd_tmp = queue entry: set up the pitch envelope and
+; program the start frequency (keeps X)
+pstart: phx
+        txa
+        asl
+        asl
+        asl
+        tax                     ; X = channel state offset
+        ldy snd_tmp
+        lda SNDQ,y
+        sta PCH+5,x             ; pitch
+        lda #0
+        sta PCH,x               ; inactive
+        sta PCH+4,x             ; timer
+        lda SNDQ+7,y
+        beq .f
+        dec
+        asl
+        asl
+        asl
+        sta PCH+1,x             ; envelope offset
+        tay
+        lda PENV,y              ; t = 0 (never defined): no pitch envelope
+        and #$7f
+        beq .f
+        lda #$ff                ; section -1, left 0: first step enters section 0
+        sta PCH+2,x
+        lda #0
+        sta PCH+3,x
+        inc PCH,x
+.f      lda PCH+5,x
+        plx
+        jmp setf
+; PSTEP: X = channel: advance the pitch envelope by one frame (2 cs)
+pstep:  phx                     ; channel
+        txa
+        asl
+        asl
+        asl
+        tax                     ; X = channel state offset
+        lda PCH,x
+        beq .x
+        lda PCH+4,x             ; timer += 2 cs
+        clc
+        adc #2
+        sta PCH+4,x
+.t      ldy PCH+1,x
+        lda PENV,y              ; step length t (cs)
+        and #$7f
+        sta snd_f
+        lda PCH+4,x
+        cmp snd_f
+        bcc .x
+        sbc snd_f
+        sta PCH+4,x
+        jsr .step
+        lda PCH,x
+        beq .x
+        lda PCH+5,x             ; new pitch -> SID
+        stx snd_s
+        plx
+        phx
+        jsr setf
+        ldx snd_s
+        bra .t
+.x      plx
+        rts
+; one step: Y = envelope offset, X = state offset
+.step   lda #4                  ; (all counts 0: stop after 4 section changes)
+        sta snd_g
+-       lda PCH+3,x
+        bne .go
+        dec snd_g
+        beq .off
+        inc PCH+2,x             ; next section
+        lda PCH+2,x
+        cmp #3
+        bcc +
+        lda PENV,y              ; after section 3: repeat unless t bit 7
+        bmi .off
+        lda #0
+        sta PCH+2,x
++       tya
+        clc
+        adc PCH+2,x
+        tay
+        lda PENV+4,y            ; pn of the section
+        sta PCH+3,x
+        ldy PCH+1,x
+        bra -
+.go     dec PCH+3,x
+        tya
+        clc
+        adc PCH+2,x
+        tay
+        lda PENV+1,y            ; pi of the section
+        ldy PCH+1,x
+        clc
+        adc PCH+5,x
+        sta PCH+5,x
+        rts
+.off    lda #0
+        sta PCH,x
+        rts
+; SETF: A = BBC pitch, X = channel: program the SID frequency (keeps X)
+setf:   phx
+        ldy #0
+-       cmp #48
+        bcc +
+        sbc #48
+        iny
+        bra -
++       asl
+        tax
+        lda sidpitch,x
+        sta snd_f
+        lda sidpitch+1,x
+        sta snd_f+1
+-       dey
+        bmi +
+        asl snd_f
+        rol snd_f+1
+        bcc -
+        lda #$ff                ; above the SID range: clamp
+        sta snd_f
+        sta snd_f+1
++       plx
+        phx
+        lda sidbase,x
+        tax
+        lda snd_f
+        sta $d400,x
+        lda snd_f+1
+        sta $d401,x
+        plx
+        rts
 
 !src "src/sndtab.a"
