@@ -453,31 +453,30 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | attic `$8100000`-`$84FFFFF` | file channel buffers (1 MB each) |
 | bank 5 `$50000`-`$5F9FF` | MODE 1 bitmap |
 
-### Needs a hardware test
+### Hardware status (QMTECH K325T board, run by the lead)
 
-These cannot be checked in Xemu, or only partly:
+Verified on the board (all smoke tests and `tests/hw/*` transcripts equal
+to the Xemu results; card checked with a read-only `fsck.fat` before and
+after every write test, no new findings, only B65* files changed):
 
-* Keyboard and line editor with real key repeat and RUN/STOP (Escape),
-  GET/INKEY timing.
-* TIME: based on the CIA TOD clock, 0.1 s resolution. Xemu feeds TOD from
-  the host clock.
-* VIC-IV set-up on real boards: 80x25 text, CHARPTR to our font in chip RAM
-  at `$5F000`, and the XSCROLL=1 compensation for the VIC-III 2-pixel shift.
-* Math unit timing: the code polls MULBUSY/DIVBUSY (`$D70F`), and the
-  divider correction path. The multiplier is also used without polling in
-  screen and array code, which relies on its 1-cycle latency.
-* SD writes with our FAT32 writer (SAVE, CLOSE# of changed files) on the
-  real card: `tests/hw/02_save.txt`, `tests/hw/03_chan.txt`.
-* 16-bit stack (CLE) with deep recursion on real silicon.
-* The MAP-based overlays on real hardware.
-* K325T: detection through `$D629`/XCTL `$FFD71F0`, enabling 1 MB chip RAM,
-  and the 64 MB attic probe. These can only be checked on the board itself.
-* Raster IRQ timing and TIME on PAL and NTSC; EVERY/AFTER rates.
-* SID output: audio mixer routing after a cold start through the PRG, the
-  noise channel, ENVELOPE ADSR mapping, and pitch accuracy (the table assumes
-  the PAL SID clock).
-* MODE 1 on real VIC-IV: the full-colour character layout, the HOTREG-based
-  geometry recompute, the palette, and DMA F018B job lists read from bank 4.
+* VIC-IV set-up (no stray pixels), key queue flushed at start, keyboard
+  input; smoke 18/18 at commit 04abfba.
+* SD reading (LOAD, CHAIN, *CAT, OPENIN/BGET of existing files) and writing
+  with our FAT32 writer (SAVE new/overwrite, OPENOUT/OPENUP/PRINT#/BPUT#,
+  a 602 KB file), INSTALL, the 38 KB program in bank 1.
+* MODE 1 graphics incl. ELLIPSE/FILL, sprites (position exact), SOUND with
+  a pitch envelope (recorded: 570-720 Hz triangle warble), MOUSE with
+  injected 1351 POT values and buttons.
+* Attic arrays: 230 cs vs 218 cs (bank 0) for 5000 read-modify-writes
+  (K325T attic = DDR3 behind a cache; an original MEGA65's HyperRAM may
+  differ).
+
+Still open or only partly checked:
+
+* Keyboard feel (repeat, RUN/STOP as Escape) by a person; TIME on NTSC.
+* An original MEGA65 (R3/R6): HyperRAM timing, its SD controller, model
+  detection paths other than K325T.
+* SID by ear beyond the recorded envelope test (noise channel, ADSR).
 
 ## 7. Naming
 
