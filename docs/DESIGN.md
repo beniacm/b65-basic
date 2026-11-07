@@ -170,45 +170,119 @@ presets the "onboarded" flag in a freshly formatted virtual SD card. Hyppo
 2025-06 did not honour it, and the extonboard approach above made it
 unnecessary.
 
-## 5. Status (milestone 1)
+## 5. Status
 
-Working and covered by the smoke tests:
+See the feature table in README.md. In short:
 
-* Immediate mode and program entry: line insert, replace and delete, tokeniser
-  with abbreviations, line-number encoding after GOTO/GOSUB/THEN/ELSE/RESTORE.
-* Commands: LIST [a][,b] with LISTO indentation, NEW, OLD, DELETE, RENUMBER
-  (updates GOTO/GOSUB references), AUTO, RUN.
-* Integer expressions with the BASIC V precedences:
-  * operators: `+ - * DIV MOD AND OR EOR NOT = <> < > <= >= == << >> >>>`,
-    `&hex`, `%binary`,
-  * indirection: `? ! $`.
-* Variables: static, dynamic integer/variant/byte/string variables and
-  multi-dimensional arrays (DIM). DIM also reserves memory blocks
-  (`DIM x% n`).
-* Strings: `+`, comparisons, LEN, LEFT$, MID$, RIGHT$ (v5 one-argument forms
-  included), CHR$, ASC, STR$(~), VAL, INSTR, STRING$, GET$, INKEY$, REPORT$,
-  EVAL.
-* Statements:
-  * output: PRINT (@% field width, `, ; ' ~ TAB(x[,y]) SPC`), VDU, CLS,
-  * assignment: LET, compound `+= -= *= /= AND= OR= EOR= MOD= DIV=`,
-  * loops: FOR/NEXT [STEP], REPEAT/UNTIL, WHILE/ENDWHILE,
-  * conditionals: single-line IF/THEN/ELSE and multi-line IF ... ELSE ...
-    ENDIF,
-  * jumps and procedures: GOTO, GOSUB/RETURN, ON n GOTO/GOSUB, DEF PROC/FN
-    with parameters, LOCAL (numeric and string), ENDPROC, `=`, recursive FN,
-  * data and input: READ/DATA/RESTORE [line], INPUT,
-  * errors: ON ERROR / ON ERROR OFF, ERROR n,"text", REPORT, ERR, ERL,
-  * other: END, STOP, CLEAR, TRACE, WIDTH, WAIT, QUIT, TIME (CIA TOD,
-    0.1 s resolution).
+* **M1** (interactive core): done.
+* **M2** (floating point): done.
+* **M3** (statements, ASCII font, line editor, files): done except for the
+  items marked partial or missing.
+* **M4** (inline assembler): done.
+* **M5** (MEGA65 extensions): see below.
 
-## 6. Milestone plan
+### Floating point (M2)
 
-| # | Milestone | Content | Estimate |
-|---|---|---|---|
-| 2 | Floating point | Port the MATH.Z80 40-bit package: FADD/FSUB/FMUL/FDIV, FIX/FLOAT, comparisons, number parsing, @% G/E/F formatting, SQR, SIN, COS, TAN, ATN, ASN, ACS, EXP, LN, LOG, `^`, INT, RND(1), PI, DEG, RAD. Integer overflow promotes to float as upstream does. The hardware multiplier/divider can speed up the mantissa operations. | 3-5 days |
-| 3 | Statement set to v5 parity | CASE/WHEN/OTHERWISE, EXIT, SWAP, whole-array operations, LOCAL arrays, ON ERROR LOCAL / RESTORE ERROR/DATA, `DIM LOCAL`, INSTALL, string arrays in PROC args, RETURNed parameters, `PTR/EXT/EOF`, `OPENIN/OPENOUT/BGET/BPUT` and LOAD/SAVE/CHAIN on SD-card files (Hyppo DOS traps), an ASCII font in char WOM, a better line editor (cursor keys and copy), Escape tested on real hardware | 1-2 weeks |
-| 4 | 45GS02 inline assembler | `[ ... ]` with OPT, labels and P%/O%; mnemonic and addressing-mode tables for 6502, 65CE02, 4510 and 45GS02 (`[zp],z`, Q ops, long branches). Table-driven like ASMB.Z80. | 1 week |
-| 5 | MEGA65 extensions | VIC-IV graphics through the HOOK entry points: MODE, CLG, GCOL, PLOT/MOVE/DRAW, CIRCLE, RECTANGLE, FILL, COLOUR/palette, sprites, using the DMA fill/copy hardware. SID SOUND/ENVELOPE with Locomotive-style queues. EVERY/AFTER timers on the raster IRQ. Memory: move the interpreter out of bank 0, 28-bit pointers for programs/heap in chip RAM (384 KB; 1 MB on the K325T) and attic RAM (8 MB, or 64 MB on the K325T) through `[zp],z`, e.g. a big-array or `DIM ... ATTIC` extension. | 2-4 weeks |
+`src/fp.a` and `src/fp2.a` are a port of MATH.Z80. They use the same 5-byte
+format and the same algorithms:
+
+* rounding: unbiased, from a 16-bit extension,
+* normalisation,
+* POWR10, the CON number parser, STR with @% G/E/F formats, MOD48 range
+  reduction,
+* the same polynomial coefficients for SIN, COS, EXP, LN and ATN,
+* the literal SQRA/SQRB square root,
+* IPOW/FPOW for `^`,
+* integer to float promotion on overflow, including IMUL's truncated
+  64-bit path.
+
+The mantissa operations use the MEGA65 math unit:
+
+* **Multiply.** `$D770`-`$D77F` give the exact 32x32->64 product. The code
+  waits on the MULBUSY bit.
+* **Divide.** The hardware divider (`$D768`) is an iterative Goldschmidt
+  divider; see `fast_divide.vhdl` in mega65-core. On real hardware it rounds,
+  so its quotient is only an *estimate*. The quotient is then corrected
+  exactly with the multiplier (remainder = N - q*d, adjust q by +-1). That
+  makes the result bit-identical to the restoring division in MATH.Z80
+  whatever the divider returns.
+
+Test and benchmark switch: `?&AF=1` selects the pure software
+multiply/divide. `?&AF=&80` or `&81` deliberately perturbs the hardware
+estimate by +1 or -1 to exercise the correction. `tests/smoke/06_fp_paths`
+checks that all paths give identical results on 400 random operand pairs.
+
+Benchmark (`tests/bench_fp.txt`, Xemu at real speed, frames of 1/50 s,
+loop overhead included):
+
+| | 5000 `C=A*B` | 5000 `C=A/B` | 1000 `SIN` | empty loop |
+|---|---|---|---|---|
+| math unit | 28 | 29 | 13 | 8 |
+| software | 44 | 48 | 30 | 8 |
+
+### Inline assembler (M4)
+
+`src/asm.a` runs in code overlay 0 and takes its instruction table from
+`src/asmtab.a`, generated by `tools/gen_opcodes.py`: 366 forms covering
+6502, 65C02, 65CE02/4510 and 45GS02.
+
+* 45GS02 extensions: Q instructions (`LDQ`, `STQ`, `ADCQ`, ... with the
+  `$42 $42` prefix), `[zp],Z` 32-bit flat addressing (`$EA` prefix), 16-bit
+  branches (`LBxx`, `BSR`), `BBR`/`BBS`/`RMB`/`SMB`, `PHW`, `RTN`, `MAP`/`EOM`.
+* Mnemonics that the tokeniser turned into BASIC keywords (`AND`, `EOR`, `OR`
+  in `ORA`, `ORQ`, ...) are expanded back to text.
+* Directives: `OPT` (bit 0 listing, bit 1 errors, bit 2 assemble at `O%`),
+  labels `.name` (BASIC variables), `EQUB`/`EQUW`/`EQUD`/`EQUS` (with lists).
+* When OPT bit 1 is clear, undefined labels take the value of P%.
+* `tests/smoke/09_assembler` checks the output byte for byte against ACME.
+* `CALL addr` and `USR(addr)` pass A%, X%, Y%, Z% and C% (carry). USR returns
+  A + X<<8 + Y<<16 + Z<<24.
+
+### Code overlays
+
+Rarely used modules are assembled with `!pseudopc $E000`, copied at start-up
+to chip RAM bank 4 (`$40000 + n*$2000`), and mapped into CPU block 7
+(`$E000`-`$FFFF`) with the 45GS02 `MAP` instruction when they are needed
+(`ovjmp` / `ovjsr` in `src/ovl.a`). This keeps the resident core in bank 0
+(`$2000`-`$7EFF`) and leaves PAGE..HIMEM for programs, while larger modules
+are added.
+
+### Files (M3)
+
+Files use the Hyppo DOS traps on the FAT32 SD card:
+
+* setname, loadfile, opendir, readdir, openfile, readfile, mkfile and
+  writefile.
+* File existence is checked by scanning the directory, because the Hyppo
+  build in Xemu reports "found" for missing names. SAVE overwrites an
+  existing file in place; only new files go through `mkfile`.
+* `rmfile` is not used, so SAVE never deletes anything.
+* Program files are the tokenised program, the same format as BBC BASIC
+  (Z80) v5. `.BBC` is added when the name has no extension.
+* Files only work after the ROM has booted DOS (the normal case on a
+  MEGA65). The `tests/smoke_rom.sh` tests boot the ROM from an onboarded card
+  image.
+* **Known problem:** Hyppo's mkfile is marked work-in-progress upstream. In
+  Xemu, once files without long names exist, it reports "file exists" for
+  new names, so SAVE of a *new* file can fail with "Disk fault". Needs a test
+  on real hardware.
+
+### Needs a hardware test
+
+These cannot be checked in Xemu, or only partly:
+
+* Keyboard and line editor with real key repeat and RUN/STOP (Escape),
+  GET/INKEY timing.
+* TIME: based on the CIA TOD clock, 0.1 s resolution. Xemu feeds TOD from
+  the host clock.
+* VIC-IV set-up on real boards: 80x25 text, CHARPTR to our font in chip RAM
+  at `$5F000`, and the XSCROLL=1 compensation for the VIC-III 2-pixel shift.
+* Math unit timing: the code polls MULBUSY/DIVBUSY (`$D70F`), and the
+  divider correction path. The multiplier is also used without polling in
+  screen and array code, which relies on its 1-cycle latency.
+* Hyppo file I/O: SAVE of new files (mkfile/writefile), OPENIN/BGET, *CAT.
+* 16-bit stack (CLE) with deep recursion on real silicon.
+* The MAP-based overlays on real hardware.
 
 ## 7. Naming
 
