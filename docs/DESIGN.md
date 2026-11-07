@@ -267,6 +267,88 @@ Files use the Hyppo DOS traps on the FAT32 SD card:
   new names, so SAVE of a *new* file can fail with "Disk fault". Needs a test
   on real hardware.
 
+### MEGA65 extensions (M5)
+
+* **Hardware detection** (`src/m65.a`) runs at start-up, and the banner
+  shows the result (for example "MEGA65 (model $03), 384K chip RAM, 8MB
+  attic RAM").
+  * K325T: `$D629 = $62`, confirmed by writing bit 0 of XCTL `$FFD71F0` and
+    reading it back (the original value is restored if the read fails). On
+    success the 1 MB chip RAM bit is left set. Attic size is probed by
+    writing 64 to `$BFFFFFC`; this only happens on a confirmed K325T.
+  * On a standard MEGA65, XCTL is never touched.
+  * Information block, readable with `?`: `&6E0` = model id, `&6E1` = &FF on
+    K325T, `&6E2`/`&6E3` = chip RAM in KB, `&6E4` = attic RAM in MB.
+  * In Xemu, `-model 98` takes the K325T path, because Xemu's I/O page reads
+    the XCTL value back.
+* **Raster interrupt** (line 251) at 50/60 Hz:
+  * TIME in centiseconds; NTSC adds 2,2,1 per frame.
+  * Four Locomotive-BASIC-style timers: `EVERY t[,n] GOSUB line`,
+    `AFTER t[,n] GOSUB line`, `TIMELEFT(n)` (like Locomotive REMAIN: returns
+    what is left and stops the timer), `DI`/`EI`.
+  * Events are dispatched between statements, higher timer number first. A
+    handler ends with RETURN.
+  * The new keywords use tokens `$11`-`$15`. In program text these values
+    are free; upstream uses `$11`-`$1B` only as message fragments in error
+    texts. LIST expands them through a second keyword table.
+  * All 16-bit stack pointer updates are protected against interrupts
+    (`+setsp`).
+* **SOUND / ENVELOPE** (`src/sound.a`), BBC syntax:
+  * Channels 1-3 use SID 1 (pulse wave); channel 0 is noise on SID 2.
+  * Each channel has an 8-note queue that the interrupt plays; SOUND waits
+    when a queue is full. `SOUND &1x,...` flushes the queue.
+  * `ADVAL(-5..-8)` gives the free queue space.
+  * ENVELOPE becomes a SID ADSR (attack/decay/release rates and sustain
+    level). Pitch envelopes are not supported.
+* **Graphics** (overlay 1, `src/gfx.a`):
+  * `MODE 1` is 320x200 in 256 colours. It uses VIC-IV full-colour
+    characters: 1000 cells of 64 bytes in chip RAM at `$50000`, with 16-bit
+    character numbers in the text screen RAM.
+  * Palette: colours 0-15 are the VIC defaults, 16-255 an RGB 3-3-2 cube.
+    Colour 255 shows the colour RAM foreground (full-colour mode rule), so
+    use 254 for white.
+  * Statements: `MODE 0/1`, `CLG`, `GCOL [m,]c`, `COLOUR c` (text colour,
+    both modes), `ORIGIN`, `MOVE`, `DRAW`, `PLOT 4/5/69,x,y`, `LINE`,
+    `CIRCLE [FILL]`, `RECTANGLE [FILL]`, and the `POINT(x,y)` function.
+  * Coordinates are pixels, origin top left.
+  * Text output works in graphics mode (40x25, own font). CLG and scrolling
+    use the DMA controller (F018B job lists).
+  * FILL (flood fill), ELLIPSE, sprites and MOUSE are not implemented.
+* **Far memory.** `?addr`, `!addr` and `|addr` with 28-bit addresses
+  (>= `&10000`) use 32-bit flat addressing, so they reach all chip RAM and
+  attic RAM (`&8000000`-). `$addr` strings are limited to bank 0.
+* **Interpreter out of bank 0.** Done only in part: the assembler and
+  graphics run from bank 4 through the overlay mechanism, while the core
+  (`$2000`-`$86FF`, about 26 KB) stays in bank 0. Program space is
+  PAGE=`$8700` to HIMEM=`$CF00`, about 18 KB. Next steps:
+  * move FP formatting/transcendentals and LIST/RENUMBER/editor/files into
+    overlays,
+  * move the text screen and PARBUF out of bank 0 and start the core at
+    `$0800`,
+  * allocate arrays and strings in chip/attic RAM through 28-bit pointers.
+
+### Memory map (current)
+
+| Range | Use |
+|---|---|
+| `$0000`-`$00FF` | zero page |
+| `$0200`/`$0300` | ACCS / BUFFER |
+| `$0400`-`$04FF` | STAVAR, variable list heads |
+| `$0500`/`$0600` | STRBUF / NUMBUF |
+| `$0640`-`$06FF` | MISC variables, channel table, IRQ state, `HWINFO` at `$06E0` |
+| `$0700`-`$07FF` | EVAL buffer / dirent, STR digit stack, FP stack |
+| `$0800`-`$0FCF` | text screen, or the 16-bit character map in MODE 1 |
+| `$1000`-`$1BFF` | PARBUF: 6 parameter slots |
+| `$1C00`-`$1DFF` | sound queues, envelopes, graphics argument buffer |
+| `$1E00`-`$1FFF` | FN result slot |
+| `$2001`-`$86FF` | PRG stub + resident interpreter |
+| `$8700`-`$CEFF` | PAGE..HIMEM (program, variables, CPU stack from the top) |
+| `$E000`-`$FFFF` | overlay window (MAP) |
+| bank 1 `$10000`/`$18000` | test script / transcript (test mode only) |
+| bank 4 `$40000`-`$43FFF` | overlay images (assembler, graphics) |
+| bank 4 `$4E000`/`$4F700`/`$4F800` | file channel buffers / line history / font |
+| bank 5 `$50000`-`$5F9FF` | MODE 1 bitmap |
+
 ### Needs a hardware test
 
 These cannot be checked in Xemu, or only partly:
@@ -283,6 +365,14 @@ These cannot be checked in Xemu, or only partly:
 * Hyppo file I/O: SAVE of new files (mkfile/writefile), OPENIN/BGET, *CAT.
 * 16-bit stack (CLE) with deep recursion on real silicon.
 * The MAP-based overlays on real hardware.
+* K325T: detection through `$D629`/XCTL `$FFD71F0`, enabling 1 MB chip RAM,
+  and the 64 MB attic probe. These can only be checked on the board itself.
+* Raster IRQ timing and TIME on PAL and NTSC; EVERY/AFTER rates.
+* SID output: audio mixer routing after a cold start through the PRG, the
+  noise channel, ENVELOPE ADSR mapping, and pitch accuracy (the table assumes
+  the PAL SID clock).
+* MODE 1 on real VIC-IV: the full-colour character layout, the HOTREG-based
+  geometry recompute, the palette, and DMA F018B job lists read from bank 4.
 
 ## 7. Naming
 

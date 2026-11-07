@@ -30,7 +30,13 @@ standard MEGA65 (R3 to R6, standard core). See docs/DESIGN.md for the design.
 | OPENOUT, OPENUP, BPUT#, INPUT#, PRINT#, EXT# | missing |
 | 45GS02 inline assembler, CALL, USR | done |
 | Own ASCII 8x8 font, line editor (cursor keys, HOME, DEL, INST, recall, ctrl-U) | done |
-| MEGA65 graphics, sound, EVERY/AFTER, big memory | see M5 in docs/DESIGN.md |
+| Hardware detection banner (standard MEGA65 / K325T, chip and attic RAM), info block at &6E0 | done (K325T path needs hardware test) |
+| Raster-interrupt TIME, EVERY/AFTER/TIMELEFT/DI/EI timer events | done |
+| SOUND (SID, per-channel queues), ENVELOPE (ADSR), ADVAL(-5..-8) | done (pitch envelopes missing) |
+| Graphics MODE 1 320x200x256: CLG GCOL COLOUR ORIGIN MOVE DRAW PLOT LINE CIRCLE [FILL] RECTANGLE [FILL] POINT, text in graphics | done |
+| FILL (flood), ELLIPSE, sprites, MOUSE | missing |
+| 28-bit `?` `!` `\|` indirection to chip RAM and attic RAM | done |
+| Interpreter fully out of bank 0 / big program space | partial (overlays in bank 4; about 18 KB for programs) |
 
 ## Build
 
