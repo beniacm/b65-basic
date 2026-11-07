@@ -6,10 +6,13 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >10 AFTER 5,1 GOSUB 100
 >20 T%=TIME:REPEAT UNTIL TIME>T%+30
 >30 PRINT "lib ";FNx
+>35 PRINT FNnone
 >40 END
 >100 PRINT "event":RETURN
 >110 DEF FNx=7
 >RUN
 event
 lib 7
+
+No such FN/PROC at line 35
 >
