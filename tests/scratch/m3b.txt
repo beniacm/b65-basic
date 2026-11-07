@@ -1,0 +1,7 @@
+DIM A(4),B(4)
+A()=1,2,3,4,5:PRINT A(0),A(4)
+B()=A():PRINT B(3)
+B()*=2:PRINT B(3)
+PRINT SUM(A())
+PRINT DIM(A()),DIM(A(),1)
+A()=7:PRINT A(2)

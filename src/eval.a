@@ -119,7 +119,7 @@ pushval:
         pha
         lda accx
         pha
-        lda #0
+        lda etype               ; 0 = number, $40 = array reference
         pha
         bra .r
 .s      ldx slen
@@ -772,6 +772,10 @@ item:   jsr nxt
 +       cmp #'&'
         bne +
         jmp hexnum
++       cmp #'^'
+        bne +
+        inw tp
+        jmp f_addr
 +       cmp #'%'
         bne +
         jmp binnum

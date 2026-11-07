@@ -1,0 +1,932 @@
+; B65 BASIC - BASIC V / v5 statements: CASE, EXIT, SWAP, LEFT$()=, ...
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+
+; ---- EXIT REPEAT | WHILE | FOR [var] ----
+!zone exit
+exit:   cmp #TREPEAT
+        beq .ok
+        cmp #TWHILE
+        beq .ok
+        cmp #TFOR
+        beq .ok
+.bad    lda #44                 ; Bad EXIT
+        jmp error
+.ok     sta tmp4                ; target marker
+        inw tp
+        lda #0
+        sta vptr                ; optional FOR variable
+        sta vptr+1
+        lda #1
+        sta tmp6                ; nesting level for the text search
+        lda tmp4
+        cmp #TFOR
+        bne .pop
+        jsr termq
+        beq .pop
+        jsr getvar
+        bcs .bad
+        bne .bad
+.pop    jsr getsp
+        cmp #TFOR
+        beq .for
+        cmp #TREPEAT
+        beq .r3
+        cmp #TWHILE
+        beq .r3
+        bra .bad
+.r3     sta tmp1                ; REPEAT/WHILE frame
+        lda #3
+        jsr drop
+        lda tmp1
+        cmp tmp4
+        bne .pop
+        bra .search
+.for    lda tmp4
+        cmp #TFOR
+        bne .dropf
+        lda vptr                ; FOR var given? must match
+        ora vptr+1
+        beq .gotf
+        ldy #2
+        lda (spz),y
+        cmp vptr
+        bne .inner
+        iny
+        lda (spz),y
+        cmp vptr+1
+        beq .gotf
+.inner  inc tmp6                ; an inner FOR loop: its NEXT must be skipped too
+.dropf  lda #16
+        jsr drop
+        bra .pop
+.gotf   lda #16
+        jsr drop
+.search lda tmp4                ; find matching closing token
+        ldx #TNEXT
+        cmp #TFOR
+        beq +
+        ldx #TUNTIL
+        cmp #TREPEAT
+        beq +
+        ldx #TENDWHILE
++       stx tmp5
+.s      jsr scan
+        bcs .miss
+        cmp tmp4
+        bne +
+        inc tmp6
+        bra .s
++       cmp tmp5
+        bne .s
+        dec tmp6
+        bne .s
+        lda tmp5                ; skip NEXT var list / UNTIL condition
+        cmp #TENDWHILE
+        beq .x
+-       jsr termq
+        beq .x
+        jsr scan
+        bcs .x
+        bra -
+.x      jmp xeq
+.miss   lda #44
+        jmp error
+
+; ---- CASE expr OF / WHEN / OTHERWISE / ENDCASE ----
+!zone case
+case:   jsr expr
+        jsr nxt
+        cmp #TOF
+        beq +
+        lda #47                 ; Missing ENDCASE ("OF" missing)
+        jmp error
++       jsr pushval             ; keep the case value on the stack
+        lda #0
+        sta casel               ; nesting level
+.next   jsr scan                ; to the start of a line at level 0
+        bcs .miss
+        cmp #TCASE
+        bne +
+        inc casel
+        bra .next
++       cmp #TENDCASE
+        bne +
+        lda casel
+        beq .endc
+        dec casel
+        bra .next
++       cmp #CR
+        bne .next
+        lda casel
+        bne .next
+        jsr nxt
+        cmp #TOTHERWISE
+        beq .other
+        cmp #TWHEN
+        bne .next
+        inw tp
+.w1     ; compare each value with the case value
+        jsr expr
+        jsr casecmp
+        bcs .match
+        jsr nxt
+        cmp #','
+        bne .next
+        inw tp
+        bra .w1
+.match  ; skip the rest of the WHEN list
+-       jsr nxt
+        cmp #':'
+        beq .go
+        cmp #CR
+        beq .go
+        jsr scan
+        bcc -
+.go     jsr dropval
+        jmp xeq
+.other  inw tp
+        bra .go
+.endc   jsr dropval
+        jmp xeq
+.miss   lda #47
+        jmp error
+
+; CASECMP: compare current value with the pushed case value; Z if equal
+casecmp:                        ; C set if current value = case value (on stack)
+        pla
+        sta rtmp2
+        pla
+        sta rtmp2+1
+        jsr popval              ; case value -> arg/STRBUF (current stays in acc/ACCS)
+        jsr pushback
+        lda tmp5
+        eor etype
+        bpl +
+        lda #6
+        jmp error
++       ldx #OP_EQ
+        jsr binop
+        jsr acczero
+        clc
+        beq +
+        sec
++       lda rtmp2+1
+        pha
+        lda rtmp2
+        pha
+        rts
+; push arg/STRBUF (left operand form) back onto the stack
+!zone pushback
+pushback:
+        pla
+        sta rtmp
+        pla
+        sta rtmp+1
+        lda tmp5
+        bmi .s
+        lda arg
+        pha
+        lda arg+1
+        pha
+        lda arg+2
+        pha
+        lda arg+3
+        pha
+        lda argx
+        pha
+        lda #0
+        pha
+        bra .r
+.s      ldx tmp6
+        beq +
+-       dex
+        lda STRBUF,x
+        pha
+        cpx #0
+        bne -
++       lda tmp6
+        pha
+        lda #$80
+        pha
+.r      lda rtmp+1
+        pha
+        lda rtmp
+        pha
+        rts
+; DROPVAL: discard a pushval'd value
+!zone dropval
+dropval:
+        pla
+        sta rtmp
+        pla
+        sta rtmp+1
+        pla
+        bmi .s
+        pla
+        pla
+        pla
+        pla
+        pla
+        bra .r
+.s      pla
+        tax
+        beq .r
+-       pla
+        dex
+        bne -
+.r      lda rtmp+1
+        pha
+        lda rtmp
+        pha
+        rts
+
+; WHEN / OTHERWISE reached in normal flow: skip to after matching ENDCASE
+!zone whenskip
+whenskip:
+        lda #0
+        sta casel
+.l      jsr scan
+        bcs .miss
+        cmp #TCASE
+        bne +
+        inc casel
+        bra .l
++       cmp #TENDCASE
+        bne .l
+        lda casel
+        beq .x
+        dec casel
+        bra .l
+.x      jmp xeq
+.miss   lda #47
+        jmp error
+
+; ---- SWAP a,b ----
+!zone swap
+swap:   jsr getvar
+        bcs .bad
+        bne .nos
+        lda vptr
+        pha
+        lda vptr+1
+        pha
+        lda vtype
+        pha
+        jsr comma
+        jsr getvar
+        bcs .bad
+        bne .nos
+        pla
+        cmp vtype
+        bne .mis
+        pla
+        sta ptr1+1
+        pla
+        sta ptr1
+        ldx vtype
+        lda elsize5,x           ; bytes to swap
+        bpl +
+        lda #4
++       tax
+        ldy #0
+-       lda (ptr1),y
+        pha
+        lda (vptr),y
+        sta (ptr1),y
+        pla
+        sta (vptr),y
+        iny
+        dex
+        bne -
+        jmp xeq
+.bad    jmp syntax
+.nos    lda #26
+        jmp error
+.mis    lda #6
+        jmp error
+elsize5 = *-0
+        !byte 1,1,0,0,4,5       ; type 0..5 (index by vtype; $80+ handled above)
+
+; ---- LEFT$(a$[,n])=b$ / MID$(a$,p[,n])=b$ / RIGHT$(a$[,n])=b$ ----
+!zone substr
+leftsl: lda #0
+        bra subsl
+midsl:  lda #1
+        bra subsl
+ritesl: lda #2
+subsl:  sta tmp2                ; kind
+        jsr getvar
+        bcc +
+        jmp syntax
++       beq +
+        lda #26
+        jmp error
++       lda vtype
+        cmp #$81
+        beq +
+        lda #6
+        jmp error
++       lda vptr
+        pha
+        lda vptr+1
+        pha
+        lda tmp2
+        pha
+        lda #255
+        sta tmp3                ; n (count)
+        lda #1
+        sta tmp4                ; p (position)
+        jsr nxt
+        cmp #','
+        bne .cl
+        inw tp
+        jsr expri
+        jsr clampn
+        sta tmp4
+        lda #255
+        sta tmp3
+        pla
+        pha
+        cmp #1
+        beq .mid
+        lda tmp4                ; LEFT$/RIGHT$: this was n
+        sta tmp3
+        bra .cl
+.mid    jsr nxt
+        cmp #','
+        bne .cl
+        inw tp
+        lda tmp4
+        pha
+        jsr expri
+        jsr clampn
+        sta tmp3
+        pla
+        sta tmp4
+.cl     jsr braket
+        jsr nxt
+        cmp #'='
+        beq +
+        jmp mistake
++       inw tp
+        lda tmp3
+        pha
+        lda tmp4
+        pha
+        jsr exprs
+        pla
+        sta tmp4
+        pla
+        sta tmp3
+        pla
+        sta tmp2
+        pla
+        sta vptr+1
+        pla
+        sta vptr
+        ; target string: addr, len
+        ldy #0
+        lda (vptr),y
+        sta ptr1
+        iny
+        lda (vptr),y
+        sta ptr1+1
+        iny
+        lda (vptr),y
+        sta tmp5                ; target length
+        ; count = min(n, len(b$))
+        lda tmp3
+        cmp slen
+        bcc +
+        lda slen
++       sta tmp3
+        lda tmp2
+        beq .left
+        cmp #1
+        beq .midp
+        ; RIGHT$: start = len - count
+        lda tmp5
+        sec
+        sbc tmp3
+        bcs +
+        lda #0
++       sta tmp4
+        bra .copy
+.left   lda #0
+        sta tmp4
+        bra .copy
+.midp   lda tmp4
+        beq +
+        dec tmp4                ; 0-based
++
+.copy   ldx #0                  ; copy count chars, not beyond target length
+        ldy tmp4
+-       cpx tmp3
+        beq .x
+        cpy tmp5
+        bcs .x
+        lda ACCS,x
+        sta (ptr1),y
+        inx
+        iny
+        bra -
+.x      jmp xeq
+
+; ---- RESTORE ERROR / RESTORE DATA helper ----
+; RESFRAME: if the LOCAL frame on top (caller = statement level) saves the
+; 4 bytes at page-0 address A, restore them (caller then drops 9 bytes).
+!zone resframe
+resframe:
+        sta tmp0
+        jsr getsp               ; (spz = our SP + our return address: add 2 more)
+        lda spz
+        clc
+        adc #2
+        sta spz
+        bcc +
+        inc spz+1
++       ldy #1
+        lda (spz),y
+        cmp #TLOCAL
+        bne .bad
+        ldy #2
+        lda (spz),y
+        cmp tmp0
+        bne .bad
+        iny
+        lda (spz),y
+        bne .bad
+        ldx tmp0
+        ldy #5
+-       lda (spz),y
+        sta $00,x
+        inx
+        iny
+        cpy #9
+        bne -
+        rts
+.bad    lda #16
+        jmp error
+
+; ---- whole arrays ----
+; ARRREF: tp at name; if "name()" -> Z set, ptr2 = array block, vtype, vptr -> pointer field
+!zone arrref
+arrref: lda tp
+        sta tmpw
+        lda tp+1
+        sta tmpw+1
+        jsr getname
+        bcs .no
+        jsr isarray
+        bne .no
+        lda (tp),z
+        cmp #')'
+        bne .no
+        inw tp
+        jsr locate
+        bcs .no
+        beq +
+        jsr create              ; new (undimensioned) array variable
++       ldy #0
+        lda (vptr),y
+        sta ptr2
+        iny
+        lda (vptr),y
+        sta ptr2+1
+        lda #0                  ; Z
+        rts
+.no     lda tmpw
+        sta tp
+        lda tmpw+1
+        sta tp+1
+        lda #1
+        rts
+; ARRSIZE: ptr2 = block -> tmpw = number of elements, ptr3 = first element
+arrsize:
+        lda ptr2
+        ora ptr2+1
+        bne +
+        lda #14                 ; Bad use of array
+        jmp error
++       ldy #0
+        lda (ptr2),y
+        sta tmp6                ; dims
+        lda #1
+        sta arg
+        lda #0
+        sta arg+1
+        sta arg+2
+        sta arg+3
+        ldy #1
+.al     lda (ptr2),y
+        sta $d774
+        iny
+        lda (ptr2),y
+        sta $d775
+        iny
+        lda #0
+        sta $d776
+        sta $d777
+        phy
+        ldq arg
+        stq $d770
+.mb     bit $d70f
+        bvs .mb
+        ldq $d778
+        stq arg
+        ldz #0
+        ply
+        dec tmp6
+        bne .al
+        lda arg
+        sta tmpw
+        lda arg+1
+        sta tmpw+1
+        tya
+        clc
+        adc ptr2
+        sta ptr3
+        lda ptr2+1
+        adc #0
+        sta ptr3+1
+        rts
+
+; whole-array assignment: name() = ...   (tp at name; returns NZ if not an array ref)
+!zone arrlet
+arrlet: jsr arrref
+        beq +
+        rts
++       lda vptr
+        sta avp
+        lda vptr+1
+        sta avp+1
+        lda vtype
+        sta avt
+        lda ptr2
+        sta ablk
+        lda ptr2+1
+        sta ablk+1
+        jsr nxt
+        ldx #$ff
+        cmp #'='
+        beq .eq
+        ldx #OP_ADD
+        cmp #'+'
+        beq .cmp
+        ldx #OP_SUB
+        cmp #'-'
+        beq .cmp
+        ldx #OP_MUL
+        cmp #'*'
+        beq .cmp
+        ldx #OP_FDIV
+        cmp #'/'
+        beq .cmp
+        jmp mistake
+.cmp    inw tp
+        lda (tp),z
+        cmp #'='
+        beq .eq
+        jmp mistake
+.eq     inw tp
+        stx aop
+        jsr nxt
+        jsr arrref              ; a() = b()  (copy)
+        bne .expr
+        lda aop
+        cmp #$ff
+        bne .expr2
+        lda ablk
+        ora ablk+1
+        bne +
+        ; destination not DIMmed: share? BASIC V copies into an existing array only
+        lda #14
+        jmp error
++       jsr arrsize             ; source
+        lda ptr3
+        sta ptr1
+        lda ptr3+1
+        sta ptr1+1
+        lda tmpw
+        pha
+        lda tmpw+1
+        pha
+        lda ablk
+        sta ptr2
+        lda ablk+1
+        sta ptr2+1
+        jsr arrsize             ; destination
+        pla
+        cmp tmpw+1
+        bne .badsz
+        pla
+        cmp tmpw
+        bne .badsz2
+        jsr elbytes             ; tmpw = bytes
+        ldy #0
+-       lda tmpw
+        ora tmpw+1
+        lbeq .done
+        lda (ptr1),y
+        sta (ptr3),y
+        inw ptr1
+        inw ptr3
+        lda tmpw
+        bne +
+        dec tmpw+1
++       dec tmpw
+        bra -
+.badsz2 pla
+.badsz  lda #15                 ; Bad subscript (size mismatch)
+        jmp error
+.expr2  jmp syntax
+.expr   ; a() = expr[,expr...]  or a() op= expr
+        lda ablk
+        sta ptr2
+        lda ablk+1
+        sta ptr2+1
+        jsr arrsize
+        lda ptr3
+        sta aelp
+        lda ptr3+1
+        sta aelp+1
+        lda tmpw
+        sta acnt
+        lda tmpw+1
+        sta acnt+1
+        lda #0
+        sta alist
+.e1     jsr expr
+        lda etype
+        eor avt
+        and #$80
+        beq +
+        lda #6
+        jmp error
++       jsr pushval             ; keep value
+        jsr nxt
+        cmp #','
+        bne .fill
+        ; initialisation list: store this value in the next element only
+        inw tp
+        lda #1
+        sta alist
+        jsr popacc
+        jsr .store1
+        lda acnt
+        ora acnt+1
+        beq .e1                 ; (extra values are ignored)
+        bra .e1
+.fill   jsr popacc
+        lda alist
+        bne .last
+-       lda acnt                ; fill (or op=) every element
+        ora acnt+1
+        beq .done
+        jsr pushval
+        jsr .store1
+        jsr popacc
+        bra -
+.last   jsr .store1             ; last element of an init list
+.done   jmp xeq
+; store acc/ACCS (with op) into the element at aelp, advance
+.store1 lda acnt
+        ora acnt+1
+        bne +
+        rts
++       lda aelp
+        sta vptr
+        lda aelp+1
+        sta vptr+1
+        lda avt
+        sta vtype
+        lda aop
+        cmp #$ff
+        beq .st
+        jsr pushval             ; element = element OP rhs
+        jsr loadvar
+        jsr movleft
+        jsr popacc
+        ldx aop
+        jsr binop
+        lda aelp
+        sta vptr
+        lda aelp+1
+        sta vptr+1
+        lda avt
+        sta vtype
+.st     jsr storevar
+        lda avt                 ; next element
+        bpl +
+        lda #4
++       clc
+        adc aelp
+        sta aelp
+        bcc +
+        inc aelp+1
++       lda acnt
+        bne +
+        dec acnt+1
++       dec acnt
+        rts
+; ELBYTES: tmpw = tmpw * element size (avt / vtype)
+elbytes:
+        lda vtype
+        bpl +
+        lda #4
++       sta $d774
+        lda #0
+        sta $d775
+        sta $d776
+        sta $d777
+        sta $d772
+        sta $d773
+        lda tmpw
+        sta $d770
+        lda tmpw+1
+        sta $d771
+-       bit $d70f
+        bvs -
+        lda $d778
+        sta tmpw
+        lda $d779
+        sta tmpw+1
+        rts
+
+; SUM(a()) / SUMLEN(a$()) / DIM(a()[,n]) functions
+!zone arrfn
+f_sum:  lda (tp),z
+        cmp #TLEN
+        beq .sumlen
+        jsr .open
+        lda vtype
+        bmi .sums
+        lda #0                  ; numeric sum
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+-       lda acnt
+        ora acnt+1
+        beq .done
+        jsr pushval
+        lda aelp
+        sta vptr
+        lda aelp+1
+        sta vptr+1
+        jsr loadn
+        jsr movleft
+        jsr popacc
+        lda #0
+        sta tmp5
+        ldx #OP_ADD
+        jsr binop
+        jsr .adv
+        bra -
+.done   rts
+.sums   lda #0                  ; string concatenation
+        sta slen
+        lda #$80
+        sta etype
+-       lda acnt
+        ora acnt+1
+        beq .done
+        jsr movleft
+        lda aelp
+        sta vptr
+        lda aelp+1
+        sta vptr+1
+        jsr loads
+        jsr sconcat
+        jsr .adv
+        bra -
+.sumlen inw tp
+        jsr .open
+        lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+-       lda acnt
+        ora acnt+1
+        beq .done
+        lda aelp
+        sta ptr3
+        lda aelp+1
+        sta ptr3+1
+        ldy #2
+        lda (ptr3),y
+        clc
+        adc acc
+        sta acc
+        bcc +
+        inc acc+1
++       jsr .adv
+        bra -
+.open   jsr nxt                 ; "(name())"
+        cmp #'('
+        beq +
+        jmp syntax
++       inw tp
+        jsr arrref
+        beq +
+        jmp syntax
++       jsr braket
+        jsr arrsize
+        lda vtype
+        sta avt
+        lda ptr3
+        sta aelp
+        lda ptr3+1
+        sta aelp+1
+        lda tmpw
+        sta acnt
+        lda tmpw+1
+        sta acnt+1
+        rts
+.adv    lda avt
+        bpl +
+        lda #4
++       clc
+        adc aelp
+        sta aelp
+        bcc +
+        inc aelp+1
++       lda acnt
+        bne +
+        dec acnt+1
++       dec acnt
+        rts
+
+; DIM(a()) = number of dimensions, DIM(a(),n) = upper bound of dimension n
+f_dimfn:
+        jsr nxt
+        cmp #'('
+        beq +
+        jmp syntax
++       inw tp
+        jsr arrref
+        beq +
+        jmp syntax
++       lda ptr2
+        ora ptr2+1
+        bne +
+        lda #14
+        jmp error
++       jsr nxt
+        cmp #','
+        beq .n
+        jsr braket
+        ldy #0
+        lda (ptr2),y
+        ldx #0
+        jmp setw
+.n      inw tp
+        lda ptr2
+        pha
+        lda ptr2+1
+        pha
+        jsr expri
+        jsr braket
+        pla
+        sta ptr2+1
+        pla
+        sta ptr2
+        lda acc                 ; 1-based dimension
+        beq .bad
+        ldy #0
+        cmp (ptr2),y
+        beq +
+        bcs .bad
++       asl
+        tay
+        dey
+        lda (ptr2),y
+        sec
+        sbc #1
+        tax
+        iny
+        lda (ptr2),y
+        sbc #0
+        tay
+        txa
+        phy
+        plx
+        jmp setw
+.bad    lda #15
+        jmp error
+
+; ^var : address of a variable
+f_addr: jsr getvar
+        bcc +
+        jmp syntax
++       beq +
+        lda #26
+        jmp error
++       lda vptr
+        ldx vptr+1
+        jmp setw

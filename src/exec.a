@@ -100,8 +100,13 @@ run0:   jsr resetsp_jsr
 xeq0:   jsr newlin
         jsr nxt
         cmp #TELSE
-        bne xeq
+        bne +
         jmp mlelse
++       cmp #TWHEN
+        beq +
+        cmp #TOTHERWISE
+        bne xeq
++       jmp whenskip
 xeq:    lda tp
         sta curlin
         lda tp+1
@@ -193,8 +198,8 @@ termq:  jsr nxt
         cmp #TELSE
 +       rts
 
-cmdjmp: !word noimp, noimp, noimp, syntax, syntax, syntax, syntax, while    ; C0-C7
-        !word noimp, syntax, syntax, xeq, syntax, xeq, endwhile, noimp      ; C8-CF
+cmdjmp: !word leftsl, midsl, ritesl, syntax, syntax, syntax, syntax, while ; C0-C7
+        !word case, whenskip, syntax, xeq, whenskip, xeq, endwhile, noimp   ; C8-CF
         !word pagev, timev, noimp, himemv, noimp, noimp, noimp, noimp       ; D0-D7
         !word clr, noimp, cls_st, cls_st, rem, rem, dim, noimp              ; D8-DF
         !word end, endproc, noimp, for, gosub, goto, noimp, if              ; E0-E7
@@ -202,8 +207,8 @@ cmdjmp: !word noimp, noimp, noimp, syntax, syntax, syntax, syntax, while    ; C0
         !word noimp, print, proc, read, rem, repeat, report_st, restore     ; F0-F7
         !word return, run, stop, noimp, trace, until, widthv, noimp         ; F8-FF
         !word rem, noimp, noimp, noimp, noimp, noimp, quit, noimp           ; 00-07
-        !word noimp, noimp, noimp, wait, syntax, rem, noimp, syntax         ; 08-0F
-        !word noimp                                                         ; 10 EXIT
+        !word swap, noimp, noimp, wait, syntax, rem, noimp, syntax          ; 08-0F
+        !word exit                                                          ; 10 EXIT
 
 syntax: lda #16
         jmp error
@@ -373,7 +378,8 @@ vdu:    jsr termq
 
 ; ---- LET ----
 !zone let
-let:    jsr getvar
+let:    jsr arrlet              ; whole-array assignment?
+        jsr getvar
         bcc +
         jmp mistake
 +       beq +
@@ -1251,10 +1257,17 @@ dim:    jsr getname
 +       jsr locate
         bcc +
         jmp syntax
-+       bne +
-        lda #10                 ; Bad DIM (already exists)
++       bne .new
+        jsr isarray
+        bne .bad0
+        ldy #0                  ; existing array with no block (LOCAL a()) is OK
+        lda (vptr),y
+        iny
+        ora (vptr),y
+        beq .arr2
+.bad0   lda #10                 ; Bad DIM (already exists)
         jmp error
-+       jsr isarray
+.new    jsr isarray
         beq .arr
         ; DIM var size : reserve bytes
         jsr create
@@ -1295,7 +1308,7 @@ dim:    jsr getname
         jsr storen
         lbra .next
 .arr    jsr create              ; vptr -> 2-byte pointer field
-        lda vptr
+.arr2   lda vptr
         sta ptr2
         lda vptr+1
         sta ptr2+1
@@ -1601,8 +1614,22 @@ callset:
         inw tp
 .a1     lda cnt
         pha
-        jsr expr
-        pla
+        jsr nxt
+        jsr arrref              ; whole array argument: name()
+        bne .ae
+        lda ptr2
+        sta acc
+        lda ptr2+1
+        sta acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        sta accx
+        lda #$40
+        sta etype
+        bra .ad
+.ae     jsr expr
+.ad     pla
         sta cnt
         jsr pushval_keep        ; value stays on stack under the counters
         inc cnt
@@ -1677,19 +1704,25 @@ callset:
         sta tmp2                ; slot index
         jsr nxt
         cmp #'('
-        bne .nof
+        lbne .nof
         inw tp
 .b1     lda tmp2
         cmp cnt
-        bcs .badarg
+        lbcs .badarg
         jsr nxt
-        jsr getvar
+        jsr arrref              ; formal array parameter name()
+        bne .fv
+        lda #2
+        sta vtype
+        jsr savelocal
+        bra .fl
+.fv     jsr getvar
         bcc +
         jmp syntax
 +       beq +
         jsr putvar
 +       jsr savelocal
-        lda tmp2
+.fl     lda tmp2
         asl
         clc
         adc #>PARBUF
@@ -1719,7 +1752,15 @@ callset:
         sta ACCS,x
         inx
         bra -
-.bst    jsr storevar
+.bst    lda vtype
+        cmp #2
+        bne +
+        lda etype               ; array reference -> pointer field
+        cmp #$40
+        bne .badarg2
+        lda #0
+        sta etype
++       jsr storevar
         inc tmp2
         jsr nxt
         cmp #','
@@ -1734,6 +1775,7 @@ callset:
 .nof    lda cnt
         bne .badarg
         jmp xeq
+.badarg2
 .badarg lda #31                 ; Bad arguments
         jmp error
 
@@ -1792,7 +1834,29 @@ savelocal:
 
 ; LOCAL var[,var...]
 !zone local
-local:  jsr getvar
+local:  cmp #TDATA
+        bne +
+        inw tp
+        lda #<datptr
+        sta vptr
+        lda #0
+        sta vptr+1
+        lda #4
+        sta vtype
+        jsr savelocal
+        jmp xeq
++       jsr arrref              ; LOCAL a()
+        bne .nv
+        lda #2
+        sta vtype
+        jsr savelocal
+        lda #0
+        tay
+        sta (vptr),y
+        iny
+        sta (vptr),y
+        bra .nx
+.nv     jsr getvar
         bcc +
         jmp syntax
 +       beq +
@@ -1809,10 +1873,11 @@ local:  jsr getvar
         and #$80
         sta etype
         jsr storevar
-        jsr nxt
+.nx     jsr nxt
         cmp #','
         bne +
         inw tp
+        jsr nxt
         bra local
 +       jmp xeq
 
@@ -2026,7 +2091,26 @@ on:     cmp #TERROR
         bne .ongo
         inw tp
         jsr nxt
-        cmp #TOFF
+        cmp #TLOCAL
+        bne .ofq
+        inw tp                  ; ON ERROR LOCAL: save handler as a LOCAL frame
+        lda #<errtrp
+        sta vptr
+        lda #0
+        sta vptr+1
+        lda #4
+        sta vtype
+        jsr savelocal
+        tsx
+        stx onersp
+        tsy
+        sty onersp+1
+        lda tp
+        sta errtrp
+        lda tp+1
+        sta errtrp+1
+        jmp rem
+.ofq    cmp #TOFF
         bne +
         inw tp
         lda #0
@@ -2190,7 +2274,64 @@ signednum:                      ; parse a number at tp -> acc (0 if none)
 ; ---- READ / DATA / RESTORE ----
 !zone read
 restore:
-        jsr termq
+        cmp #TERROR
+        bne +
+        inw tp
+        lda #<errtrp
+        jsr resframe
+        lda #9
+        jsr drop
+        jmp xeq
++       cmp #TDATA
+        bne +
+        inw tp
+        lda #<datptr
+        jsr resframe
+        lda #9
+        jsr drop
+        jmp xeq
++       cmp #TLOCAL
+        bne +
+        inw tp
+        jsr unwind
+        jmp xeq
++       cmp #'+'
+        bne +
+        inw tp                  ; RESTORE +n: n lines after the current one
+        jsr expri
+        lda curlin
+        sta ptr1
+        lda curlin+1
+        sta ptr1+1
+        jsr setlin
+        lda erl
+        sta lnum
+        lda erl+1
+        sta lnum+1
+        jsr findl
+-       lda acc
+        ora acc+1
+        beq ++
+        ldy #0
+        lda (ptr1),y
+        beq ++
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +++
+        inc ptr1+1
++++     lda acc
+        bne ++++
+        dec acc+1
+++++    dec acc
+        bra -
+++      lda ptr1
+        sta datptr
+        lda ptr1+1
+        sta datptr+1
+        jsr dsrch
+        jmp xeq
++       jsr termq
         beq .r0
         jsr itemi
         lda acc

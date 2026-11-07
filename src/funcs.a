@@ -38,6 +38,8 @@ functab:
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
         !byte TREPORT : !word f_reports
+        !byte $c6     : !word f_sum
+        !byte TDIM    : !word f_dimfn
         !byte $95     : !word fn_acs
         !byte $98     : !word fn_asn
         !byte $99     : !word fn_atn

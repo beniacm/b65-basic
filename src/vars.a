@@ -205,8 +205,9 @@ create: lda free
         sta vptr+1
         jsr nametype
         sta vtype
-        ldx #2                  ; array: 2-byte pointer
         jsr isarray
+        ldx #2                  ; array: 2-byte pointer
+        cmp #'('
         beq +
         ldx #4
         lda vtype
@@ -488,6 +489,8 @@ elsize: lda vtype
 loadn:  ldy #0
         lda vtype
         beq .b
+        cmp #2
+        beq .w
         cmp #1
         beq .b
         cmp #4
@@ -525,6 +528,17 @@ loadn:  ldy #0
         lda (vptr),y
         sta accx
         rts
+.w      lda (vptr),y            ; type 2: 16-bit pointer (array parameters)
+        sta acc
+        iny
+        lda (vptr),y
+        sta acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+        rts
 
 ; ---- store acc into numeric variable ----
 !zone storen
@@ -537,6 +551,8 @@ storen: lda etype
         beq .b
         cmp #1
         beq .b
+        cmp #2
+        beq .w
         cmp #4
         beq .i
         cmp #5
@@ -562,6 +578,12 @@ storen: lda etype
         sta (vptr),y
         iny
         lda acc+3
+        sta (vptr),y
+        rts
+.w      lda acc
+        sta (vptr),y
+        iny
+        lda acc+1
         sta (vptr),y
         rts
 .f      lda acc
