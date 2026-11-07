@@ -1,0 +1,54 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>NEW
+>10 DEF FNlibsq(X)=X*X
+>20 DEF PROClibhi(A$):PRINT "hello ";A$:ENDPROC
+>30 DEF FNlib2:=42
+>SAVE "B65LIB1"
+>NEW
+>10 DEF PROClib3:PRINT "lib3 ";FNlib2:ENDPROC
+>SAVE "B65LIB2"
+>NEW
+>PRINT ~HIMEM
+      CF00
+>INSTALL "B65LIB1"
+>PRINT ~HIMEM
+      CEAE
+>10 FOR I%=1 TO 2
+>20 INSTALL "B65LIB2"
+>30 PRINT FNlibsq(7):PROClibhi("world"):PROClib3
+>40 NEXT
+>50 PRINT ~HIMEM
+>60 PROCmain
+>70 END
+>80 DEF PROCmain:LOCAL a,b:a=3:b=FNlibsq(a):PRINT "main ";b
+>90 ON ERROR LOCAL PRINT "trapped ";REPORT$:ENDPROC
+>100 PROCnone
+>110 ENDPROC
+>RUN
+        49
+hello world
+lib3 42
+        49
+hello world
+lib3 42
+      CE81
+main 9
+trapped No such FN/PROC
+>INSTALL "B65NONE"
+
+File not found
+>RUN
+        49
+hello world
+lib3 42
+        49
+hello world
+lib3 42
+      CE81
+main 9
+trapped No such FN/PROC
+>

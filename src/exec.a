@@ -231,7 +231,7 @@ cmdjmp: !word leftsl, midsl, ritesl, syntax, syntax, syntax, syntax, while ; C0-
         !word gs_plot, print, proc, read, rem, repeat, report_st, restore   ; F0-F7
         !word return, run, stop, gs_colour, trace, until, widthv, noimp     ; F8-FF
         !word rem, gs_circle, gs_ellipse, gs_fill, gs_mouse, gs_origin, quit, gs_rect ; 00-07
-        !word swap, noimp, noimp, wait, syntax, rem, noimp, syntax          ; 08-0F
+        !word swap, noimp, noimp, wait, install, rem, noimp, syntax         ; 08-0F
         !word exit                                                          ; 10 EXIT
 
 syntax: lda #16
@@ -1662,8 +1662,54 @@ procname:
 
 ; FINDDEF: A = TPROC/TFN. Find DEF, return ptr1 -> text after name
 !zone finddef
+; LIBNEXT: ptr1 = program text of the next installed library; carry set if none
+libnext:
+        lda libcur+1
+        bne .adv
+        lda libase
+        sta libcur
+        lda libase+1
+        sta libcur+1
+        bra .chk
+.adv    lda libcur
+        sta ptr1
+        lda libcur+1
+        sta ptr1+1
+        ldy #0
+        lda (ptr1),y
+        clc
+        adc #13
+        php
+        clc
+        adc libcur
+        sta libcur
+        iny
+        lda (ptr1),y
+        adc libcur+1
+        plp
+        adc #0
+        sta libcur+1
+.chk    lda libcur
+        cmp #<HIMEM0
+        lda libcur+1
+        sbc #>HIMEM0
+        bcs .none
+        lda libcur
+        clc
+        adc #13
+        sta ptr1
+        lda libcur+1
+        adc #0
+        sta ptr1+1
+        clc
+        rts
+.none   sec
+        rts
 finddef:
         sta tmp4
+        lda #0
+        sta libcur+1            ; (scanning the program, not a library)
+        lda tmp4
         ldx #<PROPTR
         cmp #TPROC
         beq +
@@ -1692,6 +1738,8 @@ finddef:
 .ln     ldy #0
         lda (ptr1),y
         bne +
+        jsr libnext             ; end of program: next library
+        bcc .ln
         pla
         pla
         lda #29                 ; No such FN/PROC

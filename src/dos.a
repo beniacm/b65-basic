@@ -388,6 +388,10 @@ bput:   jsr ovjmp
 printh: jsr ovjmp
         !byte 3
         !word o_printh
+install:
+        jsr ovjmp
+        !byte 3
+        !word o_install
 inputh: jsr ovjmp
         !byte 3
         !word o_inputh

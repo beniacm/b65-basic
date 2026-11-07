@@ -2,7 +2,7 @@
 """B65 BASIC file-writing test on a real FAT32 card image (Xemu, MEGA65 ROM).
 
 Copies the card image (CARD env, default ~/src/xemu-work/card.img; never
-written) to a private sparse copy, runs tests/hw/0[123]*.txt in sequence
+written) to a private sparse copy, runs tests/hw/0[1-4]*.txt in sequence
 on it (with --rom), compares each transcript (up to a *CAT line) with
 tests/hw/NN.card.expected, and checks the file system with fsck.fat -n:
 the fsck findings must be the same as on the original image (numbers
@@ -12,7 +12,8 @@ usage: tests/cardtest.py [--update]
 import os, re, shutil, subprocess, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CARD = os.environ.get('CARD', os.path.expanduser('~/src/xemu-work/card.img'))
-TESTS = ['tests/hw/01_files.txt', 'tests/hw/02_save.txt', 'tests/hw/03_chan.txt']
+TESTS = ['tests/hw/01_files.txt', 'tests/hw/02_save.txt', 'tests/hw/03_chan.txt',
+         'tests/hw/04_install.txt']
 
 def fsck(img, td):
     part = os.path.join(td, 'part.img')

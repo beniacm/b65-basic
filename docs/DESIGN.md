@@ -289,6 +289,21 @@ CR LF. PTR#= beyond EXT extends a writable file with zeros; on a read-only
 one it stops at EXT. Writing to an OPENIN channel gives "Access denied".
 Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
 
+### INSTALL (step 2)
+
+`INSTALL "file"` loads a program file as a library. The file is loaded into
+bank 4 (`$48000`) first and its line structure checked ("Bad library"),
+then HIMEM is lowered by its length + 13 and the stack contents are moved
+down with it (interrupts off; `onersp` adjusted). Block layout at the new
+HIMEM: length (2), 8.3 name (11), program. `libase` (`$06C0`) points to the
+lowest library; libraries end at `HIMEM0`. FN/PROC lookup (`finddef`)
+scans the program first, then each library (`libnext`), and caches the DEF
+address in the PROC/FN lists as usual. Installing the same name again does
+nothing. Libraries stay until the next cold start (HIMEM is only reset
+there). Limits: 28 KB per library; DIM LOCAL blocks on the stack are not
+relocated, so INSTALL belongs at the start of a program (it works inside
+loops and PROCs otherwise). Tested by `tests/hw/04_install.txt`.
+
 ### MEGA65 extensions (M5)
 
 * **Hardware detection** (`src/m65.a`) runs at start-up, and the banner

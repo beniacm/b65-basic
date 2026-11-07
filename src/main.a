@@ -105,6 +105,10 @@ cold_test:
         sta STAVAR+$200,x       ; NUMBUF + MISC variables
         inx
         bne -
+        lda #<HIMEM0            ; no libraries
+        sta libase
+        lda #>HIMEM0
+        sta libase+1
         lda #0                  ; keyboard ring buffer
         sta kbhead
         sta kbtail

@@ -1707,5 +1707,254 @@ o_close:
 .done   lda #0
         sta CHT+CH_OPEN,x
         rts
+
+; ================= INSTALL "file" =================
+; The library (a program file) is kept below HIMEM: HIMEM is lowered by its
+; size + 13, the stack contents move down with it. Block: [length (2)]
+; [8.3 name (11)][program]. Libraries are searched by FN/PROC after the
+; program (finddef/libnext); they stay until the next cold start. INSTALL of
+; an already installed name does nothing. Best used at the start of a
+; program (stack blocks of DIM LOCAL are not relocated).
+LIBTMP  = $048000               ; load buffer (bank 4, also the FILL stack)
+!zone install
+o_install:
+        jsr expr
+        jsr chkstr
+        jsr setfname
+        jsr fexists
+        bcs +
+        jmp notfound
++       lda DIRENT+85           ; at most 28 KB
+        ora DIRENT+84
+        lbne .room
+        lda DIRENT+83
+        cmp #$70
+        lbcs .room
+        ldx #10
+-       lda DIRENT+65,x
+        sta fn83,x
+        dex
+        bpl -
+        ; already installed?
+        lda libase
+        sta ptr1
+        lda libase+1
+        sta ptr1+1
+.dup    lda ptr1
+        cmp #<HIMEM0
+        lda ptr1+1
+        sbc #>HIMEM0
+        bcs .new
+        ldy #12
+-       lda (ptr1),y
+        cmp fn83-2,y
+        bne +
+        dey
+        cpy #2
+        bcs -
+        jmp xeq                 ; yes: nothing to do
++       ldy #0                  ; next block: ptr1 += length + 13
+        lda (ptr1),y
+        sta tmpw
+        iny
+        lda (ptr1),y
+        sta tmpw+1
+        lda ptr1
+        clc
+        adc tmpw
+        sta ptr1
+        lda ptr1+1
+        adc tmpw+1
+        sta ptr1+1
+        lda ptr1
+        clc
+        adc #13
+        sta ptr1
+        bcc .dup
+        inc ptr1+1
+        bra .dup
+.new    jsr setname2            ; load into the buffer in bank 4
+        ldx #<LIBTMP
+        ldy #>LIBTMP
+        ldz #^LIBTMP
+        lda #$36
+        jsr hyppo
+        ldz #0
+        bcs +
+        jmp diskerr
++       ; check the program structure, find its real length
+        lda #<LIBTMP
+        sta fptr
+        lda #>LIBTMP
+        sta fptr+1
+        lda #^LIBTMP
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        sta flen
+        sta flen+1
+.ln     lda [fptr],z
+        beq .end
+        cmp #4
+        bcc .bad
+        clc
+        adc fptr
+        sta fptr
+        bcc +
+        inc fptr+1
++       lda fptr+1
+        cmp #(>LIBTMP)+$70
+        bcc .ln
+.bad    lda #<msg_blib
+        ldx #>msg_blib
+        ldy #200
+        jmp ovmsg
+.end    inz                     ; 0, FF, FF
+        lda [fptr],z
+        cmp #$ff
+        bne .bad
+        inz
+        lda [fptr],z
+        ldz #0
+        cmp #$ff
+        bne .bad
+        lda fptr                ; length = end + 3 - start
+        clc
+        adc #3
+        sta flen
+        lda fptr+1
+        adc #0
+        sec
+        sbc #>LIBTMP
+        sta flen+1
+        lda flen                ; delta = length + 13
+        clc
+        adc #13
+        sta fcnt
+        lda flen+1
+        adc #0
+        sta fcnt+1
+        ; room: SP - delta must stay 512 bytes above FREE
+        tsx
+        stx ftmp
+        tsy
+        sty ftmp+1
+        lda ftmp
+        sec
+        sbc fcnt
+        sta ftmp+2              ; new SP
+        lda ftmp+1
+        sbc fcnt+1
+        sta ftmp+3
+        lda ftmp+2
+        sec
+        sbc free
+        lda ftmp+3
+        sbc free+1
+        bcc .room
+        cmp #2
+        bcs +
+.room   lda #0                  ; No room
+        jmp error
++       ; move the stack contents [SP+1, HIMEM) down by delta
+        sei
+        lda ftmp                ; src = SP+1
+        clc
+        adc #1
+        sta ptr1
+        lda ftmp+1
+        adc #0
+        sta ptr1+1
+        lda ptr1                ; dst = src - delta
+        sec
+        sbc fcnt
+        sta ptr2
+        lda ptr1+1
+        sbc fcnt+1
+        sta ptr2+1
+        lda himem               ; count = HIMEM - src
+        sec
+        sbc ptr1
+        sta tmpw
+        lda himem+1
+        sbc ptr1+1
+        sta tmpw+1
+        ldy #0
+-       lda tmpw
+        ora tmpw+1
+        beq +
+        lda (ptr1),y
+        sta (ptr2),y
+        inw ptr1
+        inw ptr2
+        lda tmpw
+        bne ++
+        dec tmpw+1
+++      dec tmpw
+        bra -
++       ldx ftmp+2
+        ldy ftmp+3
+        +setsp
+        lda himem               ; HIMEM -= delta
+        sec
+        sbc fcnt
+        sta himem
+        sta libase
+        sta ptr2
+        lda himem+1
+        sbc fcnt+1
+        sta himem+1
+        sta libase+1
+        sta ptr2+1
+        lda onersp              ; ON ERROR LOCAL stack pointer moves too
+        ora onersp+1
+        beq +
+        lda onersp
+        sec
+        sbc fcnt
+        sta onersp
+        lda onersp+1
+        sbc fcnt+1
+        sta onersp+1
++       ldy #0                  ; header
+        lda flen
+        sta (ptr2),y
+        iny
+        lda flen+1
+        sta (ptr2),y
+-       iny
+        lda fn83-2,y
+        sta (ptr2),y
+        cpy #12
+        bne -
+        lda ptr2                ; copy the program from the buffer
+        clc
+        adc #13
+        sta ptr2
+        bcc +
+        inc ptr2+1
++       lda #<LIBTMP
+        sta fptr
+        lda #>LIBTMP
+        sta fptr+1
+        lda #^LIBTMP
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldy #0
+-       lda flen
+        ora flen+1
+        beq +
+        lda [fptr],z
+        sta (ptr2),y
+        inw fptr
+        inw ptr2
+        lda flen
+        bne ++
+        dec flen+1
+++      dec flen
+        bra -
++       jmp xeq
+msg_blib: !text "Bad library",0
 ovl_fat_end:
 }
