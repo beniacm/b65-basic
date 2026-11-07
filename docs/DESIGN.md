@@ -293,7 +293,7 @@ Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
 
 `INSTALL "file"` loads a program file as a library at the top of the
 program bank: block = length (2), 8.3 name (11), file. The file is loaded
-straight into place below the lowest library (`libase`, `$06C0`; `PLIM` =
+straight into place below the lowest library (`libase`, `$1FB8`; `PLIM` =
 `$F800` when there is none) and above TOP, its line structure is checked
 ("Bad library"), then `libase` is lowered. FN/PROC lookup (`finddef`) scans
 the program first, then each library (`libnext`), and caches the DEF

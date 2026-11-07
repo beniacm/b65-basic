@@ -1,0 +1,15 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 AFTER 5,1 GOSUB 100
+>20 T%=TIME:REPEAT UNTIL TIME>T%+30
+>30 PRINT "lib ";FNx
+>40 END
+>100 PRINT "event":RETURN
+>110 DEF FNx=7
+>RUN
+event
+lib 7
+>
