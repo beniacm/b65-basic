@@ -937,6 +937,503 @@ circle: lda gx0
         plx
         rts
 
+
+; ELLIPSE [FILL] x,y,a,b  (a: horizontal, b: vertical semi-axis)
+; row dy (0..b): half width w = round(a*sqrt(b*b-dy*dy)/b); the outline
+; joins each row to the one below it, so it has no gaps.
+EN      = $1dd4         ; 8: a*a*(b*b-dy*dy)
+EREM    = $1ddc         ; 5
+EROOT   = $1de1         ; 4
+ETT     = $1de5         ; 5
+gxd     = NBUF+24       ; 2 half width of this row
+!zone gx_ellipse
+gx_ellipse:
+        jsr fillq
+        lda #4
+        jsr getargs
+        ldx #0
+        jsr argxy
+        lda gx0
+        sta gsx
+        lda gx0+1
+        sta gsx+1
+        lda gy0
+        sta gsy
+        lda gy0+1
+        sta gsy+1
+        ldx #4                  ; |a|, |b| clamped to 4095
+        jsr .absc
+        sta gdx
+        sty gdx+1
+        ldx #6
+        jsr .absc
+        sta gdy
+        sty gdy+1
+        sta gerr                ; dy = b
+        sty gerr+1
+        lda #$ff                ; previous half width = -1
+        sta gr
+        sta gr+1
+.row    jsr .width
+        ; lo = prev+1, at most w
+        lda gr
+        clc
+        adc #1
+        sta gtmp+0+20           ; (NBUF+38: lo)
+        lda gr+1
+        adc #0
+        sta gtmp+1+20
+        lda gxd
+        cmp gtmp+20
+        lda gxd+1
+        sbc gtmp+21
+        bpl +                   ; w >= lo
+        lda gxd
+        sta gtmp+20
+        lda gxd+1
+        sta gtmp+21
++       lda gsy                 ; y = cy + dy
+        clc
+        adc gerr
+        sta gy0
+        lda gsy+1
+        adc gerr+1
+        sta gy0+1
+        jsr .spans
+        lda gerr
+        ora gerr+1
+        beq .x
+        lda gsy                 ; y = cy - dy
+        sec
+        sbc gerr
+        sta gy0
+        lda gsy+1
+        sbc gerr+1
+        sta gy0+1
+        jsr .spans
+        lda gxd
+        sta gr
+        lda gxd+1
+        sta gr+1
+        lda gerr
+        bne +
+        dec gerr+1
++       dec gerr
+        bra .row
+.x      jmp xeq
+; spans of this row: filled cx-w..cx+w, outline cx+lo..cx+w and cx-w..cx-lo
+.spans  lda gfill
+        beq +
+        lda #0
+        sta gtmp+20
+        sta gtmp+21
++       lda gsx                 ; right part cx+lo .. cx+w
+        clc
+        adc gtmp+20
+        sta gx0
+        lda gsx+1
+        adc gtmp+21
+        sta gx0+1
+        lda gsx
+        clc
+        adc gxd
+        sta gx1
+        lda gsx+1
+        adc gxd+1
+        sta gx1+1
+        jsr hspan
+        lda gsx                 ; left part cx-w .. cx-lo
+        sec
+        sbc gxd
+        sta gx0
+        lda gsx+1
+        sbc gxd+1
+        sta gx0+1
+        lda gsx
+        sec
+        sbc gtmp+20
+        sta gx1
+        lda gsx+1
+        sbc gtmp+21
+        sta gx1+1
+        jmp hspan
+.absc   lda GARG+1,x            ; |GARG[x]| clamped -> A/Y
+        bpl +
+        lda #0
+        sec
+        sbc GARG,x
+        sta GARG,x
+        lda #0
+        sbc GARG+1,x
+        sta GARG+1,x
++       lda GARG+1,x
+        cmp #$10
+        bcc +
+        lda #$ff
+        ldy #$0f
+        rts
++       tay
+        lda GARG,x
+        rts
+; .WIDTH: gxd = round(sqrt(a*a*(b*b-dy*dy)) / b)  (b = 0: w = a)
+.width  lda gdy
+        ora gdy+1
+        bne +
+        lda gdx
+        sta gxd
+        lda gdx+1
+        sta gxd+1
+        rts
++       ldx gdy                 ; b*b
+        ldy gdy+1
+        jsr .sq
+        ldx #3
+-       lda $d778,x
+        sta EN,x
+        dex
+        bpl -
+        ldx gerr                ; dy*dy
+        ldy gerr+1
+        jsr .sq
+        sec                     ; EN = b*b - dy*dy (dy <= b)
+        ldx #0
+        ldy #4
+-       lda EN,x
+        sbc $d778,x
+        sta EN,x
+        inx
+        dey
+        bne -
+        ldx gdx                 ; a*a
+        ldy gdx+1
+        jsr .sq
+        ldx #3                  ; a*a * EN (64-bit)
+-       lda $d778,x
+        sta ETT,x
+        dex
+        bpl -
+        ldx #3
+-       lda ETT,x
+        sta $d770,x
+        lda EN,x
+        sta $d774,x
+        dex
+        bpl -
+        ldx #7
+-       lda $d778,x
+        sta EN,x
+        dex
+        bpl -
+        ; integer square root of EN (64 bits) -> EROOT (32 bits)
+        ldx #4
+        lda #0
+-       sta EREM,x
+        dex
+        bpl -
+        ldx #3
+-       sta EROOT,x
+        dex
+        bpl -
+        ldy #32
+.sl     ldx #2                  ; rem = rem<<2 | top two bits of n
+--      asl EN
+        rol EN+1
+        rol EN+2
+        rol EN+3
+        rol EN+4
+        rol EN+5
+        rol EN+6
+        rol EN+7
+        rol EREM
+        rol EREM+1
+        rol EREM+2
+        rol EREM+3
+        rol EREM+4
+        dex
+        bne --
+        asl EROOT               ; root <<= 1
+        rol EROOT+1
+        rol EROOT+2
+        rol EROOT+3
+        lda EROOT               ; tt = 2*root + 1
+        asl
+        ora #1
+        sta ETT
+        lda EROOT+1
+        rol
+        sta ETT+1
+        lda EROOT+2
+        rol
+        sta ETT+2
+        lda EROOT+3
+        rol
+        sta ETT+3
+        lda #0
+        rol
+        sta ETT+4
+        sec                     ; rem >= tt ?
+        lda EREM
+        sbc ETT
+        sta ETT
+        lda EREM+1
+        sbc ETT+1
+        sta ETT+1
+        lda EREM+2
+        sbc ETT+2
+        sta ETT+2
+        lda EREM+3
+        sbc ETT+3
+        sta ETT+3
+        lda EREM+4
+        sbc ETT+4
+        sta ETT+4
+        bcc +
+        ldx #4                  ; yes: rem -= tt, root |= 1
+-       lda ETT,x
+        sta EREM,x
+        dex
+        bpl -
+        inc EROOT
++       dey
+        lbne .sl
+        ; gxd = (root + b/2) / b
+        lda gdy+1
+        lsr
+        sta gtmp+21
+        lda gdy
+        ror
+        clc
+        adc EROOT
+        sta EROOT
+        lda gtmp+21
+        adc EROOT+1
+        sta EROOT+1
+        bcc +
+        inc EROOT+2
+        bne +
+        inc EROOT+3
++       lda #0                  ; 32/16 division, remainder in EREM (3 bytes)
+        sta EREM
+        sta EREM+1
+        sta EREM+2
+        ldy #32
+-       asl EROOT
+        rol EROOT+1
+        rol EROOT+2
+        rol EROOT+3
+        rol EREM
+        rol EREM+1
+        rol EREM+2
+        lda EREM
+        sec
+        sbc gdy
+        tax
+        lda EREM+1
+        sbc gdy+1
+        sta ETT
+        lda EREM+2
+        sbc #0
+        bcc +
+        sta EREM+2
+        lda ETT
+        sta EREM+1
+        stx EREM
+        inc EROOT
++       dey
+        bne -
+        lda EROOT
+        sta gxd
+        lda EROOT+1
+        sta gxd+1
+        rts
+; .SQ: X/Y (16-bit) squared -> $D778.. (math unit; 1-cycle latency)
+.sq     stx $d770
+        sty $d771
+        stx $d774
+        sty $d775
+        lda #0
+        sta $d772
+        sta $d773
+        sta $d776
+        sta $d777
+        rts
+
+; FILL x,y: flood fill (4-connected) of the area that has the colour of the
+; pixel at x,y, with the graphics colour. Scan-line algorithm; the seed stack
+; is in chip RAM at $48000 (10,000 entries; when full, seeds are dropped).
+gtgt    = NBUF+24       ; colour being replaced
+gfsp    = NBUF+25       ; 2 stack offset (bytes)
+gfxx    = NBUF+27       ; 2
+gstk    = NBUF+32       ; 4 far pointer
+!zone gx_fill
+gx_fill:
+        jsr getxy
+        jsr paddr
+        lbcs .x
+        lda [fptr],z
+        cmp gfg
+        beq .x
+        sta gtgt
+        lda #0
+        sta gfsp
+        sta gfsp+1
+        lda gx0
+        sta gfxx
+        lda gx0+1
+        sta gfxx+1
+        lda gy0
+        sta gerr
+        jsr .push
+.loop   lda gfsp
+        ora gfsp+1
+        beq .x
+        jsr .pop
+        jsr .tst
+        bcs .loop
+        ; scan left
+-       lda gx0
+        bne +
+        dec gx0+1
++       dec gx0
+        jsr .tst
+        bcc -
+        inw gx0
+        lda gx0
+        sta gdx                 ; lx
+        lda gx0+1
+        sta gdx+1
+        lda gsx                 ; scan right from the seed
+        sta gx0
+        lda gsx+1
+        sta gx0+1
+-       inw gx0
+        jsr .tst
+        bcc -
+        lda gx0
+        bne +
+        dec gx0+1
++       dec gx0
+        lda gx0
+        sta gdy                 ; rx
+        sta gx1
+        lda gx0+1
+        sta gdy+1
+        sta gx1+1
+        lda gdx
+        sta gx0
+        lda gdx+1
+        sta gx0+1
+        jsr hspan
+        ; seeds in the rows above and below
+        lda gsy
+        beq +
+        dec
+        jsr .seeds
++       lda gsy
+        cmp #199
+        bcs .loop
+        inc
+        jsr .seeds
+        bra .loop
+.x      jmp xeq
+; .TST: carry clear if gx0/gy0 is on screen and has the target colour
+.tst    jsr paddr
+        bcs +
+        lda [fptr],z
+        cmp gtgt
+        beq ++
+        sec
++       rts
+++      clc
+        rts
+; .SEEDS: row A: push the start of every run of target pixels in lx..rx
+.seeds  sta gy0
+        sta gerr
+        lda #0
+        sta gy0+1
+        sta gr                  ; in a run
+        lda gdx
+        sta gx0
+        lda gdx+1
+        sta gx0+1
+.s1     jsr .tst
+        bcs .s2
+        lda gr
+        bne .s3
+        lda gx0
+        sta gfxx
+        lda gx0+1
+        sta gfxx+1
+        jsr .push
+        lda #1
+        sta gr
+        bra .s3
+.s2     lda #0
+        sta gr
+.s3     lda gx0
+        cmp gdy
+        bne +
+        lda gx0+1
+        cmp gdy+1
+        beq ++
++       inw gx0
+        bra .s1
+++      rts
+.sp     lda gfsp
+        sta gstk
+        lda gfsp+1
+        clc
+        adc #$80
+        sta gstk+1
+        lda #$04
+        sta gstk+2
+        lda #0
+        sta gstk+3
+        rts
+.push   lda gfsp+1              ; full: drop the seed
+        cmp #$75
+        bcs +
+        jsr .sp
+        lda gfxx
+        sta [gstk],z
+        inz
+        lda gfxx+1
+        sta [gstk],z
+        inz
+        lda gerr
+        sta [gstk],z
+        ldz #0
+        lda gfsp
+        clc
+        adc #3
+        sta gfsp
+        bcc +
+        inc gfsp+1
++       rts
+.pop    lda gfsp
+        sec
+        sbc #3
+        sta gfsp
+        bcs +
+        dec gfsp+1
++       jsr .sp
+        lda [gstk],z
+        sta gsx
+        sta gx0
+        inz
+        lda [gstk],z
+        sta gsx+1
+        sta gx0+1
+        inz
+        lda [gstk],z
+        sta gsy
+        sta gy0
+        ldz #0
+        lda #0
+        sta gsy+1
+        sta gy0+1
+        rts
+
 ; ---------------- text output in graphics mode ----------------
 ; GX_GLYPH: A = character, drawn at ccol/crow (40x25) in gtfg on gbg
 !zone gx_glyph

@@ -1016,6 +1016,12 @@ gs_circle: jsr ovjmp
 gs_rect:   jsr ovjmp
            !byte 1
            !word gx_rect
+gs_ellipse: jsr ovjmp
+           !byte 1
+           !word gx_ellipse
+gs_fill:   jsr ovjmp
+           !byte 1
+           !word gx_fill
 f_point:   jsr ovjsr
            !byte 1
            !word gx_point

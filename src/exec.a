@@ -227,7 +227,7 @@ cmdjmp: !word leftsl, midsl, ritesl, syntax, syntax, syntax, syntax, while ; C0-
         !word input, let, local, gs_mode, gs_move, next, on, vdu            ; E8-EF
         !word gs_plot, print, proc, read, rem, repeat, report_st, restore   ; F0-F7
         !word return, run, stop, gs_colour, trace, until, widthv, noimp     ; F8-FF
-        !word rem, gs_circle, noimp, noimp, noimp, gs_origin, quit, gs_rect ; 00-07
+        !word rem, gs_circle, gs_ellipse, gs_fill, noimp, gs_origin, quit, gs_rect ; 00-07
         !word swap, noimp, noimp, wait, syntax, rem, noimp, syntax          ; 08-0F
         !word exit                                                          ; 10 EXIT
 
