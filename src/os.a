@@ -35,10 +35,16 @@ hw_init:
         sta $d016
         lda #$80                ; H640
         tsb $d031
-        lda #$08                ; V400 off, attributes off
+        lda #$3d                ; ATTR, BPM, V400, MONO, INT off (keep H640, FAST, EXTSYNC off)
         trb $d031
-        lda #$01                ; CHR16 off
-        trb $d054
+        lda #$40                ; $D054: only VFAST (CHR16, full colour, 16-colour/wide sprites off)
+        sta $d054
+        lda #0                  ; no sprites, no sprite priority/multicolour leftovers
+        sta $d015
+        sta $d01b
+        sta $d01c
+        sta $d017
+        sta $d01d
         lda #<SCREEN
         sta $d060
         lda #>SCREEN
@@ -72,6 +78,11 @@ hw_init:
         sta $d065
         lda #$80                ; HOTREG off so VIC-II writes don't clobber the above
         trb $d05d
+-       lda $d610               ; flush keys typed into BASIC 65 before the start
+        beq +
+        sta $d610
+        bra -
++
         ; colour RAM ($FF80000) = white, 2048 bytes
         lda #$00
         sta fptr

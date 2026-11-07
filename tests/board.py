@@ -79,8 +79,12 @@ def ctl(*args):
 
 def load(reset=True):
     retry(['scp', '-o', 'ConnectTimeout=8', PRG, 'root@%s:/tmp/b65.prg' % HOST])
-    retry(['ssh', '-o', 'ConnectTimeout=8', 'root@%s' % HOST,
-           'm65run /tmp/b65.prg --run' + (' --reset' if reset else '')], timeout=180)
+    # no retry here: a second m65run would type RUN into the running B65
+    r = subprocess.run(['ssh', '-o', 'ConnectTimeout=8', 'root@%s' % HOST,
+                        'm65run /tmp/b65.prg --run' + (' --reset' if reset else '')],
+                       capture_output=True, text=True, timeout=180)
+    if r.returncode != 0:
+        raise RuntimeError('m65run failed: ' + (r.stderr + r.stdout)[-300:])
     time.sleep(3)
 
 
@@ -142,6 +146,9 @@ def main():
         for p in sorted(glob.glob(os.path.join(ROOT, 'tests/smoke/*.txt'))):
             t = run_script(p)
             exp = os.path.splitext(p)[0] + '.expected'
+            bexp = os.path.splitext(p)[0] + '.board.expected'   # board-specific (e.g. K325T info)
+            if os.path.exists(bexp):
+                exp = bexp
             e = open(exp, encoding='latin-1').read() if os.path.exists(exp) else ''
             if strip_banner(t).rstrip() == strip_banner(e).rstrip():
                 print('PASS', os.path.basename(p))

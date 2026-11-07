@@ -1,0 +1,26 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 N%=0:M%=0
+>20 EVERY 5,1 GOSUB 200
+>30 AFTER 30 GOSUB 300
+>40 T%=TIME:REPEAT UNTIL TIME-T%>=100
+>50 DI:PRINT "ticks: ";N%;" after: ";M%;" left: ";TIMELEFT(1)
+>60 PRINT ?&6E0, ?&6E2+256*?&6E3, ?&6E4
+>70 ?&8000000=42:!&8000004=123456:PRINT ?&8000000, !&8000004
+>80 X=PI:|&5F000=X:PRINT |&5F000
+>90 END
+>200 N%+=1:RETURN
+>300 M%+=1:RETURN
+>LIST 10,30
+   10 N%=0:M%=0
+   20 EVERY 5,1 GOSUB 200
+   30 AFTER 30 GOSUB 300
+>RUN
+ticks: 10 after: 1 left: 5
+        98      1024        64
+        42    123456
+3.14159265
+>
