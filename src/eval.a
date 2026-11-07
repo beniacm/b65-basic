@@ -787,12 +787,24 @@ item:   jsr nxt
         jsr getvar
         bcs .mist
         beq .found
-        lda #26                 ; No such variable
-        jmp error
+        bra .undef
 .found  lda vtype
         bmi +
         jmp loadn
 +       jmp loads
+.undef  lda asmq                ; assembler first pass: undefined label = P%
+        beq +
+        ldx #4
+-       lda STAVAR+4*('P'-'@'),x
+        sta acc,x
+        dex
+        bpl -
+        lda #0
+        sta accx
+        sta etype
+        rts
++       lda #26
+        jmp error
 .mist   lda #16                 ; Syntax error
         jmp error
 .tok    inw tp

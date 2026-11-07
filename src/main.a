@@ -89,6 +89,7 @@ cold_test:
         inx
         bne -
         jsr hw_init
+        jsr ovinit
         jsr test_init
         ; 16-bit stack from HIMEM down
         lda #<HIMEM0
@@ -101,6 +102,7 @@ cold_test:
         lda #0
 -       sta STAVAR,x
         sta STAVAR+$100,x
+        sta STAVAR+$200,x       ; NUMBUF + MISC variables
         inx
         bne -
         lda #<($90a)            ; @% = &90A
@@ -181,6 +183,7 @@ clopp:
         ora #$30
         sta listo
         lda #0
+        sta asmq
         sta errtrp
         sta errtrp+1
         sta onersp

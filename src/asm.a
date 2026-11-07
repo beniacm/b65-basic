@@ -1,0 +1,784 @@
+; B65 BASIC - 45GS02 inline assembler (overlay 0)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+; Replaces the Z80 assembler ASMB.Z80; same structure: [ ... ] with OPT,
+; labels (.name -> BASIC variable = P%), P%/O%, EQUB/EQUW/EQUD/EQUS.
+; Instruction set: 6502, 65C02, 65CE02/4510 and 45GS02 (Q instructions,
+; [zp],Z 32-bit flat addressing, 16-bit branches LBxx/BSR).
+
+M_IMP=0
+M_ACC=1
+M_IMM=2
+M_ZP=3
+M_ZPX=4
+M_ZPY=5
+M_ABS=6
+M_ABSX=7
+M_ABSY=8
+M_IND=9
+M_INDX=10
+M_IZX=11
+M_IZY=12
+M_IZZ=13
+M_ISY=14
+M_REL=15
+M_REL16=16
+M_ZPREL=17
+M_IMM16=18
+M_FLAT=19
+
+; assembler workspace (MISC area)
+amn     = MISC+81       ; 4 bytes mnemonic
+amode   = MISC+85       ; parsed operand class
+aval    = MISC+86       ; 4 bytes operand value
+aval2   = MISC+90       ; 2 bytes second operand (BBR target)
+aent    = MISC+92       ; 2 bytes: table entry found
+anb     = MISC+94       ; bytes emitted
+abuf    = MISC+95       ; up to 8 bytes
+astart  = MISC+103      ; 2 bytes statement start (listing)
+apc     = MISC+105      ; 2 bytes P% at statement start
+
+PVAR    = STAVAR+4*('P'-'@')
+OVAR    = STAVAR+4*('O'-'@')
+
+; operand classes from the parser
+C_NONE=0
+C_A=1
+C_IMM=2
+C_DIR=3         ; expr
+C_DIRX=4        ; expr,X
+C_DIRY=5        ; expr,Y
+C_IND=6         ; (expr)
+C_INDX=7        ; (expr,X)
+C_INDY=8        ; (expr),Y
+C_INDZ=9        ; (expr),Z
+C_ISY=10        ; (expr,SP),Y
+C_FLAT=11       ; [expr] or [expr],Z
+C_TWO=12        ; expr,expr (BBR/BBS)
+
+ovl_asm_img:
+!pseudopc $e000 {
+assem:  lda #3                  ; default OPT 3
+        sta asmopt
+.stmt   jsr nxt
+        sta tmp0
+        lda tp
+        sta curlin
+        sta astart
+        lda tp+1
+        sta curlin+1
+        lda tp+1
+        sta astart+1
+        lda PVAR
+        sta apc
+        lda PVAR+1
+        sta apc+1
+        lda #0
+        sta anb
+        lda tmp0
+        cmp #']'
+        bne +
+        inw tp
+        lda #0
+        sta asmq
+        jmp xeq
++       cmp #':'
+        bne +
+        inw tp
+        bra .stmt
++       cmp #CR
+        bne +
+        inw tp                  ; next program line
+        lda tp
+        cmp page
+        lda tp+1
+        sbc page+1
+        bcc .eoi                ; immediate mode: end of input
+        jsr newlin
+        bra .stmt
+.eoi    lda #0
+        sta asmq
+        jmp clopp
++       cmp #';'
+        beq .com
+        cmp #$5c
+        beq .com
+        cmp #'.'
+        bne .mn
+        inw tp                  ; label: variable := P%
+        jsr getvar
+        bcc +
+        jmp syntax
++       beq +
+        jsr putvar
++       lda PVAR
+        sta acc
+        lda PVAR+1
+        sta acc+1
+        lda PVAR+2
+        sta acc+2
+        lda PVAR+3
+        sta acc+3
+        lda #0
+        sta accx
+        sta etype
+        jsr storen
+        lbra .stmt
+.com    jsr skipstmt
+        lbra .stmt
+.mn     jsr getmn
+        jsr direct              ; OPT / EQUx ?
+        bcs .done
+        jsr findmn
+        jsr operand
+        jsr choose
+        jsr emit
+.done   jsr listing
+        jmp .stmt
+
+; skip to ':' / CR / ']'
+skipstmt:
+        lda (tp),z
+        cmp #':'
+        beq +
+        cmp #CR
+        beq +
+        inw tp
+        bra skipstmt
++       rts
+
+; GETMN: read the mnemonic (letters/digits, BASIC tokens AND/EOR/OR expanded)
+!zone getmn
+getmn:  ldx #0
+        lda #' '
+-       sta amn,x
+        inx
+        cpx #4
+        bne -
+        ldx #0
+.l      lda (tp),z
+        cmp #TAND
+        bne +
+        ldy #0
+        bra .tok
++       cmp #TEOR
+        bne +
+        ldy #4
+        bra .tok
++       cmp #TOR
+        bne +
+        ldy #8
+        bra .tok
++       cmp #'a'
+        bcc +
+        cmp #'z'+1
+        bcs +
+        and #$df
++       cmp #'0'
+        bcc .x
+        cmp #'9'+1
+        bcc .ch
+        cmp #'A'
+        bcc .x
+        cmp #'Z'+1
+        bcs .x
+.ch     cpx #4
+        bcs +
+        sta amn,x
+        inx
++       inw tp
+        bra .l
+.tok    inw tp                  ; copy keyword letters
+-       lda .kw,y
+        beq .l
+        cpx #4
+        bcs +
+        sta amn,x
+        inx
++       iny
+        bra -
+.x      rts
+.kw     !text "AND",0,"EOR",0,"OR",0
+
+; DIRECT: OPT n, EQUB, EQUW, EQUD, EQUS. Carry set if handled.
+!zone direct
+direct: lda amn
+        cmp #'O'
+        bne .equ
+        lda amn+1
+        cmp #'P'
+        bne .no
+        lda amn+2
+        cmp #'T'
+        bne .no
+        jsr expri
+        lda acc
+        sta asmopt
+        and #2
+        eor #2
+        sta asmq                ; errors suppressed when OPT bit 1 is clear
+        sec
+        rts
+.no     clc
+        rts
+.equ    cmp #'E'
+        bne .no
+        lda amn+1
+        cmp #'Q'
+        bne .no
+        lda amn+2
+        cmp #'U'
+        bne .no
+        lda amn+3
+        cmp #'S'
+        beq .s
+        ldx #1
+        cmp #'B'
+        beq .n
+        ldx #2
+        cmp #'W'
+        beq .n
+        ldx #4
+        cmp #'D'
+        bne .no
+.n      stx tmp4
+.n1     lda tmp4
+        pha
+        jsr expri
+        pla
+        sta tmp4
+        ldx #0
+-       lda acc,x
+        phx
+        jsr putb
+        plx
+        inx
+        cpx tmp4
+        bne -
+        jsr nxt                 ; EQUB a,b,c ... (list extension)
+        cmp #','
+        bne +
+        inw tp
+        bra .n1
++       sec
+        rts
+.s      jsr exprs
+        ldx #0
+-       cpx slen
+        beq +
+        lda ACCS,x
+        phx
+        jsr putb
+        plx
+        inx
+        bra -
++       sec
+        rts
+
+; FINDMN: aent -> first table entry with this mnemonic
+!zone findmn
+findmn: lda #<asm_tab
+        sta aent
+        lda #>asm_tab
+        sta aent+1
+.l      lda aent
+        sta ptr3
+        lda aent+1
+        sta ptr3+1
+        ldy #0
+        lda (ptr3),y
+        cmp #$ff
+        beq .bad
+-       lda (ptr3),y
+        cmp amn,y
+        bne .n
+        iny
+        cpy #4
+        bne -
+        rts
+.n      lda aent
+        clc
+        adc #7
+        sta aent
+        bcc .l
+        inc aent+1
+        bra .l
+.bad    jmp syntax
+
+; OPERAND: parse -> amode (class), aval (value), aval2
+!zone operand
+operand:
+        lda #0
+        sta aval
+        sta aval+1
+        sta aval+2
+        sta aval+3
+        jsr nxt
+        jsr .term
+        bne +
+        lda #C_NONE
+        sta amode
+        rts
++       cmp #'#'
+        bne +
+        inw tp
+        jsr .ex
+        lda #C_IMM
+        sta amode
+        rts
++       cmp #'['
+        bne .par
+        inw tp
+        jsr .ex
+        jsr nxt
+        cmp #']'
+        bne .syn
+        inw tp
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr .reg
+        cmp #'Z'
+        bne .syn
++       lda #C_FLAT
+        sta amode
+        rts
+.syn    jmp syntax
+.par    cmp #'('
+        bne .dir
+        inw tp
+        jsr .ex
+        jsr nxt
+        cmp #','
+        bne .cl
+        inw tp                  ; (expr,X) or (expr,SP),Y
+        jsr .reg
+        cmp #'X'
+        bne .sp
+        jsr nxt
+        cmp #')'
+        bne .syn
+        inw tp
+        lda #C_INDX
+        sta amode
+        rts
+.sp     cmp #'S'
+        bne .syn
+        lda (tp),z
+        and #$df
+        cmp #'P'
+        bne .syn
+        inw tp
+        jsr nxt
+        cmp #')'
+        bne .syn
+        inw tp
+        jsr nxt
+        cmp #','
+        bne .syn
+        inw tp
+        jsr .reg
+        cmp #'Y'
+        bne .syn
+        lda #C_ISY
+        sta amode
+        rts
+.cl     cmp #')'
+        bne .syn
+        inw tp
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr .reg
+        ldx #C_INDY
+        cmp #'Y'
+        beq .st
+        ldx #C_INDZ
+        cmp #'Z'
+        beq .st
+        bra .syn
++       ldx #C_IND
+.st     stx amode
+        rts
+.dir    ; "A" alone = accumulator
+        cmp #'A'
+        bne .dx
+        ldy #1
+        lda (tp),y
+        jsr .term
+        bne .dx
+        inw tp
+        lda #C_A
+        sta amode
+        rts
+.dx     jsr .ex
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr nxt
+        and #$df
+        ldy #1
+        cmp #'X'
+        bne .dy
+        lda (tp),y
+        jsr .term2
+        bne .two
+        inw tp
+        lda #C_DIRX
+        sta amode
+        rts
+.dy     cmp #'Y'
+        bne .two
+        lda (tp),y
+        jsr .term2
+        bne .two
+        inw tp
+        lda #C_DIRY
+        sta amode
+        rts
+.two    lda aval                ; BBR/BBS zp,target
+        sta aval2
+        lda aval+1
+        sta aval2+1
+        jsr .ex
+        lda #C_TWO
+        sta amode
+        rts
++       lda #C_DIR
+        sta amode
+        rts
+.reg    jsr nxt                 ; register letter (upper case), consumed
+        and #$df
+        inw tp
+        rts
+.term   cmp #':'                ; Z set at end of statement
+        beq +
+        cmp #CR
+        beq +
+        cmp #';'
+        beq +
+        cmp #$5c
+        beq +
+        cmp #']'
++       rts
+.term2  cmp #' '
+        beq +
+        jmp .term
++       rts
+.ex     jsr expri               ; integer value -> aval (swap for BBR second)
+        ldx #3
+-       lda acc,x
+        sta aval,x
+        dex
+        bpl -
+        rts
+
+; CHOOSE: find opcode for mnemonic + operand class; sets x = mode, aent -> entry
+!zone choose
+choose: lda amode
+        asl
+        tax
+        jmp (.tab,x)
+.tab    !word .none, .acc, .imm, .dir, .dirx, .diry, .ind, .indx, .indy, .indz, .isy, .flat, .two
+.none   lda #M_IMP
+        jsr .try
+        lbcs .ok
+        lda #M_ACC
+        bra .must
+.acc    lda #M_ACC
+        bra .must
+.imm    lda #M_IMM
+        jsr .try
+        bcs .ok
+        lda #M_IMM16
+        bra .must
+.dir    lda #M_REL
+        jsr .try
+        bcs .ok
+        lda #M_REL16
+        jsr .try
+        bcs .ok
+        lda #M_ZP
+        ldx #M_ABS
+        bra .zpabs
+.dirx   lda #M_ZPX
+        ldx #M_ABSX
+        bra .zpabs
+.diry   lda #M_ZPY
+        ldx #M_ABSY
+        bra .zpabs
+.ind    lda #M_IND
+        jsr .try
+        bcs .ok
+        lda #M_IZZ
+        bra .must
+.indx   lda #M_INDX
+        jsr .try
+        bcs .ok
+        lda #M_IZX
+        bra .must
+.indy   lda #M_IZY
+        bra .must
+.indz   lda #M_IZZ
+        bra .must
+.isy    lda #M_ISY
+        bra .must
+.flat   lda #M_FLAT
+        bra .must
+.two    lda #M_ZPREL
+        bra .must
+.zpabs  stx tmp5                ; zero page form if value < 256 and it exists
+        pha
+        lda aval+1
+        ora aval+2
+        ora aval+3
+        bne .abs
+        pla
+        jsr .try
+        bcs .ok
+        lda tmp5
+        bra .must
+.abs    pla
+        lda tmp5
+.must   jsr .try
+        bcs .ok
+        jmp syntax
+.ok     rts
+; .try: A = mode; search entries with the same mnemonic from aent; carry set if found (ptr3 -> entry)
+.try    sta tmp4
+        lda aent
+        sta ptr3
+        lda aent+1
+        sta ptr3+1
+.t0     ldy #0
+.t1     lda (ptr3),y
+        cmp amn,y
+        bne .nf
+        iny
+        cpy #4
+        bne .t1
+        lda (ptr3),y
+        cmp tmp4
+        beq .f
+        lda ptr3
+        clc
+        adc #7
+        sta ptr3
+        bcc .t0
+        inc ptr3+1
+        bra .t0
+.nf     clc
+        rts
+.f      sec
+        rts
+
+; EMIT: prefixes, opcode, operand bytes for the entry at ptr3
+!zone emit
+emit:   ldy #6
+        lda (ptr3),y            ; flags
+        sta tmp6
+        and #1
+        beq +
+        lda #$42
+        jsr putb
+        lda #$42
+        jsr putb
++       lda tmp6
+        and #2
+        beq +
+        lda #$ea
+        jsr putb
++       ldy #5
+        lda (ptr3),y
+        jsr putb                ; opcode
+        ldy #4
+        lda (ptr3),y            ; mode
+        tax
+        lda .len,x
+        beq .x
+        cpx #M_REL
+        beq .rel
+        cpx #M_REL16
+        beq .rel16
+        cpx #M_ZPREL
+        beq .zprel
+        cmp #1
+        beq .one
+        lda aval
+        jsr putb
+        lda aval+1
+        jmp putb
+.one    lda aval
+        jmp putb
+.x      rts
+.rel    lda aval                ; offset = target - (start + 2)
+        sec
+        sbc apc
+        tax
+        lda aval+1
+        sbc apc+1
+        tay
+        txa
+        sec
+        sbc #2
+        tax
+        tya
+        sbc #0
+        jsr .rng8
+        txa
+        jmp putb
+.rel16  lda aval                ; offset = target - (start + 2) (45GS02 convention)
+        sec
+        sbc apc
+        sta tmpw
+        lda aval+1
+        sbc apc+1
+        sta tmpw+1
+        lda tmpw
+        sec
+        sbc #2
+        sta tmpw
+        bcs +
+        dec tmpw+1
++       lda tmpw
+        jsr putb
+        lda tmpw+1
+        jmp putb
+.zprel  lda aval2
+        jsr putb
+        lda aval                ; offset = target - (start + 3)
+        sec
+        sbc apc
+        tax
+        lda aval+1
+        sbc apc+1
+        tay
+        txa
+        sec
+        sbc #3
+        tax
+        tya
+        sbc #0
+        jsr .rng8
+        txa
+        jmp putb
+.rng8   ; A:X = offset; must be -128..127 (only checked when OPT bit 1 set)
+        cmp #0
+        bne +
+        cpx #$80
+        bcc .r
+        bra .bad
++       cmp #$ff
+        bne .bad
+        cpx #$80
+        bcs .r
+.bad    lda asmopt
+        and #2
+        beq .r
+        lda #1                  ; Out of range
+        jmp error
+.r      rts
+.len    !byte 0,0,1,1,1,1,2,2,2,2,2,1,1,1,1,1,2,2,2,1
+
+; PUTB: store A at P% (or O% with OPT 4), advance
+putb:   ldy anb
+        cpy #8
+        bcs +
+        sta abuf,y
+        inc anb
++       pha
+        lda asmopt
+        and #4
+        beq .p
+        lda OVAR
+        sta ptr2
+        lda OVAR+1
+        sta ptr2+1
+        pla
+        ldy #0
+        sta (ptr2),y
+        inc OVAR
+        bne .inc
+        inc OVAR+1
+        bra .inc
+.p      lda PVAR
+        sta ptr2
+        lda PVAR+1
+        sta ptr2+1
+        pla
+        ldy #0
+        sta (ptr2),y
+.inc    inc PVAR
+        bne +
+        inc PVAR+1
++       rts
+
+; LISTING (OPT bit 0): address, bytes, source text
+!zone listing
+listing:
+        lda asmopt
+        and #1
+        beq .x
+        lda apc+1
+        jsr hexb
+        lda apc
+        jsr hexb
+        lda #' '
+        jsr outchr
+        ldx #0
+-       cpx #8
+        beq +
+        cpx anb
+        bcs .sp
+        lda abuf,x
+        phx
+        jsr hexb
+        lda #' '
+        jsr outchr
+        plx
+        inx
+        bra -
+.sp     phx
+        lda #' '
+        jsr outchr
+        jsr outchr
+        jsr outchr
+        plx
+        inx
+        bra -
++       lda astart              ; source text up to tp
+        sta ptr2
+        lda astart+1
+        sta ptr2+1
+-       lda ptr2
+        cmp tp
+        bne +
+        lda ptr2+1
+        cmp tp+1
+        beq .nl
++       ldy #0
+        lda (ptr2),y
+        jsr out
+        inw ptr2
+        bra -
+.nl     jsr crlf
+.x      rts
+hexb:   pha
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr .d
+        pla
+        and #$0f
+.d      cmp #10
+        bcc +
+        adc #6
++       adc #'0'
+        jmp outchr
+
+!src "src/asmtab.a"
+ovl_asm_end:
+}

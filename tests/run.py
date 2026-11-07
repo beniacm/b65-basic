@@ -17,12 +17,12 @@ def build_image(script_bytes):
     boot = open(os.path.join(ROOT, 'build/boot.bin'), 'rb').read()
     assert prg[:2] == b'\x01\x20'
     body = prg[2:]
-    assert len(boot) <= 0x100 and len(body) <= 0x7000
-    img = bytearray(0x8000)
+    assert len(boot) <= 0x100 and len(body) <= 0xb000
+    img = bytearray(0xc000)
     img[:len(boot)] = boot
     img[0x100:0x100 + len(body)] = body
     scr = b'B65TEST:' + script_bytes + b'\0'
-    assert len(scr) <= 0x7000
+    assert len(scr) <= 0x3f00
     return bytes(img) + scr
 
 def main():

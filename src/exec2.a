@@ -930,3 +930,39 @@ f_addr: jsr getvar
 +       lda vptr
         ldx vptr+1
         jmp setw
+
+; ---- CALL addr / USR(addr): A,X,Y,Z from A%,X%,Y%,Z%, carry from C% ----
+!zone callusr
+callm:  lda STAVAR+4*('C'-'@')
+        lsr                     ; carry
+        lda STAVAR+4*('A'-'@')
+        ldx STAVAR+4*('X'-'@')
+        ldy STAVAR+4*('Y'-'@')
+        ldz STAVAR+4*('Z'-'@')
+        jmp (tmpw2)
+call:   jsr expri
+        lda acc
+        sta tmpw2
+        lda acc+1
+        sta tmpw2+1
+        jsr callm
+        ldz #0
+        cld
+        jmp xeq
+f_usr:  jsr itemi
+        lda acc
+        sta tmpw2
+        lda acc+1
+        sta tmpw2+1
+        jsr callm
+        sta acc
+        stx acc+1
+        sty acc+2
+        tza
+        sta acc+3
+        ldz #0
+        cld
+        lda #0
+        sta accx
+        sta etype
+        rts

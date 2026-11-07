@@ -38,6 +38,7 @@ functab:
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
         !byte TREPORT : !word f_reports
+        !byte TUSR    : !word f_usr
         !byte $8e     : !word f_openin
         !byte $9a     : !word f_bget
         !byte $c5     : !word f_eof

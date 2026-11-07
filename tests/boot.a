@@ -9,15 +9,15 @@
         !fill $080d - *, 0
         sei
         ldz #0
-        ; copy $7000 bytes $40100 -> $02001
+        ; copy $B000 bytes $40100 -> $02001
         lda #$00 : sta $f0 : lda #$01 : sta $f1 : lda #$04 : sta $f2 : lda #0 : sta $f3
         lda #$01 : sta $f4 : lda #$20 : sta $f5 : lda #$00 : sta $f6 : sta $f7
-        ldx #$70
+        ldx #$b0
         jsr copy
-        ; copy $7000 bytes $48000 -> $10000
-        lda #$00 : sta $f0 : lda #$80 : sta $f1 : lda #$04 : sta $f2
+        ; copy $3F00 bytes $4C000 -> $10000
+        lda #$00 : sta $f0 : lda #$c0 : sta $f1 : lda #$04 : sta $f2
         lda #$00 : sta $f4 : sta $f5 : lda #$01 : sta $f6
-        ldx #$70
+        ldx #$3f
         jsr copy
         ; clear $18000-$1FFFF
         lda #$00 : sta $f4 : lda #$80 : sta $f5 : lda #$01 : sta $f6

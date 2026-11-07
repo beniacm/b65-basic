@@ -1,0 +1,154 @@
+; B65 BASIC - code overlays
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+;
+; Rarely used modules (inline assembler, ...) are assembled to run at
+; $E000-$FFF9 and copied at start-up to chip RAM bank 4 ($40000 + n*$2000).
+; They are mapped into CPU block 7 ($E000-$FFFF) with the 45GS02 MAP
+; instruction when needed. The core (bank 0, $2000-) is always visible.
+
+OVBASE  = $040000
+
+; OVINIT: copy the overlay images to bank 4 (called once at start-up)
+!zone ovinit
+ovinit: ldx #0
+.l      cpx #NOVL*4
+        beq .x
+        lda ovltab,x            ; source (bank 0)
+        sta ptr1
+        lda ovltab+1,x
+        sta ptr1+1
+        lda ovltab+2,x          ; length
+        sta tmpw
+        lda ovltab+3,x
+        sta tmpw+1
+        txa                     ; destination = OVBASE + n*$2000
+        asl
+        asl
+        asl                     ; (x = n*4) -> n*32 = high byte offset of n*$2000
+        clc
+        adc #>OVBASE
+        sta fptr+1
+        lda #<OVBASE
+        sta fptr
+        lda #^OVBASE
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldy #0
+        ldz #0
+-       lda tmpw
+        ora tmpw+1
+        beq +
+        lda (ptr1),y
+        sta [fptr],z
+        inw ptr1
+        inw fptr
+        lda tmpw
+        bne ++
+        dec tmpw+1
+++      dec tmpw
+        bra -
++       ; vectors at offset $1FFA (NMI, RESET, IRQ) -> core handlers
+        txa
+        asl
+        asl
+        asl
+        clc
+        adc #$1f                ; (OVBASE is 64K aligned)
+        sta fptr+1
+        lda #^OVBASE
+        sta fptr+2
+        lda #$fa
+        sta fptr
+        ldy #0
+        ldz #0
+-       lda ovvec,y
+        sta [fptr],z
+        iny
+        inz
+        cpy #6
+        bne -
+        ldz #0
+        inx
+        inx
+        inx
+        inx
+        bra .l
+.x      lda #$ff
+        sta curovl
+        rts
+ovvec:  !word irq_rti, cold_prg, irqhandler
+
+; OVMAP: A = overlay number ($FF = none): map it at $E000
+ovmap:  sta curovl
+        cmp #$ff
+        beq .none
+        asl                     ; offset>>8 = $320 + n*$20
+        asl
+        asl
+        asl
+        asl
+        clc
+        adc #$20
+        tay
+        lda #$83
+        adc #0
+        taz
+        lda #0
+        ldx #0
+        map
+        eom
+        ldz #0
+        rts
+.none   lda #0
+        tax
+        tay
+        taz
+        map
+        eom
+        rts
+
+; OVJMP: inline !byte n : !word addr  (does not return)
+ovjmp:  pla
+        sta rtmp
+        pla
+        sta rtmp+1
+        ldy #1
+        lda (rtmp),y
+        jsr ovmap
+        ldy #2
+        lda (rtmp),y
+        sta rtmp2
+        iny
+        lda (rtmp),y
+        sta rtmp2+1
+        jmp (rtmp2)
+
+; OVJSR: inline !byte n : !word addr ; restores the previous overlay
+ovjsr:  pla
+        sta rtmp
+        pla
+        sta rtmp+1
+        lda rtmp                ; return past the 3 inline bytes
+        clc
+        adc #3
+        tax
+        lda rtmp+1
+        adc #0
+        pha
+        phx
+        lda curovl
+        pha
+        ldy #1
+        lda (rtmp),y
+        jsr ovmap
+        ldy #2
+        lda (rtmp),y
+        sta rtmp2
+        iny
+        lda (rtmp),y
+        sta rtmp2+1
+        jsr .go
+        pla                     ; previous overlay
+        jmp ovmap
+.go     jmp (rtmp2)

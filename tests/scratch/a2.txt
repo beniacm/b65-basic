@@ -1,0 +1,7 @@
+P%=&C000
+[OPT 1
+NOP
+LDA #1
+]
+PRINT ~?&C000
+[:LDA #1:]

@@ -1,0 +1,28 @@
+10 DIM code% 100
+20 FOR pass%=0 TO 2 STEP 2
+30 P%=code%
+40 [OPT pass%
+50 .start LDA #&41
+60 STA &0800
+70 LDX #3
+80 .loop DEX
+90 BNE loop
+100 LDQ &10
+110 STQ &14
+120 LDA [&20],Z
+130 ORA (&22),Y
+140 AND #&0F
+150 ASL A
+160 JSR sub
+170 LBNE start
+180 EQUB 1,2
+190 EQUW &1234
+200 EQUS "AB"
+210 RTS
+220 .sub INX:RTS
+230 ]
+240 NEXT
+250 A%=5:X%=6:Y%=7
+260 PRINT ~USR(sub)
+270 PRINT ~?code%, ~code%?1, ~loop-start
+RUN
