@@ -229,6 +229,7 @@ irqhandler:
 .tn     dey
         bpl .t
         jsr sndirq
+        jsr kbscan
         plz
         ply
         plx

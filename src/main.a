@@ -105,6 +105,10 @@ cold_test:
         sta STAVAR+$200,x       ; NUMBUF + MISC variables
         inx
         bne -
+        lda #0                  ; keyboard ring buffer
+        sta kbhead
+        sta kbtail
+        sta escflag
         lda #80                 ; text screen state (MISC area)
         sta scrcols
         lda #1

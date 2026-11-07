@@ -172,44 +172,52 @@ fontinit:
 ; is also appended to a transcript; when the script ends, Xemu is told to exit
 ; (only works with xemu -testing: $D6CF := $42).
 !zone testinit
+; Xemu:     "B65TEST:" + script at $10000, transcript at $18000, exit via $D6CF
+; hardware: "B65HWTS:" + script in attic RAM at $8000000, transcript at
+;           $8010000 (cleared here), done marker "B65DONE" at $800FFF0
 test_init:
         lda #0
         sta testmode
-        lda #<TSTMAGIC
-        sta tsp
-        lda #>TSTMAGIC
-        sta tsp+1
+        ldx #<TSTMAGIC
+        ldy #>TSTMAGIC
         lda #^TSTMAGIC
-        sta tsp+2
-        lda #0
-        sta tsp+3
         ldz #0
-        lda [tsp],z
-        cmp #'B'
-        bne .no
-        inz
-        lda [tsp],z
-        cmp #'6'
-        bne .no
-        inz
-        lda [tsp],z
-        cmp #'5'
-        bne .no
-        inz
-        lda [tsp],z
-        cmp #'T'
-        bne .no
-        ldx #0                  ; full magic "B65TEST:"
--       inz
-        lda [tsp],z
-        cmp .mg,x
-        bne .no
-        inx
-        cpx #4
-        bne -
+        jsr .chk
+        bcs +
+        ldx #0
+        ldy #0
+        lda #0
+        ldz #$08
+        jsr .chk
+        bcc .no
+        lda #$c0                ; hardware test mode
+        sta testmode
+        lda #0                  ; consume the magic (no re-run after a reset)
+        ldz #0
+        sta [tsp],z
         lda #8
         sta tsp
-        lda #$ff
+        lda #$00                ; transcript = $8010000, cleared (64 KB)
+        sta twp
+        sta twp+1
+        lda #$01
+        sta twp+2
+        lda #$08
+        sta twp+3
+        lda #0
+        ldx #0
+--      ldz #0
+-       sta [twp],z
+        inz
+        bne -
+        inc twp+1
+        dex
+        bne --
+        stx twp+1
+        bra .no
++       lda #8
+        sta tsp
+        lda #$80
         sta testmode
         lda #<TRANSCR
         sta twp
@@ -221,10 +229,63 @@ test_init:
         sta twp+3
 .no     ldz #0
         rts
+; .chk: X/Y/A/Z = address bytes 0..3 -> tsp; carry set if "B65TEST:" (Xemu)
+; or "B65HWTS:" (hardware, then V... carry set too; caller decides by order)
+.chk    stx tsp
+        sty tsp+1
+        sta tsp+2
+        tza
+        sta tsp+3
+        ldz #0
+        ldx #0
+-       lda [tsp],z
+        cmp .mg1,x
+        beq +
+        lda tsp+3               ; second magic only for the attic address
+        beq .nm
+        lda [tsp],z
+        cmp .mg2,x
+        bne .nm
++       inz
+        inx
+        cpx #8
+        bne -
+        ldz #0
+        sec
+        rts
+.nm     ldz #0
+        clc
+        rts
+.mg1    !text "B65TEST:"
+.mg2    !text "B65HWTS:"
 
-.mg     !text "EST:"
+; end of a test script. Xemu: exit the emulator; hardware: write the done
+; marker and continue with the keyboard
 test_exit:                      ; A = exit status
-        sta $d6cf
+        bit testmode
+        bvc .xemu
+        lda #$f0                ; "B65DONE" at $800FFF0
+        sta tsp
+        lda #$ff
+        sta tsp+1
+        lda #$00
+        sta tsp+2
+        lda #$08
+        sta tsp+3
+        ldy #0
+        ldz #0
+-       lda .dn,y
+        sta [tsp],z
+        iny
+        inz
+        cpy #8
+        bne -
+        ldz #0
+        lda #0
+        sta testmode            ; back to the keyboard
+        jmp clopp
+.dn     !text "B65DONE",0
+.xemu   sta $d6cf
         lda #$42
         sta $d6cf
 -       jmp -
@@ -497,9 +558,13 @@ osrdch:
         ora #$80
         sta (scrp),y
 +
--       lda $d610
-        beq -
-        sta $d610               ; dequeue
+-       bit irqon               ; before the interrupt is set up: poll directly
+        bmi +
+        jsr kbscan
++       lda escflag
+        bne .esc
+        jsr kbget
+        bcs -
         tax
         pla
         bit gmode
@@ -507,7 +572,64 @@ osrdch:
         sta (scrp),y
 +       ply
         txa
-        cmp #$14                ; DEL
+        rts
+.esc    lda #0
+        sta escflag
+        ldx #27
+        pla
+        bit gmode
+        bmi +
+        sta (scrp),y
++       ply
+        lda #27
+        rts
+
+; ---- keyboard: the raster interrupt drains the $D610 hardware queue into
+; a 64-byte ring buffer, so no keys are lost while BASIC is busy ----
+KBUF    = $1d80
+kbhead  = $1df0
+kbtail  = $1df1
+escflag = $1df2
+!zone kbscan
+kbscan: lda $d610
+        beq .x
+        sta $d610               ; dequeue
+        jsr kbmap
+        cmp #27
+        bne +
+        lda #$ff                ; ESCAPE (RUN/STOP or ESC): flag, not queued
+        sta escflag
+        bra kbscan
++       ldx kbtail
+        sta KBUF,x
+        inx
+        txa
+        and #63
+        cmp kbhead
+        beq kbscan              ; ring full: drop
+        sta kbtail
+        bra kbscan
+.x      rts
+!zone kbget
+; KBGET: carry clear and A = key if one is waiting
+kbget:  ldx kbhead
+        cpx kbtail
+        beq .no
+        lda KBUF,x
+        pha
+        inx
+        txa
+        and #63
+        sta kbhead
+        pla
+        clc
+        rts
+.no     sec
+        rts
+!zone kbmap
+; KBMAP: $D610 code -> BBC code; letters swapped (BBC style CAPS LOCK on)
+; unless the MEGA65 CAPS LOCK key is engaged ($D611 bit 6)
+kbmap:  cmp #$14                ; DEL
         bne +
         lda #127
         rts
@@ -538,26 +660,50 @@ osrdch:
 +       cmp #$94                ; INST (shift+DEL): delete under cursor
         bne +
         lda #131
-+       rts
+        rts
++       pha
+        lda $d611
+        and #$40
+        bne .asis
+        pla
+        cmp #'A'
+        bcc .r
+        cmp #'Z'+1
+        bcc .sw
+        cmp #'a'
+        bcc .r
+        cmp #'z'+1
+        bcs .r
+.sw     eor #$20
+.r      rts
+.asis   pla
+        rts
 
 ; INKEY-style poll: returns A=char or 0, no wait
+!zone kbpoll
 kbpoll: bit testmode
+        bmi .r
+        bit irqon
         bmi +
-        lda $d610
-        beq +
-        sta $d610
-+       rts
+        jsr kbscan
++       jsr kbget
+        bcc .r
+        lda #0
+.r      rts
 
 ; ESCAPE check (Z80: TRAP). Called once per statement.
 !zone trap
 trap:   bit testmode
         bmi .r
-        lda $d610
-        cmp #$03
-        beq .esc
-        cmp #$1b
-        bne .r
-.esc    sta $d610
+        bit irqon
+        bmi +
+        phx
+        jsr kbscan
+        plx
++       lda escflag
+        beq .r
+        lda #0
+        sta escflag
         lda #17
         jmp error
 .r      rts
