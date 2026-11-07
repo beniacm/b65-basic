@@ -396,8 +396,32 @@ must fit below `libase`. Up to 32 KB per library. Tested by
   * Tested by `tests/hw/07_bigprog.txt` (a 38.5 KB program written with
     BPUT#, loaded, edited at both ends, run with GOSUB/PROC to its end,
     RENUMBERed, saved, reloaded, 30 KB deleted).
-  * Later: more heap by moving cold code (LIST, RENUMBER, editor, errors)
-    into overlays, or arrays in attic RAM.
+  * Arrays in attic RAM (see below) take the big data out of the 16 KB
+    heap. Later, if needed: more heap by moving cold code (LIST, RENUMBER,
+    editor, errors) into overlays.
+* **Arrays in attic RAM.** Global arrays (not LOCAL ones) are allocated in
+  attic RAM when there is some: `$8600000`-`$87FFFFF` (2 MB), in 256-byte
+  pages. The 2-byte array variable then holds a handle `$E000`-`$FFFF`
+  (address = `$8600000 + (handle-$E000)*256`); values below `$E000` are
+  bank-0 blocks (LOCAL arrays on the stack, or no attic RAM). `CLEAR` (RUN,
+  NEW, LOAD, CHAIN) frees them all.
+  * `blkap` turns a block value into a 32-bit address in `ap` (`$3C`);
+    header reads use `[ap],z`. `setel` turns an element address into a
+    variable: near -> `vptr`; far -> `farad`/`farflag` and a copy in
+    `FARBUF` (`farld`), written back by `storevar` (`farst`, now also for
+    string descriptors: `farsz` = 4 for strings).
+  * Whole-array code (copy, `a()=expr` / init lists / `op=`, SUM, SUMLEN,
+    DIM(), arithmetic, dot product) walks elements with 32-bit cursors
+    (`aelp`/`aelq` at `$1FBC`, `XP` at `$1FC8` in overlay 2) and
+    `setel`/`storevar` per element. `a$()=b$()` now copies the strings
+    (it used to copy the descriptors, so both arrays shared their text).
+  * At most 65535 elements per array (the subscript index is 16-bit), so
+    up to 320 KB for a real array; "DIM space" when the 2 MB are used up.
+  * Far elements work with LET/compound ops, INPUT/READ, INPUT#/READ#,
+    RETURN parameters (the copy-back frame is 11 bytes and keeps the 28-bit
+    address), SWAP (swaps through 32-bit addresses), `^a(i)` (returns the
+    28-bit address). A far element as a FOR variable gives "Bad FOR
+    variable". Tested by `tests/smoke/18_far_arrays.txt`.
 
 ### Memory map (current)
 
@@ -415,6 +439,7 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | `$1E00`-`$1EFF` | FN result slot |
 | `$1F00`-`$1FAB` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries, mouse |
 | `$1FB0`-`$1FB7` | testmode, lexmode, AUTO number/step, TRACE limit (moved out of zero page) |
+| `$1FB8`-`$1FDF` | libase/libcur, array cursors aelp/aelq, arrtop, avt2, RETURN far capture, overlay-2 element addresses |
 | `$2001`-`$8DFF` | PRG stub + resident interpreter (overlay images follow in the PRG up to `$CF00` and are copied to bank 4 at start-up) |
 | `$8E00`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
 | `$E000`-`$FFFF` | overlay window (MAP) |
@@ -422,6 +447,7 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | bank 1 `$10000` | test script as loaded by Xemu, copied to attic `$8020000` at start-up |
 | bank 4 `$48000`-`$4EFFF` | Xemu test transcript (test mode only) |
 | attic `$8508000` | FILL seed stack |
+| attic `$8600000`-`$87FFFFF` | global arrays (2 MB, 256-byte pages) |
 | bank 4 `$40000`-`$47FFF` | overlay images (assembler, graphics, array arithmetic, files) |
 | bank 4 `$4F700`/`$4F800` | line history / font |
 | attic `$8100000`-`$84FFFFF` | file channel buffers (1 MB each) |

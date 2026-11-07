@@ -15,6 +15,12 @@ xj      = $1de8         ; 2
 xn      = $1dea         ; 2 dot: rows, inner, cols
 xk      = $1dec         ; 2
 xm      = $1dee         ; 2
+XP      = $1fc8         ; 5 x 4: element addresses (32-bit: arrays may be far)
+X0      = 0             ;   destination
+X1      = 4             ;   source 1
+X2      = 8             ;   source 2
+XB1     = 12            ;   dot: first element of b
+XB2     = 16            ;   dot: first element of c
 
 ovl_xtra_img:
 !pseudopc $e000 {
@@ -73,10 +79,8 @@ arrarith:
         lda ablk+1
         sta ptr2+1
         jsr arrsize
-        lda ptr3
-        sta xp0
-        lda ptr3+1
-        sta xp0+1
+        lda #X0
+        jsr .xput
         lda tmpw
         sta xcnt
         lda tmpw+1
@@ -87,10 +91,8 @@ arrarith:
         sta ptr2+1
         jsr arrsize
         jsr .same
-        lda ptr3
-        sta xp1
-        lda ptr3+1
-        sta xp1+1
+        lda #X1
+        jsr .xput
         lda xb2
         ora xb2+1
         beq .loop
@@ -100,29 +102,21 @@ arrarith:
         sta ptr2+1
         jsr arrsize
         jsr .same
-        lda ptr3
-        sta xp2
-        lda ptr3+1
-        sta xp2+1
+        lda #X2
+        jsr .xput
 .loop   lda xcnt
         ora xcnt+1
         bne +
         jmp xeq
-+       lda xp1                 ; left = b[i]
-        sta vptr
-        lda xp1+1
-        sta vptr+1
-        lda avt
-        sta vtype
++       lda #X1                 ; left = b[i]
+        jsr .xset
         jsr loadn
         jsr movleft
         lda xb2                 ; right = c[i] or scalar
         ora xb2+1
         beq .rs
-        lda xp2
-        sta vptr
-        lda xp2+1
-        sta vptr+1
+        lda #X2
+        jsr .xset
         jsr loadn
         bra .bin
 .rs     ldx #4
@@ -136,42 +130,22 @@ arrarith:
         sta tmp5
         ldx xop
         jsr binop
-        lda xp0
-        sta vptr
-        lda xp0+1
-        sta vptr+1
-        lda avt
-        sta vtype
-        jsr storen
+        lda #X0
+        jsr .xset
+        jsr storevar
         jsr .step
         bra .loop
-.step   lda avt                 ; advance all pointers by the element size
-        jsr .add0
+.step   lda #X0                 ; advance all pointers by the element size
+        jsr .xadd
+        lda #X1
+        jsr .xadd
+        lda #X2
+        jsr .xadd
         lda xcnt
         bne +
         dec xcnt+1
 +       dec xcnt
         rts
-.add0   pha
-        clc
-        adc xp0
-        sta xp0
-        bcc +
-        inc xp0+1
-+       pla
-        pha
-        clc
-        adc xp1
-        sta xp1
-        bcc +
-        inc xp1+1
-+       pla
-        clc
-        adc xp2
-        sta xp2
-        bcc +
-        inc xp2+1
-+       rts
 .same   lda tmpw
         cmp xcnt
         bne .bad
@@ -181,6 +155,43 @@ arrarith:
         rts
 .bad    lda #15                 ; Bad subscript (sizes differ)
         jmp error
+; .XPUT: XP[A] = ap   .XSET: ap = XP[A], element (type avt) -> variable
+; .XADD: XP[A] += element size
+.xput   tax
+        ldy #0
+-       lda ap,y
+        sta XP,x
+        inx
+        iny
+        cpy #4
+        bne -
+        rts
+.xset   tax
+        ldy #0
+-       lda XP,x
+        sta ap,y
+        inx
+        iny
+        cpy #4
+        bne -
+        lda avt
+        sta vtype
+        jmp setel
+.xadd   tax
+        lda avt
+        bpl +
+        lda #4
++       clc
+        adc XP,x
+        sta XP,x
+        bcc +
+        inc XP+1,x
+        bne +
+        inc XP+2,x
++       rts
+xput = .xput
+xset = .xset
+xadd = .xadd
 
 ; ---- matrix product: a() = b() . c() ----
 ; b is n x k (1-D: 1 x k), c is k x m (1-D: k x 1); a must have n*m elements
@@ -213,8 +224,8 @@ dotprod:
         lda xb2+1
         sta ptr2+1
         jsr .dims
-        ldy #0                  ; c 1-D: a column vector (k x 1)
-        lda (ptr2),y
+        jsr blkap               ; c 1-D: a column vector (k x 1)
+        lda [ap],z
         cmp #1
         bne +
         lda xj
@@ -241,28 +252,22 @@ dotprod:
         lda xb1+1
         sta ptr2+1
         jsr arrsize
-        lda ptr3
-        sta xb1                 ; (reuse: first element of b)
-        lda ptr3+1
-        sta xb1+1
+        lda #XB1                ; first element of b
+        jsr xput
         lda xb2
         sta ptr2
         lda xb2+1
         sta ptr2+1
         jsr arrsize
-        lda ptr3
-        sta xb2
-        lda ptr3+1
-        sta xb2+1
+        lda #XB2
+        jsr xput
         lda ablk
         sta ptr2
         lda ablk+1
         sta ptr2+1
         jsr arrsize             ; destination count must be n*m
-        lda ptr3
-        sta xp0
-        lda ptr3+1
-        sta xp0+1
+        lda #X0
+        jsr xput
         ; for r = 0..n-1, for q = 0..m-1: a[r,q] = sum_j b[r,j]*c[j,q]
         lda #0
         sta xi
@@ -321,8 +326,7 @@ dotprod:
         lda tmpw+1
         adc xp2+1
         sta tmpw+1
-        lda xb1
-        ldx xb1+1
+        lda #XB1
         jsr .elem
         jsr loadn
         jsr movleft
@@ -338,8 +342,7 @@ dotprod:
         lda tmpw+1
         adc xj+1
         sta tmpw+1
-        lda xb2
-        ldx xb2+1
+        lda #XB2
         jsr .elem
         jsr loadn
         lda #0
@@ -356,20 +359,11 @@ dotprod:
         bne .t
         inc xp2+1
         lbra .t
-.st     lda xp0                 ; store, next destination element
-        sta vptr
-        lda xp0+1
-        sta vptr+1
-        lda avt
-        sta vtype
-        jsr storen
-        lda avt
-        clc
-        adc xp0
-        sta xp0
-        bcc +
-        inc xp0+1
-+       rts
+.st     lda #X0                 ; store, next destination element
+        jsr xset
+        jsr storevar
+        lda #X0
+        jmp xadd
 ; .mulk: A/X * (Y=0: k, Y=1: m) -> tmpw (hardware multiplier)
 .mulk   sta $d770
         stx $d771
@@ -397,12 +391,20 @@ dotprod:
         lda $d779
         sta tmpw+1
         rts
-; .elem: A/X = first element; tmpw = index -> vptr (element size = avt)
-.elem   sta vptr
-        stx vptr+1
+; .elem: A = XP index of the first element; tmpw = index -> variable (size avt)
+.elem   tax
+        ldy #0
+-       lda XP,x
+        sta ap,y
+        inx
+        iny
+        cpy #4
+        bne -
         lda avt
         sta vtype
-        sta $d774
+        bpl +
+        lda #4
++       sta $d774
         lda #0
         sta $d775
         sta $d776
@@ -417,15 +419,18 @@ dotprod:
         bvs -
         lda $d778
         clc
-        adc vptr
-        sta vptr
+        adc ap
+        sta ap
         lda $d779
-        adc vptr+1
-        sta vptr+1
-        rts
+        adc ap+1
+        sta ap+1
+        lda $d77a
+        adc ap+2
+        sta ap+2
+        jmp setel
 ; .dims: ptr2 = block -> xi = rows, xj = cols (1-D: 1 x size)
-.dims   ldy #0
-        lda (ptr2),y
+.dims   jsr blkap
+        lda [ap],z
         cmp #2
         beq .two
         cmp #1
@@ -435,25 +440,27 @@ dotprod:
         sta xi
         lda #0
         sta xi+1
-        ldy #1
-        lda (ptr2),y
+        ldz #1
+        lda [ap],z
         sta xj
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sta xj+1
+        ldz #0
         rts
-.two    ldy #1
-        lda (ptr2),y
+.two    ldz #1
+        lda [ap],z
         sta xi
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sta xi+1
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sta xj
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sta xj+1
+        ldz #0
         rts
 ovl_xtra_end:
 }

@@ -380,8 +380,8 @@ subscr: ldy #0
         pha
         lda ptr2+1
         pha
-        ldy #0
-        lda (ptr2),y            ; number of dimensions
+        jsr blkap
+        lda [ap],z              ; number of dimensions
         pha                     ; dims left
         lda #0
         pha                     ; index lo
@@ -400,14 +400,16 @@ subscr: ldy #0
         iny
         lda (spz),y
         sta ptr2
+        jsr blkap
         ldy #1
         lda (spz),y             ; dim offset
-        tay
-        lda (ptr2),y            ; size of this dimension
+        taz
+        lda [ap],z              ; size of this dimension
         sta arg
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sta arg+1
+        ldz #0
         ; check 0 <= sub < size
         lda acc+3
         ora acc+2
@@ -483,21 +485,130 @@ subscr: ldy #0
         sta $d770
         lda tmpw+1
         sta $d771
+        jsr blkap               ; element = block + header + index*size
         lda $d778
         clc
         adc tmp0
-        sta tmpw
+        tax
         lda $d779
         adc #0
-        sta tmpw+1
-        lda ptr2
+        tay
+        lda $d77a
+        adc #0
+        pha
+        txa
         clc
-        adc tmpw
-        sta vptr
-        lda ptr2+1
-        adc tmpw+1
-        sta vptr+1
+        adc ap
+        sta ap
+        tya
+        adc ap+1
+        sta ap+1
+        pla
+        adc ap+2
+        sta ap+2
+        jsr setel
         jmp getvpost
+
+!zone fararr
+; ---- far arrays ----
+; An array block value (the 2-byte array variable) below $E000 is a bank-0
+; address; $E000-$FFFF is a handle of a block in attic RAM:
+; $8600000 + (value-$E000)*256 (2 MB). Elements are reached through
+; SETEL: near -> vptr, far -> farad/farflag and a copy in FARBUF.
+ARRH0   = $e0
+; BLKAP: ptr2 = block value -> ap = its 32-bit address
+blkap:  lda ptr2+1
+        cmp #ARRH0
+        bcs .far
+        sta ap+1
+        lda ptr2
+        sta ap
+        lda #0
+        sta ap+2
+        sta ap+3
+        rts
+.far    sec
+        sbc #ARRH0-$60
+        sta ap+2
+        lda ptr2
+        sta ap+1
+        lda #0
+        sta ap
+        lda #$08
+        sta ap+3
+        rts
+; SETEL: ap = element address, vtype -> variable (vptr; far: loaded into FARBUF)
+setel:  lda ap+3
+        ora ap+2
+        bne .sfar
+        lda ap
+        sta vptr
+        lda ap+1
+        sta vptr+1
+        lda #0
+        sta farflag
+        rts
+.sfar   ldx #3
+-       lda ap,x
+        sta farad,x
+        dex
+        bpl -
+        lda #$ff
+        sta farflag
+        lda #<FARBUF
+        sta vptr
+        lda #>FARBUF
+        sta vptr+1
+        jmp farld
+; AELSET / AELQSET: element at aelp / aelq (type avt) -> variable
+aelset: ldx #3
+-       lda aelp,x
+        sta ap,x
+        dex
+        bpl -
+        lda avt
+        sta vtype
+        bra setel
+aelqset:                        ; (type avt2)
+        ldx #3
+-       lda aelq,x
+        sta ap,x
+        dex
+        bpl -
+        lda avt2
+        sta vtype
+        bra setel
+; APAEL: aelp = ap; APAELQ: aelq = ap
+apael:  ldx #3
+-       lda ap,x
+        sta aelp,x
+        dex
+        bpl -
+        rts
+apaelq: ldx #3
+-       lda ap,x
+        sta aelq,x
+        dex
+        bpl -
+        rts
+; AELINC / AELQINC: advance by one element of type avt
+aelinc: ldx #0
+        lda avt
+        bra +
+aelqinc:
+        ldx #aelq-aelp
+        lda avt2
++       ora #0
+        bpl +
+        lda #4
++       clc
+        adc aelp,x
+        sta aelp,x
+        bcc +
+        inc aelp+1,x
+        bne +
+        inc aelp+2,x
++       rts
 
 elsize: lda vtype
         bpl +

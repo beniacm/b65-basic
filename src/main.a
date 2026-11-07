@@ -1507,6 +1507,10 @@ clear:  jsr gettop
         lda #>prog_start
         sta lomem+1
         sta free+1
+        lda #0                  ; far arrays (attic RAM) start again
+        sta arrtop
+        lda #$e0
+        sta arrtop+1
         ldx #DYNEND-DYNVAR-1
         lda #0
 -       sta DYNVAR,x

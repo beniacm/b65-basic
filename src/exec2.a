@@ -266,39 +266,61 @@ whenskip:
 swap:   jsr getvar
         bcs .bad
         bne .nos
-        lda vptr
+        jsr .addr               ; 32-bit address of the first -> stack
+        ldx #3
+-       lda ap,x
         pha
-        lda vptr+1
-        pha
+        dex
+        bpl -
         lda vtype
         pha
         jsr comma
         jsr getvar
         bcs .bad
         bne .nos
+        jsr .addr               ; second -> ap, first -> fptr
         pla
         cmp vtype
         bne .mis
-        pla
-        sta ptr1+1
-        pla
-        sta ptr1
+        ldx #0
+-       pla
+        sta fptr,x
+        inx
+        cpx #4
+        bne -
+        lda #4                  ; bytes to swap (strings: the descriptor)
         ldx vtype
-        lda elsize5,x           ; bytes to swap
-        bpl +
-        lda #4
+        bmi +
+        lda elsize5,x
 +       tax
-        ldy #0
--       lda (ptr1),y
+        ldz #0
+-       lda [fptr],z
         pha
-        lda (vptr),y
-        sta (ptr1),y
+        lda [ap],z
+        sta [fptr],z
         pla
-        sta (vptr),y
-        iny
+        sta [ap],z
+        inz
         dex
         bne -
+        ldz #0
         jmp xeq
+.addr   lda farflag             ; ap = address of the variable (far: farad)
+        beq +
+        ldx #3
+-       lda farad,x
+        sta ap,x
+        dex
+        bpl -
+        rts
++       lda vptr
+        sta ap
+        lda vptr+1
+        sta ap+1
+        lda #0
+        sta ap+2
+        sta ap+3
+        rts
 .bad    jmp syntax
 .nos    lda #26
         jmp error
@@ -501,15 +523,15 @@ arrref: lda tp
         jsr settph
         lda #1
         rts
-; ARRSIZE: ptr2 = block -> tmpw = number of elements, ptr3 = first element
+; ARRSIZE: ptr2 = block -> tmpw = number of elements, ap = first element (32-bit)
 arrsize:
         lda ptr2
         ora ptr2+1
         bne +
         lda #14                 ; Bad use of array
         jmp error
-+       ldy #0
-        lda (ptr2),y
++       jsr blkap
+        lda [ap],z
         sta tmp6                ; dims
         lda #1
         sta arg
@@ -518,11 +540,15 @@ arrsize:
         sta arg+2
         sta arg+3
         ldy #1
-.al     lda (ptr2),y
+.al     tya
+        taz
+        lda [ap],z
         sta $d774
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sta $d775
+        ldz #0
+        iny
         iny
         lda #0
         sta $d776
@@ -542,14 +568,15 @@ arrsize:
         sta tmpw
         lda arg+1
         sta tmpw+1
-        tya
+        tya                     ; ap = first element
         clc
-        adc ptr2
-        sta ptr3
-        lda ptr2+1
-        adc #0
-        sta ptr3+1
-        rts
+        adc ap
+        sta ap
+        bcc +
+        inc ap+1
+        bne +
+        inc ap+2
++       rts
 
 ; whole-array assignment: name() = ...   (tp at name; returns NZ if not an array ref)
 !zone arrlet
@@ -593,9 +620,11 @@ arrlet: jsr arrref
         jsr nxt
         jsr arrref              ; a() = b()  (copy)
         lbne .expr
+        lda vtype
+        sta avt2
         lda aop
         cmp #$ff
-        bne .expr2
+        lbne .expr2
         jsr nxt                 ; a() = b() OP ... : whole-array arithmetic
         cmp #'+'
         beq .ar
@@ -618,10 +647,7 @@ arrlet: jsr arrref
         lda #14
         jmp error
 +       jsr arrsize             ; source
-        lda ptr3
-        sta ptr1
-        lda ptr3+1
-        sta ptr1+1
+        jsr apaelq
         lda tmpw
         pha
         lda tmpw+1
@@ -637,19 +663,24 @@ arrlet: jsr arrref
         pla
         cmp tmpw
         bne .badsz2
-        jsr elbytes             ; tmpw = bytes
-        ldy #0
--       lda tmpw
-        ora tmpw+1
-        lbeq .done
-        lda (ptr1),y
-        sta (ptr3),y
-        inw ptr1
-        inw ptr3
+        jsr apael
         lda tmpw
+        sta acnt
+        lda tmpw+1
+        sta acnt+1
+-       lda acnt                ; element by element (strings are copied)
+        ora acnt+1
+        lbeq .done
+        jsr aelqset
+        jsr loadvar
+        jsr aelset
+        jsr storevar
+        jsr aelinc
+        jsr aelqinc
+        lda acnt
         bne +
-        dec tmpw+1
-+       dec tmpw
+        dec acnt+1
++       dec acnt
         bra -
 .badsz2 pla
 .badsz  lda #15                 ; Bad subscript (size mismatch)
@@ -661,10 +692,7 @@ arrlet: jsr arrref
         lda ablk+1
         sta ptr2+1
         jsr arrsize
-        lda ptr3
-        sta aelp
-        lda ptr3+1
-        sta aelp+1
+        jsr apael
         lda tmpw
         sta acnt
         lda tmpw+1
@@ -709,12 +737,7 @@ arrlet: jsr arrref
         ora acnt+1
         bne +
         rts
-+       lda aelp
-        sta vptr
-        lda aelp+1
-        sta vptr+1
-        lda avt
-        sta vtype
++       jsr aelset
         lda aop
         cmp #$ff
         beq .st
@@ -724,50 +747,14 @@ arrlet: jsr arrref
         jsr popacc
         ldx aop
         jsr binop
-        lda aelp
-        sta vptr
-        lda aelp+1
-        sta vptr+1
-        lda avt
-        sta vtype
+        jsr aelset
 .st     jsr storevar
-        lda avt                 ; next element
-        bpl +
-        lda #4
-+       clc
-        adc aelp
-        sta aelp
-        bcc +
-        inc aelp+1
-+       lda acnt
+        jsr aelinc              ; next element
+        lda acnt
         bne +
         dec acnt+1
 +       dec acnt
         rts
-; ELBYTES: tmpw = tmpw * element size (avt / vtype)
-elbytes:
-        lda vtype
-        bpl +
-        lda #4
-+       sta $d774
-        lda #0
-        sta $d775
-        sta $d776
-        sta $d777
-        sta $d772
-        sta $d773
-        lda tmpw
-        sta $d770
-        lda tmpw+1
-        sta $d771
--       bit $d70f
-        bvs -
-        lda $d778
-        sta tmpw
-        lda $d779
-        sta tmpw+1
-        rts
-
 ; SUM(a()) / SUMLEN(a$()) / DIM(a()[,n]) functions
 !zone arrfn
 f_sum:  lda [tp],z
@@ -787,10 +774,7 @@ f_sum:  lda [tp],z
         ora acnt+1
         beq .done
         jsr pushval
-        lda aelp
-        sta vptr
-        lda aelp+1
-        sta vptr+1
+        jsr aelset
         jsr loadn
         jsr movleft
         jsr popacc
@@ -809,10 +793,7 @@ f_sum:  lda [tp],z
         ora acnt+1
         beq .done
         jsr movleft
-        lda aelp
-        sta vptr
-        lda aelp+1
-        sta vptr+1
+        jsr aelset
         jsr loads
         jsr sconcat
         jsr .adv
@@ -829,12 +810,9 @@ f_sum:  lda [tp],z
 -       lda acnt
         ora acnt+1
         beq .done
-        lda aelp
-        sta ptr3
-        lda aelp+1
-        sta ptr3+1
+        jsr aelset              ; (string descriptor: byte 2 = length)
         ldy #2
-        lda (ptr3),y
+        lda (vptr),y
         clc
         adc acc
         sta acc
@@ -851,27 +829,17 @@ f_sum:  lda [tp],z
         beq +
         jmp syntax
 +       jsr braket
-        jsr arrsize
         lda vtype
         sta avt
-        lda ptr3
-        sta aelp
-        lda ptr3+1
-        sta aelp+1
+        jsr arrsize
+        jsr apael
         lda tmpw
         sta acnt
         lda tmpw+1
         sta acnt+1
         rts
-.adv    lda avt
-        bpl +
-        lda #4
-+       clc
-        adc aelp
-        sta aelp
-        bcc +
-        inc aelp+1
-+       lda acnt
+.adv    jsr aelinc
+        lda acnt
         bne +
         dec acnt+1
 +       dec acnt
@@ -896,8 +864,8 @@ f_dimfn:
         cmp #','
         beq .n
         jsr braket
-        ldy #0
-        lda (ptr2),y
+        jsr blkap
+        lda [ap],z
         ldx #0
         jmp setw
 .n      inw tp
@@ -911,22 +879,23 @@ f_dimfn:
         sta ptr2+1
         pla
         sta ptr2
+        jsr blkap
         lda acc                 ; 1-based dimension
         beq .bad
-        ldy #0
-        cmp (ptr2),y
+        cmp [ap],z
         beq +
         bcs .bad
 +       asl
-        tay
-        dey
-        lda (ptr2),y
+        taz
+        dez
+        lda [ap],z
         sec
         sbc #1
         tax
-        iny
-        lda (ptr2),y
+        inz
+        lda [ap],z
         sbc #0
+        ldz #0
         tay
         txa
         phy
@@ -942,6 +911,14 @@ f_addr: jsr getvar
 +       beq +
         lda #26
         jmp error
++       lda farflag             ; far element: its 28-bit address
+        beq +
+        ldx #3
+-       lda farad,x
+        sta acc,x
+        dex
+        bpl -
+        jmp setnum
 +       lda vptr
         ldx vptr+1
         jmp setw

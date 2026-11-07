@@ -1,0 +1,66 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 DIM A(60000),B(60000),C$(3),D$(3),M(1,2),N(2,1),R(1,1)
+>20 A(60000)=1.5:B(60000)=2:A(1)=3:B(1)=4
+>30 C$(0)="ab":C$(3)="cd":D$()=C$():C$(0)="zz":PRINT D$(0);D$(3);C$(0)
+>40 A()=A()+B():PRINT A(1),A(60000),A(2)
+>50 A()=A()*2:PRINT A(1),SUM(B())
+>60 M()=1,2,3,4,5,6:N()=7,8,9,10,11,12:R()=M().N():PRINT R(0,0),R(0,1),R(1,0),R(1,1)
+>70 PRINT SUMLEN(C$()),DIM(A()),DIM(M(),2)
+>80 PROCp(A()):PRINT A(5)
+>90 PROCr(A(7)):PRINT A(7)
+>100 PROCs(C$(1)):PRINT C$(1)
+>110 SWAP A(1),B(1):PRINT A(1),B(1):SWAP C$(0),C$(3):PRINT C$(0);C$(3)
+>120 X=^A(1):PRINT ~X
+>130 PROCl:PRINT END<&B000
+>135 PROCf
+>140 FOR I%=1 TO 5:A(I%)=I%*I%:NEXT:PRINT A(1)+A(5)
+>150 DIM E(65000),F(65000),G(65000),H(65000)
+>160 ON ERROR PRINT REPORT$:END
+>170 DIM I(65000)
+>175 DIM A(3)
+>180 END
+>200 DEF PROCp(z()):z(5)=55:ENDPROC
+>210 DEF PROCr(RETURN v):v=v+70:ENDPROC
+>220 DEF PROCs(RETURN s$):s$="ret"+s$:ENDPROC
+>240 DEF PROCf:ON ERROR LOCAL PRINT REPORT$:ENDPROC
+>250 FOR A(2)=1 TO 2:NEXT:ENDPROC
+>230 DEF PROCl:LOCAL L():DIM L(10):L(3)=9:PRINT L(3),^L(3)<&D000:ENDPROC
+>RUN
+abcdzz
+         7       3.5         0
+        14         6
+        58        64       139       154
+         4         1         2
+        55
+        70
+ret
+         4        14
+cdzz
+   8600008
+         9        -1
+        -1
+Bad FOR variable
+        26
+DIM space
+>RUN
+abcdzz
+         7       3.5         0
+        14         6
+        58        64       139       154
+         4         1         2
+        55
+        70
+ret
+         4        14
+cdzz
+   8600008
+         9        -1
+        -1
+Bad FOR variable
+        26
+DIM space
+>

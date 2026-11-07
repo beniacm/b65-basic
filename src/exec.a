@@ -519,11 +519,12 @@ storevar:
         lda vtype
         bmi +
         jsr storen
-        lda farflag
-        beq ++
+        bra ++
++       jsr stores
+++      lda farflag
+        beq +
         jmp farst
-+       jmp stores
-++      rts
++       rts
 
 ; current value -> left operand (arg/argx or STRBUF/tmp6), tmp5 = type
 movleft:
@@ -1145,9 +1146,11 @@ for:    jsr getvar
         jmp syntax
 +       beq +
         jsr putvar
-+       lda vtype
++       lda farflag             ; (far array elements cannot be FOR variables)
+        bne .bfv
+        lda vtype
         bpl +
-        lda #34                 ; Bad FOR variable
+.bfv    lda #34                 ; Bad FOR variable
         jmp error
 +       lda vptr
         pha
@@ -1538,12 +1541,19 @@ dim:    jsr getname
         dec cnt
         bne -
         sty tmp6                ; header size
+        lda arg+2               ; at most 65535 elements (16-bit index)
+        ora arg+3
+        lbne .bad
         lda dimvt
         sta vtype
         bpl +
         lda #4
 +       jsr mulsmall            ; bytes = elements * elsize
-        lda arg+2
+        bit dimloc
+        bmi +
+        lda hw_attic            ; global array: in attic RAM if there is some
+        lbne .far
++       lda arg+2
         ora arg+3
         lbne .bad
         ; FREE = block + header + bytes, zero fill
@@ -1635,13 +1645,89 @@ dim:    jsr getname
         bne +
         lda ptr1+1
         cmp free+1
-        beq .next
+        lbeq .next
 +       tya
         sta (ptr1),y
         inw ptr1
         bra -
 .bad    lda #10
         jmp error
+.far    ; block in attic RAM: pages = (header + bytes + 255) / 256
+        lda arg
+        clc
+        adc tmp6
+        tax
+        lda arg+1
+        adc #0
+        sta tmpw
+        lda arg+2
+        adc #0
+        sta tmpw+1
+        txa
+        beq +
+        inw tmpw
++       lda arrtop              ; handle = arrtop, arrtop += pages
+        ldy #0
+        sta (ptr2),y            ; (ptr2 = the array variable)
+        clc
+        adc tmpw
+        tax
+        lda arrtop+1
+        iny
+        sta (ptr2),y
+        adc tmpw+1
+        bcc +
+        lda #11                 ; DIM space
+        jmp error
++       pha
+        lda (ptr2),y            ; block value -> ptr2
+        pha
+        dey
+        lda (ptr2),y
+        sta ptr2
+        pla
+        sta ptr2+1
+        stx arrtop
+        pla
+        sta arrtop+1
+        jsr blkap
+        ldz #0                  ; header from the scratch copy at FREE
+-       cpz tmp6
+        beq +
+        tza
+        tay
+        lda (tmpw2),y
+        sta [ap],z
+        inz
+        bra -
++       ldz #0
+        lda ap                  ; zero the data: arg (3 bytes) from ap + header
+        clc
+        adc tmp6
+        sta ap
+        bcc .z
+        inc ap+1
+        bne .z
+        inc ap+2
+.z      lda arg
+        ora arg+1
+        ora arg+2
+        beq .next
+        lda #0
+        sta [ap],z
+        inc ap
+        bne +
+        inc ap+1
+        bne +
+        inc ap+2
++       lda arg
+        bne ++
+        lda arg+1
+        bne +
+        dec arg+2
++       dec arg+1
+++      dec arg
+        bra .z
 .next   jsr nxt
         cmp #','
         bne +
@@ -1910,6 +1996,13 @@ callset:
         jsr putvar
 +       pla
         sta retmask
+        lda farflag             ; (far array element: farad must be kept)
+        sta rfar
+        ldx #3
+-       lda farad,x
+        sta rfad,x
+        dex
+        bpl -
         lda vptr
         sta rtmp2
         lda vptr+1
@@ -1922,7 +2015,15 @@ callset:
         pla
         sta cnt
         jsr pushval_keep
-        lda rtmp2               ; then the variable's address (3 bytes)
+        ldx #3                  ; then the variable's far address (0: near)
+-       lda rfad,x
+        bit rfar
+        bmi +
+        lda #0
++       pha
+        dex
+        bpl -
+        lda rtmp2               ; and its address (3 bytes)
         pha
         lda rtmp2+1
         pha
@@ -1974,6 +2075,12 @@ callset:
         pla
         iny
         sta (ptr2),y
+        ldx #4                  ; slot+259..262: far address
+-       pla
+        iny
+        sta (ptr2),y
+        dex
+        bne -
         dec ptr2+1
 +       jsr popval              ; -> arg/argx or STRBUF/tmp6 ; tmp5 = type
         ldy #0
@@ -2085,7 +2192,7 @@ callset:
         bne +
         lda etype               ; array reference -> pointer field
         cmp #$40
-        bne .badarg2
+        lbne .badarg2
         lda #0
         sta etype
 +       jsr storevar
@@ -2093,7 +2200,7 @@ callset:
         lda bitmask6,x
         and retmask
         beq .nr
-        lda #7
+        lda #11
         jsr alloc
         lda vtype
         ldy #4
@@ -2123,6 +2230,18 @@ callset:
         lda (ptr2),y
         ldy #5
         sta (spz),y
+        ldx #4                  ; far address of the actual (slot+259..262)
+-       ldy rfidx,x
+        lda (ptr2),y
+        pha
+        txa
+        clc
+        adc #7
+        tay
+        pla
+        sta (spz),y             ; frame +8..+11
+        dex
+        bne -
         ldy #1
         lda #TRETURN
         sta (spz),y
@@ -2145,6 +2264,7 @@ callset:
         jmp error
 
 bitmask6: !byte 1,2,4,8,16,32
+rfidx:  !byte 0,3,4,5,6         ; (x=1..4: slot+259..262 -> frame +8..+11)
 ; RETSCAN: ptr1 -> DEF text after the name; retmask bit n = formal n is RETURN
 !zone retscan
 retscan:
@@ -2319,21 +2439,43 @@ unwind: pla
         sta vtype
         lda #0
         sta farflag
-        jsr storevar
+        ldy #8                  ; far actual (array element in attic RAM)?
+        lda (spz),y
+        ldy #11
+        ora (spz),y
+        beq +
+        ldx #0
+        ldy #8
+-       lda (spz),y
+        sta farad,x
+        iny
+        inx
+        cpx #4
+        bne -
+        lda #$ff
+        sta farflag
+        lda #<FARBUF
+        sta vptr
+        lda #>FARBUF
+        sta vptr+1
+        jsr pushval             ; (farld must not lose the value)
+        jsr farld
+        jsr popacc
++       jsr storevar
         pla
         sta tmpw2+1
         pla
         sta tmpw2
-        tsx                     ; drop the 7-byte frame
+        tsx                     ; drop the 11-byte frame
         txa
         clc
-        adc #7
+        adc #11
         tax
         tsy
         bcc +
         iny
 +       +setsp
-        bra .l
+        lbra .l
 .nret   cmp #TDIM               ; DIM LOCAL block: just drop it
         bne .nloc
         ldy #2

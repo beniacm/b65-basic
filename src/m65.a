@@ -491,10 +491,14 @@ farad   = MISC+108      ; 4 bytes
 farflag = MISC+112
 !zone far
 farsz:  lda vtype
+        cmp #$81                ; string variable: 4-byte descriptor
+        beq .s4
         and #$7f
         bne +
         lda #1
 +       rts
+.s4     lda #4
+        rts
 farptr: ldx #3
 -       lda farad,x
         sta fptr,x
