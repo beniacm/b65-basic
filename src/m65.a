@@ -25,6 +25,7 @@ TAFTER  = $12
 TTLEFT  = $13
 TDI     = $14
 TEI     = $15
+TSPRITE = $16
 TEVT    = $11           ; marker of an event GOSUB frame
 
 ; ---------------- hardware detection ----------------
@@ -230,12 +231,114 @@ irqhandler:
         bpl .t
         jsr sndirq
         jsr kbscan
+        jsr mousirq
         plz
         ply
         plx
         pla
         rti
 bitmask: !byte 1,2,4,8
+
+; ---------------- 1351 mouse on port 1 (proportional pots $D620/$D621) ----------------
+mouse_x = $1fa4         ; 2 pixels 0..319
+mouse_y = $1fa6         ; 2 pixels 0..199
+mouse_ox = $1fa8        ; last pot X
+mouse_oy = $1fa9        ; last pot Y
+mouse_on = $1faa        ; $80: sprite 0 follows the mouse
+!zone mouse
+mousirq:
+        lda $d620
+        ldy mouse_ox
+        jsr .mv
+        sta mouse_ox
+        txa                     ; x += d
+        clc
+        adc mouse_x
+        sta mouse_x
+        tya
+        adc mouse_x+1
+        sta mouse_x+1
+        lda $d621
+        ldy mouse_oy
+        jsr .mv
+        sta mouse_oy
+        txa                     ; y -= d (pot Y grows upwards)
+        eor #$ff
+        sec
+        adc mouse_y
+        sta mouse_y
+        tya
+        eor #$ff
+        adc mouse_y+1
+        sta mouse_y+1
+        ; clamp
+        ldx #0
+        jsr .cl
+        ldx #2
+        jsr .cl
+        bit mouse_on
+        bpl .x
+        lda mouse_x
+        clc
+        adc #24
+        sta $d000
+        lda mouse_x+1
+        adc #0
+        lsr
+        lda $d010
+        and #$fe
+        adc #0
+        sta $d010
+        lda mouse_y
+        clc
+        adc #50
+        sta $d001
+.x      rts
+.mv     ; A = new pot, Y = old -> X/Y = signed delta, A = new pot (C64 1351 driver)
+        pha
+        sty mouse_tmp
+        sec
+        sbc mouse_tmp
+        and #$7f
+        cmp #$40
+        bcs .neg
+        lsr
+        tax
+        ldy #0
+        pla
+        rts
+.neg    ora #$c0
+        cmp #$ff
+        bne +
+        lda #0
+        tax
+        tay
+        pla
+        rts
++       sec
+        ror
+        tax
+        ldy #$ff
+        pla
+        rts
+.cl     lda mouse_x+1,x         ; < 0 -> 0
+        bpl +
+        lda #0
+        sta mouse_x,x
+        sta mouse_x+1,x
+        rts
++       lda mouse_x,x
+        cmp .mx,x
+        lda mouse_x+1,x
+        sbc .mx+1,x
+        bcc +
+        lda .mx,x
+        sta mouse_x,x
+        lda .mx+1,x
+        sta mouse_x+1,x
++       rts
+.mx     !word 319, 199
+mouse_tmp = $1fab
 
 ; ---------------- EVERY / AFTER / TIMELEFT / DI / EI ----------------
 ; AFTER t[,n] GOSUB line   EVERY t[,n] GOSUB line   (t in 1/50 s, n = 0..3)
@@ -422,12 +525,13 @@ farst:  jsr farptr
         ldz #0
         rts
 
-; extension keywords (tokens $11-$1F are free in program text; $11-$1B are
+; extension keywords, in alphabetical order (tokens $11-$1F are free in program text; $11-$1B are
 ; only used as message fragments inside error texts)
 EXTWDS: !byte TAFTER : !text "AFTER"
         !byte TDI    : !text "DI "
         !byte TEI    : !text "EI "
         !byte TEVERY : !text "EVERY"
+        !byte TSPRITE : !text "SPRITE"
         !byte TTLEFT : !text "TIMELEFT("
         !byte $ff,$ff
 EXTWDL = * - EXTWDS

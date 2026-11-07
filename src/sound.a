@@ -41,8 +41,16 @@ sndinit:
         ldx #0                  ; no pitch envelopes
 -       sta PENV,x
         inx
-        cpx #$a4
+        cpx #$ac
         bne -
+        lda #160                ; mouse in the middle of the screen
+        sta mouse_x
+        lda #100
+        sta mouse_y
+        lda $d620
+        sta mouse_ox
+        lda $d621
+        sta mouse_oy
         lda #$0f
         sta $d418               ; master volume
         sta $d438

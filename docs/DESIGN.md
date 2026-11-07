@@ -310,7 +310,8 @@ Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
     what is left and stops the timer), `DI`/`EI`.
   * Events are dispatched between statements, higher timer number first. A
     handler ends with RETURN.
-  * The new keywords use tokens `$11`-`$15`. In program text these values
+  * The new keywords use tokens `$11`-`$16` (SPRITE is `$16`). EXTWDS must
+    stay in alphabetical order (the lexer stops early). In program text these values
     are free; upstream uses `$11`-`$1B` only as message fragments in error
     texts. LIST expands them through a second keyword table.
   * All 16-bit stack pointer updates are protected against interrupts
@@ -320,8 +321,12 @@ Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
   * Each channel has an 8-note queue that the interrupt plays; SOUND waits
     when a queue is full. `SOUND &1x,...` flushes the queue.
   * `ADVAL(-5..-8)` gives the free queue space.
-  * ENVELOPE becomes a SID ADSR (attack/decay/release rates and sustain
-    level). Pitch envelopes are not supported.
+  * ENVELOPE: the amplitude part becomes a SID ADSR (attack/decay/release
+    rates and sustain level). The pitch part (t, pi1-3, pn1-3) is played
+    by the interrupt: every t cs (2 cs per frame, several steps per frame
+    when t = 1) the pitch changes by pi_k, pn_k times per section; the three
+    sections repeat unless t has bit 7 set. The queue entry keeps the BBC
+    pitch and the envelope number; the IRQ computes the SID frequency.
 * **Graphics** (overlay 1, `src/gfx.a`):
   * `MODE 1` is 320x200 in 256 colours. It uses VIC-IV full-colour
     characters: 1000 cells of 64 bytes in chip RAM at `$50000`, with 16-bit
@@ -335,7 +340,22 @@ Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
   * Coordinates are pixels, origin top left.
   * Text output works in graphics mode (40x25, own font). CLG and scrolling
     use the DMA controller (F018B job lists).
-  * FILL (flood fill), ELLIPSE, sprites and MOUSE are not implemented.
+  * `ELLIPSE [FILL] x,y,a,b`: half width per row = round(sqrt(a²(b²-dy²))/b)
+    with the math unit and an integer square root; the outline joins each
+    row to the next, so it has no gaps. a, b are clamped to 4095.
+  * `FILL x,y`: scan-line flood fill (4-connected) of the area that has the
+    colour of the seed pixel, with the GCOL colour. The seed stack is in
+    bank 4 at `$48000` (about 10,000 seeds; more are dropped).
+  * `SPRITE n,x,y[,c]`, `SPRITE n OFF`, `SPRITE OFF` (new keyword, token
+    `$16`): pixel coordinates like the graphics (VIC x+24, y+50, ORIGIN not
+    applied), 16-bit sprite pointers at `$5FA00` (re-set on every SPRITE,
+    because a MODE change resets them), images at `&5FC00+n*64` (24x21
+    hi-res, default an arrow), write them with `?`.
+  * `MOUSE x,y,b` (BB4W style: b = 4 left, 1 right), `MOUSE TO x,y`,
+    `MOUSE ON`/`MOUSE OFF` (sprite 0 follows the mouse). A 1351 mouse in
+    port 1 is read every frame through `$D620`/`$D621` (the C64 1351
+    driver's delta rule); buttons from `$DC01` (fire = left, up = right).
+    Position clamped to 0..319, 0..199; MOUSE x,y subtracts ORIGIN.
 * **Far memory.** `?addr`, `!addr` and `|addr` with 28-bit addresses
   (>= `&10000`) use 32-bit flat addressing, so they reach all chip RAM and
   attic RAM (`&8000000`-). `$addr` strings are limited to bank 0.

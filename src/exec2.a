@@ -1019,6 +1019,12 @@ gs_rect:   jsr ovjmp
 gs_ellipse: jsr ovjmp
            !byte 1
            !word gx_ellipse
+gs_sprite: jsr ovjmp
+           !byte 1
+           !word gx_sprite
+gs_mouse:  jsr ovjmp
+           !byte 1
+           !word gx_mouse
 gs_fill:   jsr ovjmp
            !byte 1
            !word gx_fill

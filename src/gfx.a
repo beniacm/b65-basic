@@ -1434,6 +1434,268 @@ gx_fill:
         sta gy0+1
         rts
 
+
+; ---------------- sprites ----------------
+; SPRITE n,x,y[,c]  show sprite n (0-7) at pixel x,y (top left, 320x200)
+; SPRITE n OFF      SPRITE OFF (all)
+; Sprite n's 24x21 image (3 bytes per row) is at &5FC00 + n*64 (default: an
+; arrow); 16-bit sprite pointers at &5FA00.
+SPRDATA = $05fc00
+SPRPTRS = $05fa00
+!zone gx_sprite
+gx_sprite:
+        jsr sprinit
+        jsr nxt
+        cmp #TOFF
+        bne +
+        inw tp
+        lda #0
+        sta $d015
+        sta mouse_on
+        jmp xeq
++       jsr expri
+        lda acc
+        and #7
+        pha
+        jsr nxt
+        cmp #TOFF
+        bne +
+        inw tp
+        plx
+        lda sprbit,x
+        trb $d015
+        jmp xeq
++       jsr comma
+        lda #2
+        jsr getargs
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr expri
+        pla
+        pha
+        tax
+        lda acc
+        sta $d027,x
++       pla
+        tax
+        jsr sprpos
+        lda sprbit,x
+        tsb $d015
+        jmp xeq
+; SPRPOS: X = sprite, GARG = x, y
+sprpos: txa
+        asl
+        tay
+        lda GARG
+        clc
+        adc #24
+        sta $d000,y
+        lda GARG+1
+        adc #0
+        lsr
+        lda sprbit,x
+        bcc +
+        tsb $d010
+        bra ++
++       trb $d010
+++      lda GARG+2
+        clc
+        adc #50
+        sta $d001,y
+        rts
+sprbit: !byte 1,2,4,8,16,32,64,128
+; SPRINIT: pointer list and default images (first use only)
+sprinit:
+        lda #<SPRPTRS           ; 16-bit pointers at SPRPTRS (every time: a
+        sta $d06c               ; VIC geometry recompute (MODE) resets them)
+        lda #>SPRPTRS
+        sta $d06d
+        lda #^SPRPTRS | $80
+        sta $d06e
+        bit sprok
+        bmi .x
+        lda #$ff
+        sta sprok
+        lda #<SPRPTRS
+        sta fptr
+        lda #>SPRPTRS
+        sta fptr+1
+        lda #^SPRPTRS
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldx #0
+-       txa
+        clc
+        adc #<(SPRDATA/64)
+        sta [fptr],z
+        inz
+        lda #>(SPRDATA/64)
+        sta [fptr],z
+        inz
+        inx
+        cpx #8
+        bne -
+        ldz #0
+        lda #<SPRDATA           ; 8 arrows
+        sta fptr
+        lda #>SPRDATA
+        sta fptr+1
+        ldx #8
+--      ldy #0
+-       lda sprarrow,y
+        sta [fptr],z
+        inz
+        iny
+        cpy #64
+        bne -
+        ldz #0
+        lda fptr
+        clc
+        adc #64
+        sta fptr
+        bcc +
+        inc fptr+1
++       dex
+        bne --
+        lda #0
+        sta $d017               ; no expansion, hi-res, in front
+        sta $d01d
+        sta $d01c
+        sta $d01b
+        lda #1                  ; white
+        ldx #7
+-       sta $d027,x
+        dex
+        bpl -
+.x      rts
+sprok:  !byte 0                 ; (in the overlay image: reset at start-up)
+sprarrow:
+        !byte %10000000,0,0
+        !byte %11000000,0,0
+        !byte %11100000,0,0
+        !byte %11110000,0,0
+        !byte %11111000,0,0
+        !byte %11111100,0,0
+        !byte %11111110,0,0
+        !byte %11111111,0,0
+        !byte %11111000,0,0
+        !byte %11011000,0,0
+        !byte %10001100,0,0
+        !byte %00001100,0,0
+        !byte %00000110,0,0
+        !byte %00000110,0,0
+        !fill 64-14*3, 0
+
+; ---------------- MOUSE ----------------
+; MOUSE x,y,b   read position (pixels, minus ORIGIN) and buttons (4 left,
+;               1 right) of a 1351-compatible mouse in port 1
+; MOUSE ON / MOUSE OFF   arrow pointer (sprite 0) follows the mouse
+; MOUSE TO x,y  set the position
+!zone gx_mouse
+gx_mouse:
+        jsr nxt
+        cmp #TON
+        bne +
+        inw tp
+        jsr sprinit
+        sei
+        lda #$80
+        sta mouse_on
+        cli
+        lda #1
+        tsb $d015
+        jmp xeq
++       cmp #TOFF
+        bne +
+        inw tp
+        lda #0
+        sta mouse_on
+        lda #1
+        trb $d015
+        jmp xeq
++       cmp #TTO
+        bne .rd
+        inw tp
+        lda #2
+        jsr getargs
+        sei
+        ldx #3
+-       lda GARG,x
+        sta mouse_x,x
+        dex
+        bpl -
+        cli
+        jmp xeq
+.rd     sei
+        ldx #3
+-       lda mouse_x,x
+        sta GARG,x
+        dex
+        bpl -
+        cli
+        lda GARG                ; - ORIGIN
+        sec
+        sbc gorgx
+        sta GARG
+        lda GARG+1
+        sbc gorgx+1
+        sta GARG+1
+        lda GARG+2
+        sec
+        sbc gorgy
+        sta GARG+2
+        lda GARG+3
+        sbc gorgy+1
+        sta GARG+3
+        lda #$ff                ; buttons: fire = left, up = right (active low)
+        sta $dc00
+        lda $dc01
+        eor #$ff
+        tax
+        lda #0
+        sta GARG+4
+        sta GARG+5
+        txa
+        and #$10
+        beq +
+        lda #4
+        sta GARG+4
++       txa
+        and #1
+        tsb GARG+4
+        ldx #0
+        jsr .var
+        jsr comma
+        ldx #2
+        jsr .var
+        jsr comma
+        ldx #4
+        jsr .var
+        jmp xeq
+.var    phx                     ; variable <- GARG[x] (16-bit signed)
+        jsr getvar
+        bcc +
+        jmp syntax
++       beq +
+        jsr putvar
++       plx
+        lda GARG,x
+        sta acc
+        lda GARG+1,x
+        sta acc+1
+        and #$80
+        beq +
+        lda #$ff
++       sta acc+2
+        sta acc+3
+        lda #0
+        sta accx
+        sta etype
+        jmp storevar
+
 ; ---------------- text output in graphics mode ----------------
 ; GX_GLYPH: A = character, drawn at ccol/crow (40x25) in gtfg on gbg
 !zone gx_glyph
@@ -1447,6 +1709,10 @@ gx_glyph:
         bcs +
         lda #0
 +       sta gtmp+1              ; glyph index
+        lda ptr3                ; (callers print text through ptr3)
+        pha
+        lda ptr3+1
+        pha
         lda #0
         sta ptr3+1
         lda gtmp+1
@@ -1508,7 +1774,11 @@ gx_glyph:
         cpy #8
         lbne .row
         ldz #0
-.x      rts
+.x      pla
+        sta ptr3+1
+        pla
+        sta ptr3
+        rts
 
 ; GX_SCROLL: move the bitmap up one text row (DMA), clear the last row
 !zone gx_scroll
