@@ -88,6 +88,10 @@ cold_test:
 -       sta $00,x
         inx
         bne -
+        ldx #$4f                ; and the variables at $1FB0 (moved out of ZP)
+-       sta $1fb0,x
+        dex
+        bpl -
         jsr hw_init
         jsr ovinit
         jsr test_init
@@ -1046,7 +1050,7 @@ lex0:   ldy #0
         lda (ptr1),y            ; token
         sta tmp0
         iny
-        lda (tp),z
+        lda [tp],z
         cmp (ptr1),y
         beq .l2
         bcc .fail               ; table is sorted by first letter
@@ -1059,7 +1063,7 @@ lex0:   ldy #0
         cmp #$80
         bcc .l1
         bra .l0
-.fail   lda (tp),z
+.fail   lda [tp],z
         cmp #$ff                ; NZ (text never holds $ff here)
         rts
 .l2     ; first char matched; y -> keyword char 1st. compare rest
@@ -1072,12 +1076,12 @@ lex0:   ldy #0
         cmp #$80
         bcs .found
         inz
-        lda (tp),z
+        lda [tp],z
         cmp (ptr1),y
         bne .l7
         cmp #$20                ; matched space marker: delimiter check below
         bne .l3
-.l7     lda (tp),z
+.l7     lda [tp],z
         cmp #'.'
         beq .found
         jsr range1
@@ -1103,7 +1107,7 @@ lex0:   ldy #0
         rts
 
 ; RANGE: is (tp) valid in a variable name? carry set if not.
-range:  lda (tp),z
+range:  lda [tp],z
 range0: cmp #'$'
         bcc .rx
         cmp #'&'+1
@@ -1148,7 +1152,7 @@ lexan2: lda ptr2
         bcc +
         lda #19
         jmp error
-+       lda (tp),z
++       lda [tp],z
         cmp #CR
         bne +
         rts
@@ -1156,7 +1160,7 @@ lexan2: lda ptr2
         bcc +
         lda #$28                ; reset bits 5,3
         trb lexmode
-+       lda (tp),z
++       lda [tp],z
         cmp #' '
         beq lexan1
         cmp #','
@@ -1201,7 +1205,7 @@ lexan2: lda ptr2
         bra .l8
 .left   lda #0
         sta lexmode
-        lda (tp),z
+        lda [tp],z
         cmp #'*'
         beq .l9
         cmp #$80
@@ -1290,13 +1294,13 @@ encode: lda #$10
 ; DECODE: tp -> byte after TLINO; lnum = line number; tp += 3
 decode0:
         ldy #0
-        lda (tp),y
+        lda [tp],z
         asl
         asl
         eor #$54<<2 & $ff
         sta tmp0                ; bits: b7,b6 = lo bits 7,6 ; b5,b4 = hi bits 7,6
         iny
-        lda (tp),y
+        +ldtpy
         and #$3f
         sta lnum
         lda tmp0
@@ -1304,7 +1308,7 @@ decode0:
         ora lnum
         sta lnum
         iny
-        lda (tp),y
+        +ldtpy
         and #$3f
         sta lnum+1
         lda tmp0
@@ -1327,7 +1331,7 @@ linnum: jsr nxt
         lda #0
         sta lnum
         sta lnum+1
-.l1     lda (tp),z
+.l1     lda [tp],z
         sec
         sbc #'0'
         bcc .x
@@ -1649,7 +1653,7 @@ p10lo:  !byte <1, <10, <100, <1000, <10000
 p10hi:  !byte >1, >10, >100, >1000, >10000
 
 ; NXT: skip spaces, A = (tp)
-nxt:    lda (tp),z
+nxt:    lda [tp],z
         cmp #' '
         bne +
         inw tp

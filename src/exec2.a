@@ -479,7 +479,7 @@ arrref: lda tp
         bcs .no
         jsr isarray
         bne .no
-        lda (tp),z
+        lda [tp],z
         cmp #')'
         bne .no
         inw tp
@@ -584,7 +584,7 @@ arrlet: jsr arrref
         beq .cmp
         jmp mistake
 .cmp    inw tp
-        lda (tp),z
+        lda [tp],z
         cmp #'='
         beq .eq
         jmp mistake
@@ -770,7 +770,7 @@ elbytes:
 
 ; SUM(a()) / SUMLEN(a$()) / DIM(a()[,n]) functions
 !zone arrfn
-f_sum:  lda (tp),z
+f_sum:  lda [tp],z
         cmp #TLEN
         beq .sumlen
         jsr .open

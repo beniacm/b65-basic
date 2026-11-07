@@ -174,7 +174,7 @@ xeq1:   jsr nxt
 ; NEWLIN: handle line header at tp
 !zone newlin
 newlin: ldy #0
-        lda (tp),y
+        lda [tp],z
         bne +
         ; end of program (or of immediate line)
         lda tp
@@ -185,10 +185,10 @@ newlin: ldy #0
         jmp clopp
 +++     jmp warm
 +       ldy #1
-        lda (tp),y
+        +ldtpy
         sta lnum
         iny
-        lda (tp),y
+        +ldtpy
         sta lnum+1
         lda tp
         clc
@@ -242,7 +242,7 @@ mistake:
 
 ; ---- simple statements ----
 rem:    ldy #0
--       lda (tp),y
+-       +ldtpy
         cmp #CR
         beq +
         iny
@@ -441,7 +441,7 @@ let:    jsr arrlet              ; whole-array assignment?
         beq .cmpd
         jmp mistake
 .cmpd   ldy #1
-        lda (tp),y
+        +ldtpy
         cmp #'='
         beq +
         jmp mistake
@@ -888,7 +888,7 @@ endwhile:
 ; A = CR when a new line was entered (tp after its header),
 ; carry set at end of program.
 !zone scan
-scan:   lda (tp),z
+scan:   lda [tp],z
         cmp #CR
         beq .cr
         inw tp
@@ -907,7 +907,7 @@ scan:   lda (tp),z
         lda #0
 .tok    clc
         rts
-.q      lda (tp),z
+.q      lda [tp],z
         cmp #CR
         beq .z
         inw tp
@@ -916,7 +916,7 @@ scan:   lda (tp),z
 .z      lda #0
         clc
         rts
-.rem    lda (tp),z
+.rem    lda [tp],z
         cmp #CR
         beq .z
         inw tp
@@ -935,7 +935,7 @@ scan:   lda (tp),z
         sbc page+1
         bcc .end
         ldy #0
-        lda (tp),y
+        lda [tp],z
         beq .end
         lda tp
         clc
@@ -1241,7 +1241,7 @@ next:   jsr getsp
         jmp error
 +       jsr termq
         beq .go
-        lda (tp),z
+        lda [tp],z
         cmp #','
         beq .go
         jsr getvar              ; NEXT var: must match frame
@@ -1649,7 +1649,7 @@ dim:    jsr getname
 !zone procname
 procname:
         ldx #0
--       lda (tp),z
+-       lda [tp],z
         jsr range1
         bcs +
         sta NBUF,x
@@ -1867,7 +1867,7 @@ callset:
         pha
         lda #0
         sta cnt
-        lda (tp),z
+        lda [tp],z
         cmp #'('
         lbne .noargs
         inw tp
@@ -2895,13 +2895,13 @@ read:   jsr nxt
         bmi .str0
         jsr signednum
         bra .end
-.str0   lda (tp),z
+.str0   lda [tp],z
         cmp #'"'
         bne .raw
         jsr strlit
         bra .end
 .raw    ldx #0
--       lda (tp),z
+-       lda [tp],z
         cmp #','
         beq +
         cmp #CR

@@ -222,7 +222,7 @@ chain:  jsr fname
 ; ---- *commands: *CAT (*.), *DELETE name, *DIR (cd root) ----
 !zone star
 star:   ldy #0
-        lda (tp),y
+        lda [tp],z
         cmp #'.'
         beq .cat
         jsr .word
@@ -233,11 +233,11 @@ star:   ldy #0
         bne .bad
         jmp .del
 .bad    jmp rem                 ; unknown * command: ignored
-.word   lda (tp),y              ; first letter (upper case), skip the word
+.word   +ldtpy              ; first letter (upper case), skip the word
         and #$df
         pha
 -       inw tp
-        lda (tp),y
+        +ldtpy
         cmp #' '
         beq +
         cmp #CR
@@ -315,7 +315,7 @@ star:   ldy #0
         jmp rem
 .del    jsr nxt                 ; *DELETE name (rest of line)
         ldx #0
--       lda (tp),z
+-       lda [tp],z
         cmp #CR
         beq +
         sta ACCS,x

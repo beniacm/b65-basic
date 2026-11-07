@@ -137,7 +137,7 @@ assem:  lda #3                  ; default OPT 3
 
 ; skip to ':' / CR / ']'
 skipstmt:
-        lda (tp),z
+        lda [tp],z
         cmp #':'
         beq +
         cmp #CR
@@ -155,7 +155,7 @@ getmn:  ldx #0
         cpx #4
         bne -
         ldx #0
-.l      lda (tp),z
+.l      lda [tp],z
         cmp #TAND
         bne +
         ldy #0
@@ -364,7 +364,7 @@ operand:
         rts
 .sp     cmp #'S'
         bne .syn
-        lda (tp),z
+        lda [tp],z
         and #$df
         cmp #'P'
         bne .syn
@@ -405,7 +405,7 @@ operand:
         cmp #'A'
         bne .dx
         ldy #1
-        lda (tp),y
+        +ldtpy
         jsr .term
         bne .dx
         inw tp
@@ -422,7 +422,7 @@ operand:
         ldy #1
         cmp #'X'
         bne .dy
-        lda (tp),y
+        +ldtpy
         jsr .term2
         bne .two
         inw tp
@@ -431,7 +431,7 @@ operand:
         rts
 .dy     cmp #'Y'
         bne .two
-        lda (tp),y
+        +ldtpy
         jsr .term2
         bne .two
         inw tp

@@ -176,7 +176,7 @@ popval: pla
 ; ---- GETOP: recognise binary operator at tp ----
 !zone getop
 getop:  ldy #0
-        lda (tp),y
+        lda [tp],z
         cmp #TOR
         bne +
         ldx #OP_OR
@@ -200,7 +200,7 @@ getop:  ldy #0
         bne +
         ldx #OP_SUB
 .p4     lda #4
-        bra .l1
+        lbra .l1
 +       cmp #'*'
         bne +
         ldx #OP_MUL
@@ -227,14 +227,14 @@ getop:  ldy #0
         bne +
         ldx #OP_EQ
         iny
-        lda (tp),y
+        +ldtpy
         cmp #'='                ; '==' synonym
         beq .p3b
         bra .p3
 +       cmp #'<'
         bne .gt
         iny
-        lda (tp),y
+        +ldtpy
         ldx #OP_LE
         cmp #'='
         beq .p3b
@@ -249,14 +249,14 @@ getop:  ldy #0
 .gt     cmp #'>'
         bne .none
         iny
-        lda (tp),y
+        +ldtpy
         ldx #OP_GE
         cmp #'='
         beq .p3b
         cmp #'>'
         bne .gt1
         iny
-        lda (tp),y
+        +ldtpy
         ldx #OP_LSR
         cmp #'>'
         beq .p3b
@@ -843,7 +843,7 @@ hexnum: inw tp
         sta accx
         sta etype
         sta tmp1                ; digit count
-.l      lda (tp),z
+.l      lda [tp],z
         cmp #'a'
         bcc +
         sbc #$20
@@ -887,7 +887,7 @@ binnum: inw tp
         sta accx
         sta etype
         sta tmp1
-.l      lda (tp),z
+.l      lda [tp],z
         sec
         sbc #'0'
         bcc .x
@@ -910,13 +910,13 @@ binnum: inw tp
 !zone strlit
 strlit: inw tp
         ldx #0
-.l      lda (tp),z
+.l      lda [tp],z
         cmp #CR
         beq .miss
         inw tp
         cmp #'"'
         bne .c
-        lda (tp),z
+        lda [tp],z
         cmp #'"'
         bne .end
         inw tp

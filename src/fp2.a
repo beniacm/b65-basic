@@ -140,7 +140,7 @@ con:    jsr fzero
 +       stx fb_
 ++      lda #0
         sta fa_                 ; exponent
-        lda (tp),z
+        lda [tp],z
         cmp #'E'
         bne +
         jsr .getexp
@@ -191,7 +191,7 @@ con:    jsr fzero
         sta fa_
         bra .con2
 ; NUMBER: digits -> acc (unsigned), counting fb_ (digits) and fc_ (truncated)
-.number lda (tp),z
+.number lda [tp],z
         cmp #'0'
         bcc .nx
         cmp #'9'+1
@@ -240,7 +240,7 @@ con:    jsr fzero
         inw tp
         lda #0
         sta fg_                 ; sign
--       lda (tp),z              ; SIGNQ
+-       lda [tp],z              ; SIGNQ
         cmp #' '
         bne +
         inw tp
@@ -251,7 +251,7 @@ con:    jsr fzero
         bne .gx1
         sta fg_
 .sg     inw tp
-.gx1    lda (tp),z
+.gx1    lda [tp],z
         cmp #'0'
         bcc .gx2
         cmp #'9'+1
@@ -263,7 +263,7 @@ con:    jsr fzero
         adc fe_
         asl
         sta fe_
-        lda (tp),z
+        lda [tp],z
         inw tp
         and #$0f
         clc

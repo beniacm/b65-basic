@@ -10,7 +10,7 @@
 ; carry set if (tp) cannot start a variable name (tp unchanged)
 !zone getname
 getname:
-        lda (tp),z
+        lda [tp],z
         cmp #'@'
         beq .ok1
         cmp #'A'
@@ -24,7 +24,7 @@ getname:
 .ok1    sta nfirst
         inw tp
         ldx #0
-.l      lda (tp),z
+.l      lda [tp],z
         jsr range0
         bcs .end
         sta NBUF,x
@@ -36,7 +36,7 @@ getname:
         bcc .l                  ; alphanumeric: continue
         cmp #'('
         beq .end
-        lda (tp),z                ; $ % & : only '(' may follow
+        lda [tp],z                ; $ % & : only '(' may follow
         cmp #'('
         beq .l
 .end    stx nlen
@@ -250,7 +250,7 @@ check:  tsx
 !zone getvar
 getvar: lda #0
         sta farflag
-        lda (tp),z
+        lda [tp],z
         cmp #'!'
         beq .ind4
         cmp #'?'
@@ -312,7 +312,7 @@ getvar: lda #0
         rts
 .post   ; binary indirection: var?n  var!n
 getvpost:
-        lda (tp),z
+        lda [tp],z
         cmp #'?'
         beq +
         cmp #'!'
@@ -324,7 +324,7 @@ getvpost:
         bmi .ok                 ; string: not applicable
         jsr loadn
         jsr sfix
-        lda (tp),z
+        lda [tp],z
         ldx #0
         cmp #'?'
         beq +

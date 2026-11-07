@@ -134,7 +134,7 @@ f_sgn:  jsr item
 
 ; RND: 32-bit xorshift
 !zone rnd
-f_rnd:  lda (tp),z
+f_rnd:  lda [tp],z
         cmp #'('
         beq .arg
         jsr rndstep
@@ -284,7 +284,7 @@ f_chrs: jsr itemi
         sta slen
         jmp setstr
 
-f_strs: lda (tp),z
+f_strs: lda [tp],z
         cmp #'~'
         bne +
         inw tp
@@ -588,7 +588,7 @@ strbuf2accs:
 f_get:  jsr osrdch
         ldx #0
         jmp setw
-f_gets: lda (tp),z
+f_gets: lda [tp],z
         cmp #'#'
         bne +
         jmp f_getsch
@@ -687,7 +687,7 @@ bcd2bin:
         bra -
 +       rts
 f_reports:
-        lda (tp),z
+        lda [tp],z
         cmp #'$'
         beq +
         jmp syntax
@@ -712,7 +712,7 @@ f_himem:
         lda himem
         ldx himem+1
         jmp setw
-f_top:  lda (tp),z                ; TO P
+f_top:  lda [tp],z                ; TO P
         cmp #'P'
         beq +
         lda #16
