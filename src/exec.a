@@ -1,4 +1,5 @@
 ; B65 BASIC - statement execution (after BBC BASIC (Z80) v5 EXEC.Z80)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
 ; Control structures live on the (16-bit) CPU stack, as in the Z80 original.
 ; Frame marker byte is at SP+1:
 ;   FOR     16: TFOR, vptr(2), vtype, limit(5), step(5), looptp(2)

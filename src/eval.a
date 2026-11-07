@@ -1,4 +1,5 @@
 ; B65 BASIC - expression evaluator (after BBC BASIC (Z80) v5 EVAL.Z80)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
 ; Result: numeric in acc/accx (accx=0: 32-bit integer), etype=0
 ;         string in ACCS/slen, etype=$80
 ; Precedence (BASIC V): 1 OR EOR, 2 AND, 3 = <> < > <= >= << >> >>>,

@@ -1,4 +1,5 @@
 ; B65 BASIC - variables (port of GETVAR/LOCATE/CREATE from BBC BASIC (Z80) v5)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
 ; Variable entry: [link lo,hi][name chars after 1st][0][value...]
 ; Types: 0 = ?-indirection byte, 1 = byte var (&), 4 = integer, 5 = variant
 ;        (5 bytes: 4 bytes mantissa/integer + exponent, exp 0 = integer),

@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.." || exit 1
 make -s || exit 1
 fail=0
 for t in tests/smoke/*.txt; do
+    [ "$1" = "--update" ] || [ -f "${t%.txt}.expected" ] || { echo "MISSING ${t%.txt}.expected"; fail=1; continue; }
     exp="${t%.txt}.expected"
     out=$(python3 tests/run.py "$t" 2>&1)
     if [ "$1" = "--update" ]; then

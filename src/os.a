@@ -1,4 +1,5 @@
 ; B65 BASIC - MEGA65 host layer (replaces BBC BASIC Z80 CMOS.Z80 / AMOS.Z80)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
 ; Direct hardware access: VIC-IV 80x25 text screen, $D610 ASCII keyboard queue.
 ; No KERNAL is used; ROMs are mapped out.
 

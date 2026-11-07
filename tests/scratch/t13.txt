@@ -1,0 +1,9 @@
+30 PRINT FNfib(18)
+40 PROCdeep(500)
+50 T%=TIME:FOR I%=1 TO 20000:NEXT:PRINT "20000 empty FOR loops:";TIME-T%;"cs"
+60 T%=TIME:I%=0:REPEAT I%+=1:UNTIL I%=20000:PRINT "20000 REPEAT/+=:";TIME-T%;"cs"
+70 END
+80 DEF FNfib(n%) IF n%<2 THEN =n% ELSE =FNfib(n%-1)+FNfib(n%-2)
+90 DEF PROCdeep(d%) IF d%>0 THEN PROCdeep(d%-1) ELSE PRINT "bottom of 500-deep recursion"
+95 ENDPROC
+RUN

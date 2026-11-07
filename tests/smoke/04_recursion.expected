@@ -1,0 +1,21 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+
+>30 PRINT FNfib(18)
+>40 PROCdeep(500)
+>70 END
+>80 DEF FNfib(n%) IF n%<2 THEN =n% ELSE =FNfib(n%-1)+FNfib(n%-2)
+>90 DEF PROCdeep(d%) IF d%>0 THEN PROCdeep(d%-1) ELSE PRINT "bottom of 500-deep recursion"
+>95 ENDPROC
+>RUN
+      2584
+bottom of 500-deep recursion
+>AUTO 100,10
+>  100 PRINT "auto line"
+>  110 PRINT "second"
+>  120 
+>LIST 100,
+  100 PRINT "auto line"
+  110 PRINT "second"
+>

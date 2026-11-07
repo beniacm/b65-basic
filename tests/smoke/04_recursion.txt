@@ -1,0 +1,12 @@
+30 PRINT FNfib(18)
+40 PROCdeep(500)
+70 END
+80 DEF FNfib(n%) IF n%<2 THEN =n% ELSE =FNfib(n%-1)+FNfib(n%-2)
+90 DEF PROCdeep(d%) IF d%>0 THEN PROCdeep(d%-1) ELSE PRINT "bottom of 500-deep recursion"
+95 ENDPROC
+RUN
+AUTO 100,10
+PRINT "auto line"
+PRINT "second"
+
+LIST 100,
