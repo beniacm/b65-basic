@@ -1,0 +1,25 @@
+10 REM compare math-unit and software FP paths
+20 E%=0:N%=0
+30 FOR I%=1 TO 200
+40 A=RND(1)*10^(RND(20)-10):B=RND(1)*10^(RND(20)-10)
+45 IF RND(2)=1 THEN A=-A
+50 ?&AF=&80+(I% AND 1):Q1=A/B:M1=A*B:S1=A+B
+60 ?&AF=1:Q2=A/B:M2=A*B:S2=A+B
+70 ?&AF=0
+80 IF Q1<>Q2 OR M1<>M2 OR S1<>S2 THEN E%+=1:PRINT A,B,Q1,Q2
+90 N%+=1
+100 NEXT
+110 PRINT N%;" random pairs, ";E%;" mismatches"
+120 PRINT 2^-1, 2^-2, 10^-3, 3^3, 2^31, 2^0.5
+RUN
+NEW
+10 REM same comparison with deliberately wrong hardware quotient estimates
+20 E%=0
+30 FOR I%=1 TO 200
+40 A=RND(1)*10^(RND(20)-10):B=RND(1)*10^(RND(20)-10)
+50 ?&AF=&80+(I% AND 1):Q1=A/B:S1=SQR(A)
+60 ?&AF=1:Q2=A/B:S2=SQR(A)
+70 ?&AF=0:IF Q1<>Q2 OR S1<>S2 THEN E%+=1
+80 NEXT
+90 PRINT "perturbed estimates: ";E%;" mismatches"
+RUN

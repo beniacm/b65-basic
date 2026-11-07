@@ -38,19 +38,19 @@ functab:
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
         !byte TREPORT : !word f_reports
-        !byte $95     : !word nofp      ; ACS
-        !byte $98     : !word nofp      ; ASN
-        !byte $99     : !word nofp      ; ATN
-        !byte $9b     : !word nofp      ; COS
-        !byte $9d     : !word nofp      ; DEG
-        !byte $a1     : !word nofp      ; EXP
-        !byte $aa     : !word nofp      ; LN
-        !byte $ab     : !word nofp      ; LOG
-        !byte TPI     : !word nofp
-        !byte $b2     : !word nofp      ; RAD
-        !byte $b5     : !word nofp      ; SIN
-        !byte $b6     : !word nofp      ; SQR
-        !byte $b7     : !word nofp      ; TAN
+        !byte $95     : !word fn_acs
+        !byte $98     : !word fn_asn
+        !byte $99     : !word fn_atn
+        !byte $9b     : !word fn_cos
+        !byte $9d     : !word fn_deg
+        !byte $a1     : !word fn_exp
+        !byte $aa     : !word fn_ln
+        !byte $ab     : !word fn_log
+        !byte TPI     : !word fn_pi
+        !byte $b2     : !word fn_rad
+        !byte $b5     : !word fn_sin
+        !byte $b6     : !word fn_sqr
+        !byte $b7     : !word fn_tan
         !byte 0
 
 ; set acc to small integer A (sign-extended) as numeric result
@@ -141,7 +141,23 @@ f_rnd:  lda (tp),z
         beq .last
         cmp #1
         bne .range
-        jmp nofp                ; RND(1) -> float
+        jsr rndstep             ; RND(1): float in [0,1)
+        ldq seed
+        stq acc
+        ldz #0
+        lsr acc+3
+        ror acc+2
+        ror acc+1
+        ror acc
+        lda #0
+        sta accx
+        jsr sfloat
+        lda accx
+        beq +
+        sec
+        sbc #31
+        sta accx
++       jmp setnumf
 .last   ldq seed
         stq acc
         ldz #0
@@ -261,12 +277,22 @@ f_strs: lda (tp),z
         inw tp
         jsr itemi
         lda #1
-        bra .s
+        jsr numstr
+        bra .cp
 +       jsr item
         jsr chknum
+        lda #9                  ; G9 unless @% byte 3 is set
+        sta fmtd
         lda #0
-.s      jsr numstr              ; -> NUMBUF, X = length
-        stx slen
+        sta fmtf
+        lda STAVAR+3
+        beq +
+        lda STAVAR+1
+        sta fmtd
+        lda STAVAR+2
+        sta fmtf
++       jsr fmtnum
+.cp     stx slen
         dex
         bmi +
 -       lda NUMBUF,x
@@ -274,6 +300,23 @@ f_strs: lda (tp),z
         dex
         bpl -
 +       jmp setstr
+
+; FMTNUM: format acc with fmtd/fmtf into NUMBUF (X = length), E-mode padded
+fmtnum: jsr fpstr
+        lda fmtf
+        and #1
+        beq +
+        lda epos                ; pad so that the exponent field is 4 wide
+        clc
+        adc #4
+        sta tmp0
+-       cpx tmp0
+        bcs +
+        lda #' '
+        sta NUMBUF,x
+        inx
+        bra -
++       rts
 
 ; LEFT$(s$[,n])  RIGHT$(s$[,n])
 !zone lefts
@@ -429,11 +472,11 @@ f_strings:
 .long   lda #19
         jmp error
 
-; VAL(s$): integer only for now
+; VAL(s$)
 f_val:  jsr item
         jsr chkstr
         ldx slen
-        lda #CR
+        lda #0
         sta ACCS,x
         lda tp
         pha
@@ -443,26 +486,12 @@ f_val:  jsr item
         sta tp
         lda #>ACCS
         sta tp+1
-        jsr nxt
-        ldx #0
-        cmp #'-'
-        bne +
-        dex
-        inw tp
-        bra ++
-+       cmp #'+'
-        bne ++
-        inw tp
-++      phx
-        jsr number
-        plx
-        beq +
-        jsr ineg
-+       pla
+        jsr fpval
+        pla
         sta tp+1
         pla
         sta tp
-        jmp setnum
+        jmp setnumf
 
 ; INSTR(a$,b$[,start])
 !zone instr
@@ -744,10 +773,49 @@ f_count:
         jmp setw
 f_int:  jsr item
         jsr chknum
-        lda accx
-        beq +
-        jmp nofp
-+       rts
+        jsr fpint
+        jmp setnum
+
+; floating point function wrappers: item -> FA -> function
+fnwrap: pha
+        jsr item
+        jsr chknum
+        pla
+        asl
+        tax
+        jsr .call
+setnumf:
+        lda #0
+        sta etype
+        rts
+.call   jmp (fntab,x)
+fntab:  !word fpacs, fpasn, fpatn, fpcos, fpdeg, fpexp, fpln, fplog, fprad, fpsin, fpsqr, fptan
+fn_acs: lda #0
+        bra fnwrap
+fn_asn: lda #1
+        bra fnwrap
+fn_atn: lda #2
+        bra fnwrap
+fn_cos: lda #3
+        bra fnwrap
+fn_deg: lda #4
+        bra fnwrap
+fn_exp: lda #5
+        bra fnwrap
+fn_ln:  lda #6
+        bra fnwrap
+fn_log: lda #7
+        bra fnwrap
+fn_rad: lda #8
+        bra fnwrap
+fn_sin: lda #9
+        bra fnwrap
+fn_sqr: lda #10
+        bra fnwrap
+fn_tan: lda #11
+        bra fnwrap
+fn_pi:  jsr fppi
+        jmp setnumf
 
 ; EVAL(s$): tokenise into EVBUF and evaluate
 EVBUF = $0700
@@ -792,10 +860,8 @@ f_eval: jsr item
 ; ---- NUMSTR: acc -> NUMBUF (X = length). A=0 decimal, A<>0 hex ----
 !zone numstr
 numstr: sta tmp5
-        lda accx
-        beq +
-        jmp nofp
-+       ldq acc
+        jsr sfix
+        ldq acc
         stq arg
         ldz #0
         ldx #0                  ; digits produced (reversed in STRBUF)

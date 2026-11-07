@@ -1,0 +1,1386 @@
+; B65 BASIC - floating point package, part 2: POWR10, CON, STR and functions
+; Altered version (45GS02 port) of BBC BASIC (Z80) v5 MATH.Z80,
+; (C) R.T. Russell 1986-2025, zlib licence - see LICENSE.
+
+
+; ---------------- constants (5-byte BBC format, as in MATH.Z80) ----------------
+fpconst:
+c_piby4 = * - fpconst
+        !byte $a2,$da,$0f,$49,$7f       ; PI/4
+c_ln2   = * - fpconst
+        !byte $f8,$17,$72,$31,$7f       ; LN(2)
+c_pi    = * - fpconst
+        !byte $a2,$da,$0f,$49,$81       ; PI
+c_180pi = * - fpconst
+        !byte $d3,$e0,$2e,$65,$85       ; 180/PI
+c_sqr2  = * - fpconst
+        !byte $33,$f3,$04,$35,$80       ; SQR(2) (mantissa compare only)
+c_loge  = * - fpconst
+        !byte $a9,$d8,$5b,$5e,$7e       ; LOG(e)
+c_tpi8  = * - fpconst
+        !byte $d0,$cc,$13,$54,$7e       ; TAN(PI/8)
+c_t3pi8 = * - fpconst
+        !byte $9a,$79,$82,$1a,$81       ; TAN(3*PI/8)
+c_1e9   = * - fpconst
+
+; polynomial tables (coefficients as in MATH.Z80; last has exponent >= $80)
+p_sin:  !byte $b7,$a8,$11,$36,$6d, $26,$de,$05,$d0,$73, $c0,$80,$88,$08,$79
+        !byte $9d,$aa,$aa,$aa,$7d, $00,$00,$00,$00,$80
+p_cos:  !byte $71,$d5,$78,$4c,$70, $af,$94,$03,$b6,$76, $c8,$9c,$aa,$2a,$7b
+        !byte $dd,$ff,$ff,$ff,$7e, $00,$00,$00,$00,$80
+p_exp:  !byte $72,$40,$2e,$94,$73, $65,$6f,$4f,$2e,$76, $37,$6d,$02,$88,$79
+        !byte $12,$e5,$a0,$2a,$7b, $14,$4f,$aa,$aa,$7d, $56,$fd,$ff,$7f,$7e
+        !byte $fe,$ff,$ff,$ff,$7f, $00,$00,$00,$00,$80
+p_ln:   !byte $48,$cc,$fb,$74,$7d, $af,$ae,$ff,$11,$7e, $8c,$d9,$cd,$4c,$7e
+        !byte $e3,$a9,$aa,$2a,$7f, $00,$00,$00,$00,$81
+p_atn:  !byte $35,$f3,$d8,$37,$7b, $91,$6b,$b9,$aa,$7c, $de,$41,$97,$61,$7c
+        !byte $7b,$9d,$37,$92,$7d, $5a,$2a,$cc,$4c,$7d, $5c,$a9,$aa,$aa,$7e
+        !byte $00,$00,$00,$00,$80
+
+; POLY: X on FP stack top, FA = X; ptr2 -> coefficients
+!zone poly
+poly:   ldy #0
+        jsr .ld                 ; FB = c0
+.l      jsr fmul
+        lda ptr2
+        clc
+        adc #5
+        sta ptr2
+        bcc +
+        inc ptr2+1
++       ldy #0
+        jsr .ld
+        lda argx
+        bmi .last
+        jsr fadd
+        jsr peek5               ; FB = X
+        bra .l
+.last   jmp fadd
+.ld     lda (ptr2),y
+        sta arg,y
+        iny
+        cpy #5
+        bne .ld
+        rts
+
+; ---------------- POWR10 ----------------
+; A < 128: FB = 10^A ; A >= 128: smallest power of ten with exponent > A.
+; Returns A = power. FA preserved.
+!zone powr10
+powr10: inc
+        sta prem
+        ldx #4
+-       lda acc,x
+        sta fsav,x
+        dex
+        bpl -
+        jsr fone
+        lda #0
+        sta pcnt
+.p11    dec prem
+        beq .x
+        bpl .p13
+        lda prem
+        cmp accx
+        bcc .x
+        inc prem
+.p13    inc pcnt
+        lda #$80
+        tsb acc+3
+        jsr fcopy0              ; X5
+        jsr fd2c
+        jsr fd2c
+        lda #0
+        rol
+        sta pcar
+        jsr fiadd
+        bcc .p12
+        jsr fd2c
+        lda #0
+        rol
+        sta pcar
+.p12    lda pcar
+        beq +
+        jsr fadd1
++       inc accx
+        bmi .p11
+        jmp foflow
+.x      jsr fcopy               ; FB = power
+        lda arg+3
+        and #$7f
+        sta arg+3
+        ldx #4
+-       lda fsav,x
+        sta acc,x
+        dex
+        bpl -
+        lda pcnt
+        rts
+
+; X10B / X5 used by STR (FA *= 5 via x + x/4, C += 2) ; carry = 32-bit overflow
+fx5:    jsr fcopy0
+        jsr fd2c
+        jsr fd2c
+        jmp fiadd
+
+; ---------------- CON: numeric constant at tp -> FA (int or float) ----------------
+!zone con
+con:    jsr fzero
+        lda #0
+        sta fc_                 ; truncation counter (Z80 C)
+        sta fb_
+        jsr .number
+        ldx #0
+        cmp #'.'
+        bne +
+        stx fb_                 ; decimal places counter (Z80 B)
+        inw tp
+        jsr .number
+        bra ++
++       stx fb_
+++      lda #0
+        sta fa_                 ; exponent
+        lda (tp),z
+        cmp #'E'
+        bne +
+        jsr .getexp
++       lda acc+3
+        bmi .con0
+        lda fa_
+        bne .con0
+        lda fb_
+        bne .con0
+        lda fc_
+        bne .con0
+        lda #0                  ; integer
+        sta accx
+        sta etype
+        rts
+.con0   lda fa_
+        sec
+        sbc fb_
+        clc
+        adc fc_
+        sta fa_
+        lda #159
+        sta accx
+        jsr fflt
+        lda acc+3
+        and #$7f
+        sta acc+3
+        lda #0
+        sta etype
+        lda fa_
+        bne +
+        rts
++       bmi .con2
+        jsr powr10
+        jmp fmul
+.con2   cmp #$100-38
+        bcc .con3
+        eor #$ff
+        inc
+        jsr powr10
+        jmp fdiv
+.con3   lda #38
+        jsr powr10
+        jsr fdiv
+        lda fa_
+        clc
+        adc #38
+        sta fa_
+        bra .con2
+; NUMBER: digits -> acc (unsigned), counting fb_ (digits) and fc_ (truncated)
+.number lda (tp),z
+        cmp #'0'
+        bcc .nx
+        cmp #'9'+1
+        bcs .nx
+        inc fb_
+        inw tp
+        and #$0f
+        sta fd_
+        jsr fcopy0              ; X10 with overflow check
+        jsr fx2
+        bcs .trunc
+        jsr fx2
+        bcs .trunc
+        jsr fiadd
+        bcs .trunc
+        jsr fx2
+        bcs .trunc
+        lda fc_
+        bne .trunc
+        lda acc
+        clc
+        adc fd_
+        sta acc
+        bcc .number
+        inc acc+1
+        bne .number
+        inc acc+2               ; Z80: INC HL (high word)
+        bne .number
+        inc acc+3
+        bne .number
+        lda acc+2
+        ora acc+3
+        bne .number
+.trunc  inc fc_
+        ldx #3                  ; restore previous value
+-       lda arg,x
+        sta acc,x
+        dex
+        bpl -
+        bra .number
+.nx     rts
+.getexp lda #0
+        sta fe_                 ; value
+        lda #2
+        sta ff_                 ; digits allowed
+        inw tp
+        lda #0
+        sta fg_                 ; sign
+-       lda (tp),z              ; SIGNQ
+        cmp #' '
+        bne +
+        inw tp
+        bra -
++       cmp #'+'
+        beq .sg
+        cmp #'-'
+        bne .gx1
+        sta fg_
+.sg     inw tp
+.gx1    lda (tp),z
+        cmp #'0'
+        bcc .gx2
+        cmp #'9'+1
+        bcs .gx2
+        lda fe_
+        asl
+        asl
+        clc
+        adc fe_
+        asl
+        sta fe_
+        lda (tp),z
+        inw tp
+        and #$0f
+        clc
+        adc fe_
+        sta fe_
+        dec ff_
+        bpl .gx1
+        lda #100
+        sta fe_
+        bra .gx1
+.gx2    lda fe_
+        ldx fg_
+        beq +
+        eor #$ff
+        inc
++       sta fa_
+        rts
+
+; VAL semantics: optional sign then CON. tp -> text.
+fpval:  jsr nxt
+        cmp #'+'
+        beq .p
+        cmp #'-'
+        bne .c
+        inw tp
+        jsr con
+        lda accx
+        bne +
+        jmp fnegate
++       lda acc+3
+        eor #$80
+        sta acc+3
+        rts
+.p      inw tp
+.c      jmp con
+
+; ---------------- STR: FA -> text at NUMBUF, X = length ----------------
+; fmtd = significant figures, fmtf = format (0 G, 1 E, 2 F)
+!zone str
+dpush:  ldx dsp                 ; push (zA, zF)
+        lda zA
+        sta DSTK,x
+        lda zF
+        sta DSTK+1,x
+        inx
+        inx
+        stx dsp
+        rts
+dpop:   ldx dsp
+        dex
+        dex
+        stx dsp
+        lda DSTK,x
+        sta zA
+        lda DSTK+1,x
+        sta zF
+        rts
+setzf:  ; zF S/Z from zA, keep C
+        lda zF
+        and #1
+        ldx zA
+        bne +
+        ora #$40
++       cpx #$80
+        bcc +
+        ora #$80
++       sta zF
+        rts
+outc:   ldy #0
+        sta (optr2),y
+        inw optr2
+        rts
+
+fpstr:  lda #<NUMBUF
+        sta optr2
+        lda #>NUMBUF
+        sta optr2+1
+        lda #0
+        sta dsp
+        jsr sfloat
+        lda #0
+        sta dB
+        lda acc+3
+        bpl +
+        and #$7f
+        sta acc+3
+        lda #'-'
+        jsr outc
++       lda accx
+        bne +
+        lda #0                  ; zero
+        sta zA
+        jmp .str2
++       lda dB
+        sta zA                  ; decimal counter
+.s11    lda accx
+        cmp #161
+        bcs .s14
+        cmp #155
+        bcs .s15
+        eor #$ff
+        cmp #225
+        bcc +
+        lda #$100-8
++       clc
+        adc #28
+        jsr powr10
+        sta dB
+        jsr fmul
+        lda zA
+        sec
+        sbc dB
+        sta zA
+        bra .s11
+.s14    sec
+        sbc #32
+        jsr powr10
+        sta dB
+        jsr fdiv
+        lda zA
+        clc
+        adc dB
+        sta zA
+        bra .s11
+.s15    lda #9
+        jsr powr10
+        jsr fcp0                ; carry clear if FA < 1E9
+        php
+        lda zA
+        sta dB
+        lda #$80
+        tsb acc+3
+        plp
+        lda #0
+        bcs +
+        dec dB                  ; X10B
+        inc accx
+        jsr fx5
+        lda #0
+        rol                     ; carry of the add
++       sta zA
+        lda accx
+        and #$7f
+        sta accx
+.str2   inc accx                ; STR2
+        lda zA
+        sta sA                  ; save A (top bit)
+        lda fmtf
+        and #2
+        beq +
+        lda dB
+        bra .s20
++       lda fmtd
+        bne +
+        lda #0
+        sta zA
+        lda #$40                ; Z flag (from CP), carry clear
+        sta zF
+        bra .s21
++       lda #$100-10
+.s20    clc
+        adc fmtd
+        sta zA
+        bmi +
+        lda #0
+        sta zA
++       lda #0
+        sta zF
+        jsr setzf
+.s21    jsr dpush
+        lda sA
+        sta zA
+.s22    jsr fx2                 ; X2: carry = top bit
+        lda zA
+        rol
+        cmp #10
+        bcc +
+        sbc #10
+        tax
+        lda acc
+        ora #1
+        sta acc
+        txa
++       sta zA
+        dec accx
+        bne .s22
+        lda zA
+        sta accx                ; C = remainder digit
+        lda acc+3
+        and #$3f
+        sta acc+3
+        jsr dpop
+        lda zF
+        bpl .s24
+        inc zA                  ; negative count
+        lda zA
+        bne .s26c
+        lda #4                  ; rounding digit
+        cmp accx                ; carry (Z80) if 4 < C
+        lda #0
+        sta zA
+        lda zF
+        and #$fe
+        bcs +
+        ora #1                  ; 6502: carry clear means 4 < digit
++       sta zF
+        bra .s26
+.s26c   jmp .s26
+.s24    jsr dpush               ; keep the item
+        lda zF
+        and #1                  ; Z80 carry
+        clc
+        adc accx
+        adc #'0'
+        sta zA
+        cmp #'0'
+        beq .z0
+        cmp #'9'+1
+        bcs .s25c
+        lda #0                  ; carry clear
+        sta zF
+        bra .s26
+.z0     lda #0
+        sta zF
+        bra .s25
+.s25c   lda #1
+        sta zF
+.s25    ldx dsp                 ; top item Z flag set -> suppress
+        lda DSTK-1,x
+        and #$40
+        bne .s27
+        lda #'0'
+        sta zA
+.s26    jsr setzf
+        jsr dpush
+.s27    inc dB
+        lda #32
+        sta accx
+        lda #0
+        sta zA
+        jsr ftest
+        beq +
+        jmp .s22
++       ldx dsp                 ; peek: carry pending?
+        lda DSTK-1,x
+        and #1
+        beq .s3
+        jmp .s22
+; formatting
+.s3     lda #$ff
+        sta dC                  ; "E" flag
+        lda #1
+        sta dD
+        lda fmtd
+        sta dE
+        lda fmtf
+        and #1
+        bne .s34
+        lda fmtf
+        and #2
+        beq .s31
+        lda dB                  ; F mode
+        beq .s30
+        bmi .s30
+        sta dD
+.s30    lda dD
+        clc
+        adc fmtd
+        sta dE
+        cmp #11
+        bcc .s32
+.s31    lda #1                  ; G mode
+        sta dD
+        sta dE
+        lda dB
+        bmi .s34
+        beq .s32
+        lda fmtd
+        bne +
+        lda #10
++       cmp dB
+        bcc .s34
+        lda dB
+        sta dD
+        sta dE
+.s32    lda dB
+        clc
+        adc #129
+        sta dC
+.s34    lda #$80
+        tsb dD
+        dec dE
+.s35    lda dD
+        cmp dC
+        bcs .s33
+.s36    jsr dpop
+        lda zF
+        and #$40
+        bne .s37
+        lda zF
+        bpl .s38
+.s37    jsr dpush
+        lda dE
+        bmi .s4
+.s33    lda #'0'
+        sta zA
+.s38    lda dD                  ; DEC D, '.' when passing $80 -> $7f
+        dec dD
+        cmp #$80
+        bne +
+        lda #'.'
+        jsr outc
++       lda zA
+        jsr outc
+        dec dE
+        bpl .s35
+        bra .s36
+.s4     jsr dpop
+        lda dC
+        cmp #$ff
+        bne .s44
+        lda optr2               ; remember for E-mode padding
+        sec
+        sbc #<NUMBUF
+        sta epos
+        lda #'E'
+        jsr outc
+        lda dB
+        sec
+        sbc #1
+        sta zA
+        bpl +
+        lda #'-'
+        jsr outc
+        lda zA
+        eor #$ff
+        inc
+        sta zA
++       ldy #0
+        lda #'0'
+        sta (optr2),y
+        lda zA
+        beq .s47
+        cmp #10
+        bcc .s42
+        inw optr2
+        lda #'0'
+        sta (optr2),y
+.s42    ldx zA
+-       lda (optr2),y           ; count up
+        inc
+        cmp #':'
+        bne +
+        lda #'0'
+        sta (optr2),y
+        dew optr2
+        lda (optr2),y
+        inc
+        sta (optr2),y
+        inw optr2
+        bra ++
++       sta (optr2),y
+++      dex
+        bne -
+.s47    inw optr2
+.s44    lda optr2
+        sec
+        sbc #<NUMBUF
+        tax
+        rts
+
+; ---------------- functions ----------------
+; Each takes FA (variable type) and returns FA. Integer marker accx=0.
+f_abs2: lda acc+3
+        bpl +
+        lda accx
+        bne ++
+        jmp fnegate
+++      lda acc+3
+        and #$7f
+        sta acc+3
++       rts
+
+fpint:  lda accx                ; INT (floor)
+        beq .x
+        lda acc+3
+        sta fh_
+        lda #159
+        jsr ffix
+        lda afl
+        and fh_
+        bpl +
+        jsr fadd1
++       lda fh_
+        bpl +
+        jsr fnegate
++       lda #0
+        sta accx
+.x      rts
+
+fppi:   ldx #c_pi
+        jmp ldacc
+fpdeg:  jsr sfloat
+        ldx #c_180pi
+        jsr ldarg
+        jmp fmul
+fprad:  jsr sfloat
+        ldx #c_180pi
+        jsr ldarg
+        jmp fdiv
+recip:  jsr done
+rdiv:   jsr fswap
+        jmp fdiv
+
+; SQR (literal port of SQR0/SQRA/SQRB)
+!zone sqr
+fpsqr:  jsr sfloat
+fsqr0:  lda acc+3
+        bpl +
+        lda #21                 ; -ve root
+        jmp error
++       lda accx
+        bne +
+        rts
++       lda #$80
+        tsb acc+3
+        lda accx
+        and #1
+        bne +
+        jsr fdiv2
++       lda accx
+        sec
+        sbc #$80
+        cmp #$80                ; SRA A
+        ror
+        clc
+        adc #$80
+        sta sC                  ; saved exponent
+        ldq acc
+        stq sD                  ; radicand
+        lda #0
+        sta sR
+        sta sR+1
+        sta sR+2
+        sta sR+3
+        sta sM
+        sta sM+1
+        sta sM+2
+        sta sM+3
+        ldz #0
+        lda #$100-31
+        sta sA
+        jsr .sqra
+        lda sR+3
+        bmi +
+        jsr .sqra
++       jsr .sqrb
+        ; OR A ; CALL DIVB (one more remainder bit into sD bit 0)
+        asl sM
+        rol sM+1
+        rol sM+2
+        rol sM+3
+        bcs .dvo
+        jsr .msubr
+        bcc .dvr                ; borrow
+        sec
+        bra .dvc
+.dvr    jsr .maddr
+        clc
+        bra .dvc
+.dvo    jsr .msubr
+        sec
+.dvc    rol sD                  ; RL E ... (bit into sD bit 0)
+        rol sD+1
+        rol sD+2
+        rol sD+3
+        inc sA
+        lsr sD                  ; RR E -> rounding bit (only low byte matters)
+        php
+        ldq sR
+        stq acc
+        ldz #0
+        plp
+        bcc +
+        jsr fadd1
+        php
+        lda sC
+        sta accx
+        plp
+        bcc ++
+        jsr fincc
+        bra ++
++       lda sC
+        sta accx
+++      lda sA
+        and #1
+        beq +
+        dec accx
++       lda acc+3
+        and #$7f
+        sta acc+3
+        rts
+.msubr  sec                     ; M -= R, 6502 carry = no borrow
+        lda sM
+        sbc sR
+        sta sM
+        lda sM+1
+        sbc sR+1
+        sta sM+1
+        lda sM+2
+        sbc sR+2
+        sta sM+2
+        lda sM+3
+        sbc sR+3
+        sta sM+3
+        rts
+.maddr  clc
+        lda sM
+        adc sR
+        sta sM
+        lda sM+1
+        adc sR+1
+        sta sM+1
+        lda sM+2
+        adc sR+2
+        sta sM+2
+        lda sM+3
+        adc sR+3
+        sta sM+3
+        rts
+.sla8   asl sD
+        rol sD+1
+        rol sD+2
+        rol sD+3
+        rol sM
+        rol sM+1
+        rol sM+2
+        rol sM+3
+        rts
+.sqra   asl sR                  ; R = R*2 ; low byte |= 1 (INC C)
+        rol sR+1
+        rol sR+2
+        rol sR+3
+        inc sR
+        jsr .sla8
+        jsr .sla8
+        bcs .sqr3
+        jsr .msubr              ; SQR1
+        inc sR
+        bcs .sqr2
+        dec sR
+        jsr .maddr
+        dec sR
+        bra .sqr2
+.sqr3   jsr .msubr
+        inc sR
+.sqr2   inc sA
+        bmi .sqra
+        rts
+.sqrb   asl sM
+        rol sM+1
+        rol sM+2
+        rol sM+3
+        bcs .sqr3
+        inc sA
+        inc sR
+        jsr .msubr
+        bcs +
+        jsr .maddr
+        dec sR
++       rts
+
+; TAN, COS, SIN
+fptan:  jsr sfloat
+        jsr push5
+        jsr fcos0
+        jsr pop5
+        jsr push5
+        jsr fswap
+        jsr fsin0
+        jsr pop5
+        jmp fdiv
+fpcos:  jsr sfloat
+fcos0:  jsr scale
+        inc fe_
+        inc fe_
+        lda fe_
+        bra fsin1
+fpsin:  jsr sfloat
+fsin0:  lda acc+3
+        pha
+        jsr scale
+        pla
+        and #$80                ; sign -> bit 2
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        eor fe_
+fsin1:  pha                     ; octant
+        lda acc+3
+        and #$7f
+        sta acc+3
+        jsr piby4
+        pla
+        pha
+        lsr
+        bcc +
+        jsr rsub                ; X = PI/4 - X
++       pla
+        pha
+        and #3
+        beq .s
+        cmp #3
+        beq .s
+        jsr square              ; cosine approximation
+        lda #<p_cos
+        sta ptr2
+        lda #>p_cos
+        sta ptr2+1
+        jsr poly
+        jsr pop5
+        bra .sin3
+.s      jsr push5
+        jsr square
+        lda #<p_sin
+        sta ptr2
+        lda #>p_sin
+        sta ptr2+1
+        jsr poly
+        jsr pop5
+        jsr pop5
+        jsr fmul
+.sin3   pla
+        and #4
+        beq +
+        lda accx
+        beq +
+        lda acc+3
+        ora #$80
+        sta acc+3
++       rts
+
+; SCALE: error if too big, FA = FA mod PI/4 (48-bit divisor), fe_ = octant
+scale:  lda accx
+        cmp #151
+        bcc +
+        lda #23                 ; Accuracy lost
+        jmp error
++       jsr piby4
+        lda #$69
+        sta fext
+        lda #$21
+        sta fext+1
+; MOD48: FA (unsigned) mod FB:fext (48-bit), quotient -> fe_ (bit 7 sticky)
+!zone mod48
+mod48:  lda #$80
+        tsb arg+3
+        tsb acc+3
+        lda accx
+        sta fa_                 ; A = dividend exponent
+        lda #0
+        sta fc_                 ; quotient
+        sta fd_                 ; low 16 bits of dividend
+        sta fd_+1
+        lda fa_
+        cmp argx
+        bcc .m85
+.m81    ; dividend(48) - divisor(48)
+        sec
+        lda fd_
+        sbc fext
+        sta fd_
+        lda fd_+1
+        sbc fext+1
+        sta fd_+1
+        jsr fisubc
+        bcs .m82                ; no borrow
+        clc
+        lda fd_
+        adc fext
+        sta fd_
+        lda fd_+1
+        adc fext+1
+        sta fd_+1
+        jsr fiaddc
+        clc                     ; 6502: no subtract -> quotient bit 0
+        bra .m82b
+.m82    sec
+.m82b   rol fc_
+        bcc .m83
+        lda #$80
+        tsb fc_
+.m83    dec fa_
+        lda fa_
+        cmp argx
+        bcc .m84
+        asl fd_
+        rol fd_+1
+        rol acc
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        bcc .m81
+        sec                     ; overflow: subtract
+        lda fd_
+        sbc fext
+        sta fd_
+        lda fd_+1
+        sbc fext+1
+        sta fd_+1
+        jsr fisubc
+        sec
+        bra .m82b
+.m84    inc fa_
+.m85    lda fd_
+        sta fext
+        lda fd_+1
+        sta fext+1
+        lda fc_
+        sta fe_
+        lda fa_
+        sta accx
+        jmp flo48
+fisubc: lda acc                 ; acc -= arg with incoming 6502 carry
+        sbc arg
+        sta acc
+        lda acc+1
+        sbc arg+1
+        sta acc+1
+        lda acc+2
+        sbc arg+2
+        sta acc+2
+        lda acc+3
+        sbc arg+3
+        sta acc+3
+        rts
+fiaddc: lda acc
+        adc arg
+        sta acc
+        lda acc+1
+        adc arg+1
+        sta acc+1
+        lda acc+2
+        adc arg+2
+        sta acc+2
+        lda acc+3
+        adc arg+3
+        sta acc+3
+        rts
+
+; EXP
+!zone exp
+fpexp:  jsr sfloat
+fexp0:  jsr ln2
+        dec arg                 ; LN(2) extended: 0.B17217F7D1CF
+        lda #$cf
+        sta fext
+        lda #$d1
+        sta fext+1
+        lda acc+3
+        pha
+        jsr mod48
+        pla
+        sta fh_
+        lda fe_
+        bpl .e1
+        lda fh_
+        bpl +
+        jmp fzero
++       lda #24                 ; Exp range
+        jmp error
+.e1     lda fh_
+        and #$80
+        ora fe_
+        pha                     ; integer part with sign
+        lda acc+3
+        and #$7f
+        sta acc+3
+        jsr push5
+        lda #<p_exp
+        sta ptr2
+        lda #>p_exp
+        sta ptr2+1
+        jsr poly
+        jsr pop5
+        pla
+        pha
+        bmi +
+        jsr recip
++       pla
+        bpl +
+        and #$7f
+        eor #$ff
+        inc
++       sta fh_                 ; n (signed)
+        ldy #0
+        bit fh_
+        bpl +
+        ldy #$ff
++       lda accx
+        clc
+        adc fh_
+        tax
+        tya
+        adc #0
+        bmi .z
+        bne .ov
+        cpx #0
+        beq .z
+        stx accx
+        rts
+.z      jmp fzero
+.ov     jmp foflow
+
+; LN, LOG
+!zone ln
+fpln:   jsr sfloat
+fln0:   lda acc+3
+        bmi .rng
+        lda accx
+        bne +
+.rng    lda #22                 ; Log range
+        jmp error
++       ldx #c_sqr2
+        jsr ldarg
+        jsr icp0                ; mantissa < SQR(2) ?  (6502 carry clear)
+        lda accx
+        ldx #$80
+        bcc +
+        dex
+        inc
++       stx accx
+        pha                     ; exponent
+        jsr ratio
+        jsr push5
+        jsr square
+        lda #<p_ln
+        sta ptr2
+        lda #>p_ln
+        sta ptr2+1
+        jsr poly
+        jsr pop5
+        jsr pop5
+        jsr fmul
+        pla
+        sta fh_
+        jsr push5
+        jsr fzero
+        lda fh_
+        sec
+        sbc #$80
+        beq .l3
+        php
+        bcs +
+        eor #$ff
+        inc
++       sta acc+3
+        lda #$87
+        sta accx
+        jsr fflt
+        lda acc+3
+        and #$7f
+        sta acc+3
+        jsr ln2
+        jsr fmul
+        plp
+        bcs .l3
+        lda acc+3
+        ora #$80
+        sta acc+3
+.l3     jsr pop5
+        jmp fadd
+fplog:  jsr fpln
+        ldx #c_loge
+        jsr ldarg
+        jmp fmul
+
+; RATIO: (X-1)/(X+1)
+ratio:  jsr push5
+        jsr done
+        jsr fadd
+        jsr pop5
+        jsr push5
+        jsr fswap
+        jsr done
+        jsr fsub
+        jsr pop5
+        jmp fdiv
+
+; ASN, ATN, ACS
+!zone atn
+fpasn:  jsr sfloat
+        jsr push5
+        jsr fcopy
+        jsr fmul
+        jsr done
+        jsr rsub
+        jsr fsqr0
+        jsr pop5                ; FB = X
+        lda accx
+        bne +
+        lda arg+3               ; |X| = 1: result = sign * PI/2
+        pha
+        lda #2
+        bra acs1
++       jsr rdiv                ; X / SQR(1-X*X)
+fatn0:  lda acc+3
+        pha                     ; sign
+        and #$7f
+        sta acc+3
+        ldx #c_tpi8
+        jsr ldarg
+        jsr fcp0
+        ldx #0
+        bcc .a2
+        ldx #c_t3pi8
+        jsr ldarg
+        jsr fcp0
+        bcc .a1
+        jsr recip
+        ldx #2
+        bra .a2
+.a1     phx
+        jsr ratio
+        plx
+        ldx #1
+.a2     phx                     ; flag
+        jsr push5
+        jsr square
+        lda #<p_atn
+        sta ptr2
+        lda #>p_atn
+        sta ptr2+1
+        jsr poly
+        jsr pop5
+        jsr pop5
+        jsr fmul
+        pla
+; ACS1: A = flag (bit0: +PI/4, bit1: PI/2-X); sign byte on CPU stack
+acs1:   pha
+        jsr piby4
+        pla
+        lsr
+        pha
+        bcc +
+        jsr fadd
++       inc argx                ; Z80: INC B (FB as left by FADD)
+        pla
+        lsr
+        bcc +
+        jsr rsub
++       pla                     ; sign
+        bpl +
+        lda acc+3
+        ora #$80
+        sta acc+3
++       rts
+fpatn:  jsr sfloat
+        jmp fatn0
+fpacs:  jsr fpasn
+        lda #2                  ; positive "sign"
+        pha
+        lda #2
+        bra acs1
+
+; generic multiply FA*FB with integer->float promotion (OP '*')
+opmul:  lda accx
+        ora argx
+        bne +
+        jmp imulz
++       jsr float2
+        jsr sfloat
+        jmp fmul
+
+; IMUL (Z80 convention, FA*FB integers): exact, overflow -> float (truncated)
+!zone imulz
+imulz:  lda acc+3
+        eor arg+3
+        sta fsg
+        lda acc+3
+        bpl +
+        jsr fnegate
++       lda arg+3
+        bpl +
+        lda #0
+        sec
+        sbc arg
+        sta arg
+        lda #0
+        sbc arg+1
+        sta arg+1
+        lda #0
+        sbc arg+2
+        sta arg+2
+        lda #0
+        sbc arg+3
+        sta arg+3
++       lda fpsoft
+        pha
+        lda #0
+        sta fpsoft
+        jsr umul
+        pla
+        sta fpsoft
+        lda fp64+4
+        ora fp64+5
+        ora fp64+6
+        ora fp64+7
+        bne .big
+        lda fp64+3
+        bmi .big
+        ldq fp64
+        stq acc
+        ldz #0
+        lda #0
+        sta accx
+        bit fsg
+        bpl +
+        jmp fnegate
++       rts
+.big    lda #191                ; IMUL1: normalise 64-bit product, truncate
+        sta accx
+-       dec accx
+        asl fp64
+        rol fp64+1
+        rol fp64+2
+        rol fp64+3
+        rol fp64+4
+        rol fp64+5
+        rol fp64+6
+        rol fp64+7
+        bpl -
+        ldq fp64+4
+        stq acc
+        ldz #0
+        lda acc+3
+        bit fsg
+        bmi +
+        and #$7f
++       sta acc+3
+        rts
+
+; ^ : FPOW / IPOW (Z80 convention FA = base, FB = exponent)
+!zone pow
+fppow:  lda accx
+        ora argx
+        bne .fpow
+        jsr fswap               ; IPOW: FA = exponent, FB = base
+        lda acc+3
+        pha
+        bpl +
+        jsr fnegate
++       jmp .ipow0
+.fpow   jsr float2
+        jsr sfloat
+        lda arg+3
+        pha                     ; exponent sign
+        jsr fswap               ; FA = exponent, FB = base
+        jsr push5
+        lda accx
+        beq .fpow0
+        cmp #159
+        bcs .fpow1
+        lda #159
+        jsr ffix
+        bit afl
+        bmi .fpow1
+.fpow0  lda fsp                 ; drop pushed exponent
+        sec
+        sbc #5
+        sta fsp
+.ipow0  ldx #32                 ; FA = |exponent| (int), FB = base
+-       jsr fx2
+        bcs .ipow2
+        dex
+        bne -
+        pla                     ; exponent 0 -> 1
+        jsr fzero
+        lda #1
+        sta acc
+        rts
+.ipow2  stx ipcnt
+        ldq acc
+        stq ipbits
+        ldz #0
+        ldx #4
+-       lda arg,x
+        sta acc,x
+        dex
+        bpl -
+        pla
+        bpl +
+        jsr sfloat
+        jsr recip
++       jsr push5
+.ip3    dec ipcnt
+        beq .ipx
+        jsr fcopy
+        jsr opmul
+        asl ipbits
+        rol ipbits+1
+        rol ipbits+2
+        rol ipbits+3
+        bcc .ip3
+        jsr peek5
+        jsr opmul
+        bra .ip3
+.ipx    lda fsp
+        sec
+        sbc #5
+        sta fsp
+        rts
+.fpow1  jsr fswap               ; FA = base
+        jsr fln0
+        jsr pop5                ; FB = exponent
+        pla
+        jsr fmul
+        jmp fexp0

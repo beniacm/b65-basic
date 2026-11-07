@@ -1,0 +1,855 @@
+; B65 BASIC - floating point package
+; Altered version (45GS02 port) of the BBC BASIC (Z80) v5 floating point
+; package MATH.Z80, (C) R.T. Russell 1986-2025, zlib licence - see LICENSE.
+;
+; Format (identical to upstream): 32-bit sign-magnitude normalised mantissa,
+; 8-bit excess-128 exponent, sign bit replaces the implied 1. Exponent 0 with
+; mantissa 0 is zero; exponent 0 otherwise marks a 32-bit integer.
+;
+; Register mapping (Z80 -> 45GS02 zero page):
+;   HLH'L' C  (FA)  -> acc+3,acc+2,acc+1,acc+0  accx
+;   DED'E' B  (FB)  -> arg+3,arg+2,arg+1,arg+0  argx
+;   B'C'  (extension used by FADD/FIX/MOD48) -> fext+1,fext
+;   A'  (FIX "fraction seen" flag, bit 7)   -> afl
+; 32x32 mantissa products and quotients use the MEGA65 math unit ($D770..);
+; the hardware quotient is only an estimate and is corrected exactly with
+; the multiplier, so results are bit-identical to the upstream algorithm.
+; Setting fpsoft<>0 selects pure software primitives (for testing/benchmarks).
+
+
+; ---------------- basic register operations ----------------
+!zone fpcore
+fzero:  lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        rts
+ftest:  lda acc                 ; Z set if mantissa zero
+        ora acc+1
+        ora acc+2
+        ora acc+3
+        rts
+fnegate:                        ; NEGATE: acc = -acc (32-bit)
+        lda #0
+        sec
+        sbc acc
+        sta acc
+        lda #0
+        sbc acc+1
+        sta acc+1
+        lda #0
+        sbc acc+2
+        sta acc+2
+        lda #0
+        sbc acc+3
+        sta acc+3
+        rts
+fneg48: lda #0                  ; NEG: negate acc:fext (48-bit)
+        sec
+        sbc fext
+        sta fext
+        lda #0
+        sbc fext+1
+        sta fext+1
+        lda #0
+        sbc acc
+        sta acc
+        lda #0
+        sbc acc+1
+        sta acc+1
+        lda #0
+        sbc acc+2
+        sta acc+2
+        lda #0
+        sbc acc+3
+        sta acc+3
+        rts
+fswap:  ldx #4
+-       lda acc,x
+        ldy arg,x
+        sta arg,x
+        sty acc,x
+        dex
+        bpl -
+        rts
+fcopy:  ldx #4                  ; COPY: FB = FA (incl. exponent)
+-       lda acc,x
+        sta arg,x
+        dex
+        bpl -
+        rts
+fcopy0: ldx #3                  ; COPY0: mantissa only
+-       lda acc,x
+        sta arg,x
+        dex
+        bpl -
+        rts
+fd2:    lsr acc+3               ; D2: carry = old LSB
+        ror acc+2
+        ror acc+1
+        ror acc
+        rts
+fd2c:   inc accx                ; D2C
+        bra fd2
+fx2:    asl acc                 ; X2: carry = old MSB
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        rts
+fdiv2:  jsr fd2                 ; DIV2
+        ror fext+1
+        ror fext
+        lda fext+1
+        ora afl
+        sta afl
+fincc:  inc accx                ; INCC
+        beq foflow
+        rts
+foflow: lda #20                 ; Too big
+        jmp error
+fadd1:  inc acc                 ; ADD1: carry set on 32-bit overflow
+        bne .nc
+        inc acc+1
+        bne .nc
+        inc acc+2
+        bne .nc
+        inc acc+3
+        bne .nc
+        sec
+        rts
+.nc     clc
+        rts
+fodd:   lda acc                 ; ODD
+        ora #1
+        sta acc
+        clc
+        rts
+fiadd:  clc                     ; ADD: acc += arg
+        lda acc
+        adc arg
+        sta acc
+        lda acc+1
+        adc arg+1
+        sta acc+1
+        lda acc+2
+        adc arg+2
+        sta acc+2
+        lda acc+3
+        adc arg+3
+        sta acc+3
+        rts
+fisub:  sec                     ; SUB: acc -= arg (6502 carry = no borrow)
+        lda acc
+        sbc arg
+        sta acc
+        lda acc+1
+        sbc arg+1
+        sta acc+1
+        lda acc+2
+        sbc arg+2
+        sta acc+2
+        lda acc+3
+        sbc arg+3
+        sta acc+3
+        rts
+; ONE / DONE / PIBY4 / LN2 constants
+fone:   lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        lda #$80
+        sta accx
+        rts
+done:   lda #0
+        sta arg
+        sta arg+1
+        sta arg+2
+        sta arg+3
+        lda #$80
+        sta argx
+        rts
+piby4:  ldx #<c_piby4
+        bra ldarg
+ln2:    ldx #<c_ln2
+ldarg:  ldy #0                  ; FB = constant at fpconst page offset X
+-       lda fpconst,x
+        sta arg,y
+        inx
+        iny
+        cpy #5
+        bne -
+        rts
+ldacc:  ldy #0
+-       lda fpconst,x
+        sta acc,y
+        inx
+        iny
+        cpy #5
+        bne -
+        rts
+
+; ---------------- FIX / FLOAT ----------------
+; FFIX: A = desired exponent (> accx). Shifts acc right, fraction into fext,
+; afl bit 7 = some 1 bit was shifted out.
+ffix:   sta ftgt
+        lda #0
+        sta afl
+        lda acc+3
+        ora #$80
+        sta acc+3
+.l      lda ftgt                ; whole bytes while far away
+        sec
+        sbc accx
+        bcc .one
+        cmp #9
+        bcc .one
+        lda acc
+        beq +
+        lda #$80
+        tsb afl
++       lda fext+1
+        sta fext
+        lda acc
+        sta fext+1
+        lda acc+1
+        sta acc
+        lda acc+2
+        sta acc+1
+        lda acc+3
+        sta acc+2
+        lda #0
+        sta acc+3
+        lda accx
+        clc
+        adc #8
+        sta accx
+        bra .l
+.one    jsr fdiv2
+        lda accx
+        cmp ftgt
+        beq .x
+        bcc .one
+        jmp foflow
+.x      rts
+
+; FLOAT: normalise unsigned acc (decrementing accx, stop at 0)
+!zone fflt
+fflt:   lda acc+3
+        bmi .x
+        bne .bit
+        lda accx                ; byte steps
+        cmp #9
+        bcc .bit
+        sbc #8
+        sta accx
+        lda acc+2
+        sta acc+3
+        lda acc+1
+        sta acc+2
+        lda acc
+        sta acc+1
+        lda #0
+        sta acc
+        bra fflt
+.bit    jsr fx2
+        dec accx
+        beq .x
+        lda acc+3
+        bpl .bit
+.x      rts
+
+; SFLOAT: FA integer -> float (no-op if already float)
+!zone sfloat
+sfloat: lda accx
+        bne .x
+        jsr ftest
+        beq .x
+        lda acc+3
+        sta fh_
+        bpl +
+        jsr fnegate
++       lda #159
+        sta accx
+        jsr fflt
+        lda fh_
+        bmi .x
+        lda acc+3
+        and #$7f
+        sta acc+3
+.x      rts
+!zone float2
+float2: jsr fswap
+        jsr sfloat
+        jmp fswap
+
+; SFIX: FA float -> integer (error "Too big" if out of range)
+!zone sfix
+sfix:   lda accx
+        beq .x
+        lda acc+3
+        pha
+        lda #159
+        jsr ffix
+        lda #0
+        sta accx
+        pla
+        bpl .x
+        jmp fnegate
+.x      rts
+!zone fix2
+fix2:   jsr fswap
+        jsr sfix
+        jmp fswap
+
+; FLO48: normalise 48-bit acc:fext
+!zone flo48
+flo48:  lda acc+3
+        bmi .x
+        asl fext
+        rol fext+1
+        rol acc
+        rol acc+1
+        rol acc+2
+        rol acc+3
+        dec accx
+        bne flo48
+.x      rts
+
+; ---------------- arithmetic ----------------
+fsub:   lda arg+3               ; FSUB: FA - FB
+        eor #$80
+        sta arg+3
+        bra fadd
+rsub:   lda acc+3               ; RSUB: FB - FA
+        eor #$80
+        sta acc+3
+; FADD: FA = FA + FB, rounded (unbiased)
+!zone fadd
+fadd:   lda argx
+        bne +
+        rts
++       lda accx
+        bne +
+        jmp fswap
++       lda #0
+        sta fext
+        sta fext+1
+        lda acc+3
+        eor arg+3
+        sta fxs
+        lda argx                ; make FB the larger exponent
+        cmp accx
+        bcs +
+        jsr fswap
++       lda acc+3
+        ora #$80
+        sta acc+3
+        lda argx
+        cmp accx
+        beq +
+        jsr ffix                ; align
++       lda arg+3
+        sta fsg                 ; sign of larger
+        ora #$80
+        sta arg+3
+        bit fxs
+        bmi .diff
+        jsr fiadd
+        bcc +
+        jsr fdiv2               ; normalise (D2 shifts in 0, bit set below)
++       lda acc+3
+        ora #$80
+        sta acc+3
+        bra fround
+.diff   jsr fisub
+        bcs +
+        jsr fneg48              ; borrow: negate, complement sign
+        lda fsg
+        eor #$ff
+        sta fsg
++       jsr flo48
+        lda fsg
+        eor #$ff
+        sta fsg
+; round on fext (compare with $8000), then pack with sign fsg
+fround: lda fext+1
+        cmp #$80
+        bcc .pack
+        bne .up
+        lda fext
+        bne .up
+        jsr fodd
+        bra .pack
+.up     jsr fadd1
+        bcc .pack
+        jsr fincc
+.pack   lda acc+3
+        and #$7f
+        sta acc+3
+        lda accx
+        bne +
+        jmp fzero
++       bit fsg
+        bpl +
+        lda acc+3
+        ora #$80
+        sta acc+3
++       rts
+
+; 64-bit product fp64 = acc * arg (unsigned)
+!zone umul
+umul:   lda fpsoft
+        beq .hw
+        bpl .soft
+.hw
+        ldq acc
+        stq $d770
+        ldq arg
+        stq $d774
+-       bit $d70f               ; multiplier busy
+        bvs -
+        ldq $d778
+        stq fp64
+        ldq $d77c
+        stq fp64+4
+        ldz #0
+        rts
+.soft   lda #0                  ; shift-and-add 32x32
+        sta fp64+4
+        sta fp64+5
+        sta fp64+6
+        sta fp64+7
+        ldq arg
+        stq fp64
+        ldz #0
+        ldx #32
+        clc
+.l      ror fp64+7
+        ror fp64+6
+        ror fp64+5
+        ror fp64+4
+        ror fp64+3
+        ror fp64+2
+        ror fp64+1
+        ror fp64
+        bcc +
+        clc
+        lda fp64+4
+        adc acc
+        sta fp64+4
+        lda fp64+5
+        adc acc+1
+        sta fp64+5
+        lda fp64+6
+        adc acc+2
+        sta fp64+6
+        lda fp64+7
+        adc acc+3
+        sta fp64+7
++       dex
+        bne .l
+        ror fp64+7
+        ror fp64+6
+        ror fp64+5
+        ror fp64+4
+        ror fp64+3
+        ror fp64+2
+        ror fp64+1
+        ror fp64
+        rts
+
+; FMUL: FA = FA * FB, rounded
+!zone fmul
+fmul:   lda argx
+        bne +
+        jmp fzero
++       lda accx
+        bne +
+        rts
++       lda acc+3
+        eor arg+3
+        sta fsg
+        lda #$80
+        tsb acc+3
+        tsb arg+3
+        jsr umul
+        ldx #0                  ; normalisation flag
+        lda fp64+7
+        bmi +
+        asl fp64+1              ; P <<= 1 (bits 62..15 move up)
+        rol fp64+2
+        rol fp64+3
+        rol fp64+4
+        rol fp64+5
+        rol fp64+6
+        rol fp64+7
+        dex                     ; x = $ff -> a = 0
++       inx                     ; x = 1 (a=1) or 0 (a=0)
+        stx fh_
+        ldq fp64+4
+        stq acc
+        ldz #0
+        lda fp64+3              ; rounding bits (16) vs $8000
+        cmp #$80
+        bcc .nr
+        bne .up
+        lda fp64+2
+        bne .up
+        jsr fodd
+        bra .nr
+.up     jsr fadd1
+        bcc .nr
+        jsr fincc
+.nr     ; exponent = C + B + a - 128
+        lda accx
+        clc
+        adc argx
+        tax
+        lda #0
+        adc #0
+        tay
+        txa
+        clc
+        adc fh_
+        tax
+        tya
+        adc #0
+        tay                     ; y:x = C+B+a
+        txa
+        sec
+        sbc #128
+        tax
+        tya
+        sbc #0
+fexpck: ; Y/A hi (in A), X lo: signed 16-bit exponent; <=0 zero, >=256 overflow
+        bmi .z
+        bne .ov
+        txa
+        beq .z
+        sta accx
+        lda acc+3
+        and #$7f
+        bit fsg
+        bpl +
+        ora #$80
++       sta acc+3
+        rts
+.z      jmp fzero
+.ov     jmp foflow
+
+; exact quotient: fq = floor(fnum(64) / arg), fr = remainder; fnum < arg*2^32
+!zone udiv64
+udiv64: lda fpsoft
+        beq .hw
+        lbpl .soft              ; 1..$7f: software; $80/$81: perturbed estimate (test)
+.hw
+        ; estimate with the math unit: (fnum>>32)<<32 / arg ~ fnum/arg if fnum low=0 or (Ma&1)
+        ldq fnum+4
+        stq $d770
+        ldq arg
+        stq $d774
+-       bit $d70f               ; divider busy
+        bmi -
+        ldq $d768               ; fraction part = floor(hi*2^32/arg) mod 2^32
+        stq fq
+        ldz #0
+        lda $d76c               ; integer part non-zero -> clamp
+        ora $d76d
+        ora $d76e
+        ora $d76f
+        beq +
+        lda #$ff
+        sta fq
+        sta fq+1
+        sta fq+2
+        sta fq+3
++       bit fpsoft              ; test mode: deliberately wrong estimate
+        bpl .corr
+        lda fpsoft
+        lsr
+        bcs +
+        inc fq
+        bra .corr
++       dec fq
+; correct: R = fnum - fq*arg, adjust until 0 <= R < arg
+.corr   ldq fq
+        stq $d770
+        ldq arg
+        stq $d774
+-       bit $d70f
+        bvs -
+        sec                     ; fp64 = fnum - product (64-bit)
+        lda fnum
+        sbc $d778
+        sta fp64
+        lda fnum+1
+        sbc $d779
+        sta fp64+1
+        lda fnum+2
+        sbc $d77a
+        sta fp64+2
+        lda fnum+3
+        sbc $d77b
+        sta fp64+3
+        lda fnum+4
+        sbc $d77c
+        sta fp64+4
+        lda fnum+5
+        sbc $d77d
+        sta fp64+5
+        lda fnum+6
+        sbc $d77e
+        sta fp64+6
+        lda fnum+7
+        sbc $d77f
+        sta fp64+7
+        ldz #0
+        lda fp64+7
+        bmi .neg                ; R < 0 -> q--
+        lda fp64+4
+        ora fp64+5
+        ora fp64+6
+        ora fp64+7
+        bne .inc                ; R >= 2^32 > arg -> q++
+        lda fp64                ; R >= arg ?
+        cmp arg
+        lda fp64+1
+        sbc arg+1
+        lda fp64+2
+        sbc arg+2
+        lda fp64+3
+        sbc arg+3
+        bcs .inc
+        ldq fp64
+        stq fr
+        ldz #0
+        rts
+.neg    lda fq
+        bne +
+        lda fq+1
+        bne ++
+        lda fq+2
+        bne +++
+        dec fq+3
++++     dec fq+2
+++      dec fq+1
++       dec fq
+        jmp .corr
+.inc    inc fq
+        bne +
+        inc fq+1
+        bne +
+        inc fq+2
+        bne +
+        inc fq+3
++       jmp .corr
+.soft   ; restoring division, 32 steps: (fnum hi:lo) / arg
+        ldq fnum+4
+        stq fr
+        ldq fnum
+        stq fq
+        ldz #0
+        ldx #32
+.sl     asl fq
+        rol fq+1
+        rol fq+2
+        rol fq+3
+        rol fr
+        rol fr+1
+        rol fr+2
+        rol fr+3
+        bcs .sub                ; 33-bit remainder: always >= arg
+        lda fr
+        cmp arg
+        lda fr+1
+        sbc arg+1
+        lda fr+2
+        sbc arg+2
+        lda fr+3
+        sbc arg+3
+        bcc .sn
+.sub    sec
+        lda fr
+        sbc arg
+        sta fr
+        lda fr+1
+        sbc arg+1
+        sta fr+1
+        lda fr+2
+        sbc arg+2
+        sta fr+2
+        lda fr+3
+        sbc arg+3
+        sta fr+3
+        inc fq
+.sn     dex
+        bne .sl
+        rts
+
+; FDIV: FA = FA / FB, rounded
+!zone fdiv
+fdiv:   lda argx
+        bne +
+        lda #18                 ; Division by zero
+        jmp error
++       lda accx
+        bne +
+        rts
++       lda acc+3
+        eor arg+3
+        sta fsg
+        lda #$80
+        tsb acc+3
+        tsb arg+3
+        ; a = (Ma < Mb); N = Ma * 2^(31+a)
+        ldx #0
+        lda acc
+        cmp arg
+        lda acc+1
+        sbc arg+1
+        lda acc+2
+        sbc arg+2
+        lda acc+3
+        sbc arg+3
+        bcs +
+        inx
++       stx fh_
+        lda #0
+        sta fnum
+        sta fnum+1
+        sta fnum+2
+        sta fnum+3
+        ldq acc
+        stq fnum+4
+        ldz #0
+        lda fh_
+        bne +                   ; a=1: N = Ma<<32
+        lsr fnum+7              ; a=0: N = Ma<<31
+        ror fnum+6
+        ror fnum+5
+        ror fnum+4
+        ror fnum+3
++       jsr udiv64
+        ldq fq
+        stq acc
+        ldz #0
+        ; rounding: compare R>>16 with (Mb>>16)>>1
+        lda arg+3
+        lsr
+        sta fg_
+        lda arg+2
+        ror
+        sta ff_                 ; ff_/fg_ = divisor high word / 2
+        lda fr+3
+        cmp fg_
+        bne +
+        lda fr+2
+        cmp ff_
+        bne +
+        jsr fodd                ; equal
+        bra .nr
++       bcc .nr
+        jsr fadd1
+        bcc .nr
+        jsr fincc
+.nr     ; exponent = C - B - a + 128
+        lda accx
+        sec
+        sbc argx
+        tax
+        lda #0
+        sbc #0
+        tay
+        txa
+        sec
+        sbc fh_
+        tax
+        tya
+        sbc #0
+        tay
+        txa
+        clc
+        adc #128
+        tax
+        tya
+        adc #0
+        jmp fexpck
+
+; ---------------- compare ----------------
+; FCMP: compare FA with FB (both float) -> A = $ff (<), 0 (=), 1 (>)
+!zone fcmp
+fcmp:   lda acc+3
+        eor arg+3
+        bpl .same
+        lda acc+3               ; signs differ
+        bmi .lt
+.gt     lda #1
+        rts
+.lt     lda #$ff
+        rts
+.same   jsr fcp0
+        beq .eq
+        bit acc+3
+        bmi +
+        bcc .lt
+        bra .gt
++       bcc .gt                 ; both negative: reverse
+        bra .lt
+.eq     lda #0
+        rts
+; FCP0: compare exponent then mantissa (unsigned); 6502 carry clear if FA<FB, Z if equal
+fcp0:   lda accx
+        cmp argx
+        bne .r
+icp0:   lda acc+3
+        cmp arg+3
+        bne .r
+        lda acc+2
+        cmp arg+2
+        bne .r
+        lda acc+1
+        cmp arg+1
+        bne .r
+        lda acc
+        cmp arg
+.r      rts
+
+; ---------------- FP value stack ----------------
+!zone fstack
+push5:  ldx fsp
+        cpx #80
+        bcc +
+        lda #0                  ; No room
+        jmp error
++       ldy #0
+-       lda acc,y
+        sta FSTK,x
+        inx
+        iny
+        cpy #5
+        bne -
+        stx fsp
+        rts
+pop5:   ldx fsp                 ; POP5 -> FB
+        ldy #4
+-       dex
+        lda FSTK,x
+        sta arg,y
+        dey
+        bpl -
+        stx fsp
+        rts
+peek5:  ldx fsp                 ; top -> FB without popping
+        ldy #4
+-       dex
+        lda FSTK,x
+        sta arg,y
+        dey
+        bpl -
+        rts
+square: jsr fcopy               ; SQUARE: FA=FA*FA, push
+        jsr fmul
+        jmp push5

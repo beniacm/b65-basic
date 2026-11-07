@@ -1,0 +1,6 @@
+?&C000=1
+PRINT ?&C000
+X=PI
+PRINT X
+Y=1.5
+Z=1

@@ -543,7 +543,7 @@ print:  lda STAVAR              ; field width = @% low byte
         lda #0
         sta prflag              ; B: bit0 no-newline, bit1 hex
 .pc     jsr termq
-        beq .p4
+        lbeq .p4
         pha
         lda #1
         trb prflag
@@ -585,8 +585,15 @@ print:  lda STAVAR              ; field width = @% low byte
         bmi .str
         lda prflag
         and #2
+        beq +
         jsr numstr
-        stx tmp0
+        bra ++
++       lda STAVAR+1
+        sta fmtd
+        lda STAVAR+2
+        sta fmtf
+        jsr fmtnum
+++      stx tmp0
         lda tmp3
         sec
         sbc tmp0
@@ -603,7 +610,7 @@ print:  lda STAVAR              ; field width = @% low byte
         inx
         bra -
 .str    jsr ptext
-        bra .pc
+        lbra .pc
 .p4     lda prflag
         and #1
         bne +
@@ -1177,26 +1184,35 @@ next:   jsr getsp
         jsr getarg              ; step -> arg
         lda arg+3
         sta hexflg              ; sign of step
-        lda accx
-        ora argx
-        beq +
-        jmp nofp
-+       jsr i_add               ; acc = var + step
+        lda #0
+        sta tmp5
+        sta etype
+        ldx #OP_ADD
+        jsr binop               ; acc = var + step (int, or float)
         jsr storen
-        ; compare with limit
+        ; compare new value with the limit
+        ldx #4
+-       lda acc,x
+        sta arg,x
+        dex
+        bpl -
         jsr getsp0
         ldy #5
-        jsr getarg              ; limit -> arg ; compare acc vs limit
-        ldq acc
-        stq saveacc
-        ldz #0
-        jsr swapaa              ; arg = var, acc = limit (clobbers X: LDQ)
-        ldx #OP_GT*2
+        ldx #0
+-       lda (spz),y
+        sta acc,x
+        iny
+        inx
+        cpx #5
+        bne -
+        lda #0
+        sta tmp5
+        sta etype
+        ldx #OP_GT
         bit hexflg
         bpl +
-        ldx #OP_LT*2
-+
-        jsr i_cmp               ; acc = (var > limit) or (var < limit)
+        ldx #OP_LT
++       jsr binop               ; TRUE if past the limit
         jsr acczero
         bne .done
         jsr getsp0              ; continue loop
@@ -2167,23 +2183,9 @@ inval:  lda vtype
         lda #$80
         sta etype
         rts
-signednum:                      ; parse [+-]digits at tp -> acc (0 if none)
-        jsr nxt
-        ldx #0
-        cmp #'-'
-        bne +
-        dex
-        inw tp
-        bra ++
-+       cmp #'+'
-        bne ++
-        inw tp
-++      phx
-        jsr number
-        plx
-        beq +
-        jsr ineg
-+       jmp setnum
+signednum:                      ; parse a number at tp -> acc (0 if none)
+        jsr fpval
+        jmp setnumf
 
 ; ---- READ / DATA / RESTORE ----
 !zone read

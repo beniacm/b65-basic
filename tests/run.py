@@ -31,6 +31,7 @@ def main():
     ap.add_argument('--screenshot')
     ap.add_argument('--timeout', type=float, default=15)
     ap.add_argument('--screen', action='store_true', help='also print final screen')
+    ap.add_argument('--realtime', action='store_true', help='run at real MEGA65 speed (no -sleepless)')
     ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
     script = open(a.script, 'rb').read()
@@ -44,6 +45,8 @@ def main():
         cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
                '-virtsd', '-sdimg', sd, '-extonboard', img, '-dumpmem', mem,
                '-dumpscreen', scr]
+        if a.realtime:
+            cmd.remove('-sleepless')
         if a.screenshot:
             cmd += ['-screenshot', os.path.abspath(a.screenshot)]
         env = dict(os.environ)

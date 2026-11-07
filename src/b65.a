@@ -9,6 +9,8 @@
 !src "src/exec.a"
 !src "src/eval.a"
 !src "src/funcs.a"
+!src "src/fp.a"
+!src "src/fp2.a"
 !src "src/vars.a"
 !src "src/os.a"
 !src "src/tables.a"

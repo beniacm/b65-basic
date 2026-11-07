@@ -1,0 +1,12 @@
+10 REM FP benchmark: frames (1/50 s) for 5000 ops, math unit vs software
+20 FOR M%=0 TO 1
+30 ?&AF=M%:A=1.2345:B=6.789
+40 F%=?&D7FA:FOR I%=1 TO 5000:C=A*B:NEXT:T1%=(?&D7FA-F%) AND 255
+50 F%=?&D7FA:FOR I%=1 TO 5000:C=A/B:NEXT:T2%=(?&D7FA-F%) AND 255
+60 F%=?&D7FA:FOR I%=1 TO 1000:C=SIN(A):NEXT:T3%=(?&D7FA-F%) AND 255
+65 F%=?&D7FA:FOR I%=1 TO 5000:NEXT:T0%=(?&D7FA-F%) AND 255
+70 IF M%=0 THEN PRINT "math unit:"; ELSE PRINT "software: ";
+80 PRINT " 5000 mul ";T1%;"  5000 div ";T2%;"  1000 SIN ";T3%;"  (empty loop ";T0%;")"
+90 NEXT
+100 ?&AF=0
+RUN

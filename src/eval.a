@@ -321,28 +321,54 @@ i_and:  ldq arg
         rts
 
 
-; integer add/sub with overflow check
+; integer add/sub (arg OP acc); overflow promotes to floating point
 !zone iaddsub
-i_sub:  jsr ineg
-i_add:
+i_add:  clc
+        lda arg
+        adc acc
+        sta fp64
+        lda arg+1
+        adc acc+1
+        sta fp64+1
+        lda arg+2
+        adc acc+2
+        sta fp64+2
         lda arg+3
-        sta tmp4
-        lda acc+3
-        sta tmp3
-        clc
-        ldq arg
-        adcq acc
+        adc acc+3
+        sta fp64+3
+        lda arg+3
+        eor acc+3
+        bmi .ok                 ; different signs never overflow
+        lda arg+3
+        eor fp64+3
+        bpl .ok
+        ldx #OP_ADD
+        jmp fpbinop
+.ok     ldq fp64
         stq acc
         ldz #0
-        lda tmp4
-        eor tmp3
-        bmi .ok                 ; different signs never overflow
-        lda tmp4
+        rts
+i_sub:  sec
+        lda arg
+        sbc acc
+        sta fp64
+        lda arg+1
+        sbc acc+1
+        sta fp64+1
+        lda arg+2
+        sbc acc+2
+        sta fp64+2
+        lda arg+3
+        sbc acc+3
+        sta fp64+3
+        lda arg+3
         eor acc+3
+        bpl .ok                 ; same signs never overflow
+        lda arg+3
+        eor fp64+3
         bpl .ok
-        lda #20                 ; Too big (no FP yet to promote into)
-        jmp error
-.ok     rts
+        ldx #OP_SUB
+        jmp fpbinop
 
 i_shl:  lda acc
         and #31
@@ -452,34 +478,9 @@ cmpres: sta tmp0
         sta etype
         rts
 
-; multiply using the MEGA65 hardware multiplier
-!zone imul
-i_mul:  lda arg+3
-        eor acc+3
-        sta tmp4                ; sign of result
-        jsr absacc
-        jsr absarg
-        ldq arg
-        stq $d770
-        ldq acc
-        stq $d774
-        ldz #0
-        lda $d77c
-        ora $d77d
-        ora $d77e
-        ora $d77f
-        bne .big
-        ldq $d778
-        stq acc
-        ldz #0
-        lda acc+3
-        bmi .big
-        lda tmp4
-        bpl +
-        jmp ineg
-+       rts
-.big    lda #20
-        jmp error
+; multiply: Z80 IMUL semantics (exact, overflow -> truncated float)
+i_mul:  jsr fswap
+        jmp imulz
 
 absacc: lda acc+3
         bpl +
@@ -592,13 +593,60 @@ udivmod:
         sta accx
         rts
 
-i_fdiv:
-i_pow:
+; ---- floating point binary operators ----
+; in: arg = left, acc = right, X = op ; out: acc/accx
+!zone fpbinop
+i_fdiv: ldx #OP_FDIV
+        bra fpbinop
+i_pow:  ldx #OP_POW
 fpbinop:
-        jmp nofp
-sfix:   lda accx
-        bne nofp
+        stx fpopc
+        jsr fswap               ; Z80 convention: FA = left, FB = right
+        lda fpopc
+        cmp #OP_POW
+        bne +
+        jsr fppow
+        bra .num
++       cmp #OP_EQ
+        bcc .intop
+        cmp #OP_SHL
+        bcs +
+        jsr float2              ; comparisons: float both
+        jsr sfloat
+        jsr fcmp
+        ldx fpopc
+        jmp cmpres
++       cmp #OP_ADD
+        bcc .intop              ; shifts
+        cmp #OP_MOD
+        bcs .intop              ; MOD, DIV
+        pha
+        jsr float2
+        jsr sfloat
+        pla
+        cmp #OP_ADD
+        bne +
+        jsr fadd
+        bra .num
++       cmp #OP_SUB
+        bne +
+        jsr fsub
+        bra .num
++       cmp #OP_MUL
+        bne +
+        jsr fmul
+        bra .num
++       jsr fdiv
+.num    lda #0
+        sta etype
         rts
+.intop  jsr fix2                ; integer-only operator: fix both
+        jsr sfix
+        jsr fswap               ; back to arg = left
+        lda fpopc
+        asl
+        tax
+        jmp (opstab,x)
 nofp:   lda #<msg_nofp
         sta errtxt
         lda #>msg_nofp
@@ -700,8 +748,23 @@ item:   jsr nxt
         jsr chknum
         lda accx
         beq .negi
-        jmp nofp
-.negi   jmp ineg
+        lda acc+3
+        eor #$80
+        sta acc+3
+        rts
+.negi   lda acc+3               ; -(-2^31) needs floating point
+        cmp #$80
+        bne .ng
+        lda acc
+        ora acc+1
+        ora acc+2
+        bne .ng
+        jsr sfloat
+        lda acc+3
+        eor #$80
+        sta acc+3
+        rts
+.ng     jmp ineg
 +       cmp #'+'
         bne +
         inw tp
@@ -749,66 +812,8 @@ chknum: lda etype
         jmp error
 +       rts
 
-; number constant: decimal integer (floats not yet)
-!zone number
-number: lda #0
-        sta acc
-        sta acc+1
-        sta acc+2
-        sta acc+3
-        sta accx
-        sta etype
-.l      lda (tp),z
-        cmp #'.'
-        beq .fp
-        cmp #'E'
-        beq .fp
-        sec
-        sbc #'0'
-        bcc .x
-        cmp #10
-        bcs .x
-        sta tmp0
-        inw tp
-        ; acc = acc*10 + digit, unsigned, error if > 2^31 (FP later)
-        ldq acc
-        stq arg
-        ldz #0
-        ldx #2
--       asl acc
-        rol acc+1
-        rol acc+2
-        rol acc+3
-        bcs .big
-        dex
-        bne -
-        clc
-        ldq acc
-        adcq arg
-        stq acc
-        ldz #0
-        bcs .big
-        asl acc
-        rol acc+1
-        rol acc+2
-        rol acc+3
-        bcs .big
-        lda acc
-        clc
-        adc tmp0
-        sta acc
-        bcc .l
-        inc acc+1
-        bne .l
-        inc acc+2
-        bne .l
-        inc acc+3
-        bne .l
-.big    jmp nofp
-.fp     jmp nofp
-.x      lda acc+3
-        bmi .big
-        rts
+; number constant -> CON (floating point package)
+number: jmp con
 
 !zone hexnum
 hexnum: inw tp
