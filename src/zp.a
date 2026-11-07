@@ -85,4 +85,6 @@ saveacc = $6a   ; 5 bytes save area
 cnt     = $6f
 lnum2   = $70
 optr    = $72
+rtmp    = $74
+rndn    = $76    ; 4 bytes
 NBUF    = $80   ; up to 40 bytes variable name buffer ($80-$a7)

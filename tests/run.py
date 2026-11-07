@@ -29,8 +29,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('script')
     ap.add_argument('--screenshot')
-    ap.add_argument('--timeout', type=float, default=60)
+    ap.add_argument('--timeout', type=float, default=15)
     ap.add_argument('--screen', action='store_true', help='also print final screen')
+    ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
     script = open(a.script, 'rb').read()
     with tempfile.TemporaryDirectory() as td:
@@ -47,12 +48,27 @@ def main():
             cmd += ['-screenshot', os.path.abspath(a.screenshot)]
         env = dict(os.environ, XEMU_SKIP_ONBOARDING='')
         env.pop('XEMU_SKIP_ONBOARDING')
-        try:
-            r = subprocess.run(['timeout', '-s', 'INT', str(a.timeout)] + cmd,
-                               capture_output=True, env=env, cwd=td)
-            rc = r.returncode
-        except Exception as e:
-            print('xemu failed:', e); return 2
+        sock = os.path.join(td, 'uart.sock')
+        cmd += ['-uartmon', sock]
+        import socket, time, signal
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=td)
+        t0 = time.time(); rc = None
+        while time.time() - t0 < a.timeout:
+            if p.poll() is not None:
+                rc = p.returncode; break
+            time.sleep(0.05)
+        if rc is None:
+            try:
+                s = socket.socket(socket.AF_UNIX); s.connect(sock); s.settimeout(1)
+                s.send(b'r\n'); time.sleep(0.3)
+                print('[uartmon] ' + s.recv(4096).decode(errors='replace').strip())
+                s.close()
+            except Exception as e:
+                print('[uartmon failed]', e)
+            p.send_signal(signal.SIGINT)
+            p.wait(); rc = 124
+        class R: pass
+        r = R(); r.stdout = p.stdout.read()
         if not os.path.exists(mem):
             print('no memory dump; xemu rc', rc)
             print(r.stdout.decode(errors='replace')[-3000:])
@@ -62,6 +78,20 @@ def main():
         t = t[:t.index(0)] if 0 in t else t
         out = t.decode('latin-1').replace('\r\n', '\n').replace('\r', '')
         sys.stdout.write(out)
+        if a.peek:
+            syms = {}
+            for ln in open(os.path.join(ROOT, 'build/b65.sym')):
+                p = ln.split('=')
+                if len(p) == 2:
+                    v = p[1].split(';')[0].strip()
+                    try: syms[p[0].strip()] = int(v.replace('$', '0x'), 16 if v.startswith('$') else 10)
+                    except ValueError: pass
+            for name in a.peek.split(','):
+                n, _, ln = name.partition(':')
+                ad = syms.get(n, None)
+                if ad is None: ad = int(n, 16)
+                ln = int(ln or 2)
+                print('%-10s $%04x: %s' % (n, ad, ' '.join('%02x' % b for b in m[ad:ad + ln])))
         if a.screen and os.path.exists(scr):
             print('\n----- screen -----')
             print(open(scr, encoding='latin-1').read())

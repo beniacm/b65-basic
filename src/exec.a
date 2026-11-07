@@ -500,18 +500,40 @@ movleft:
 +       stx tmp6
         rts
 
-; POPACC: pop a pushval'd value into acc / ACCS
-popacc: jsr popval
-        lda tmp5
+; POPACC: pop a pushval'd value directly into acc / ACCS (arg untouched)
+!zone popacc
+popacc: pla
+        sta rtmp
+        pla
+        sta rtmp+1
+        pla
         sta etype
-        bmi +
-        ldq arg
-        stq acc
-        ldz #0
-        lda argx
+        bmi .s
+        pla
         sta accx
+        pla
+        sta acc+3
+        pla
+        sta acc+2
+        pla
+        sta acc+1
+        pla
+        sta acc
+        bra .r
+.s      pla
+        sta slen
+        ldx #0
+-       cpx slen
+        beq .r
+        pla
+        sta ACCS,x
+        inx
+        bra -
+.r      lda rtmp+1
+        pha
+        lda rtmp
+        pha
         rts
-+       jmp strbuf2accs
 
 ; ---- PRINT ----
 !zone print
@@ -1167,14 +1189,12 @@ next:   jsr getsp
         ldq acc
         stq saveacc
         ldz #0
-        ldx #OP_GT
+        jsr swapaa              ; arg = var, acc = limit (clobbers X: LDQ)
+        ldx #OP_GT*2
         bit hexflg
         bpl +
-        ldx #OP_LT
-+       jsr swapaa              ; arg = var, acc = limit
-        txa
-        asl
-        tax
+        ldx #OP_LT*2
++
         jsr i_cmp               ; acc = (var > limit) or (var < limit)
         jsr acczero
         bne .done
@@ -1324,11 +1344,13 @@ dim:    jsr getname
         lda #0
         sta $d776
         sta $d777
+        phy
         ldq arg
         stq $d770
         ldq $d778
         stq arg
         ldz #0
+        ply
         dec cnt
         bne -
         sty tmp6                ; header size

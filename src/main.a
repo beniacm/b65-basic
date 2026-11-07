@@ -257,7 +257,15 @@ clopp:
         sta ptr2+1
         lda #1                  ; left mode
         sta lexmode
+        lda lnum                ; LEXAN may parse line numbers (GOTO n)
+        pha
+        lda lnum+1
+        pha
         jsr lexan2              ; tokenise ACCS(tp) -> BUFFER(ptr2)
+        pla
+        sta lnum+1
+        pla
+        sta lnum
         ldy #0
         lda #CR
         sta (ptr2),y

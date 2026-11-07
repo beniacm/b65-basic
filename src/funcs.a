@@ -35,6 +35,7 @@ functab:
         !byte TINT    : !word f_int
         !byte TEND    : !word f_end
         !byte TFN     : !word fn_call
+        !byte TLINO   : !word f_decode
         !byte $95     : !word nofp      ; ACS
         !byte $98     : !word nofp      ; ASN
         !byte $99     : !word nofp      ; ATN
@@ -148,8 +149,7 @@ f_rnd:  lda (tp),z
         ldz #0
         rts
 .range  ldq acc
-        stq saveacc+0           ; n (saveacc is also used by udivmod; copy)
-        stq tmpw                ; tmpw,tmpw2 = n
+        stq rndn
         ldz #0
         jsr rndstep
         ldq seed
@@ -158,7 +158,7 @@ f_rnd:  lda (tp),z
         lda arg+3
         and #$7f
         sta arg+3
-        ldq tmpw
+        ldq rndn
         stq acc
         ldz #0
         jsr udivmod             ; saveacc = arg mod n

@@ -346,15 +346,14 @@ i_add:
 i_shl:  lda acc
         and #31
         tax
-        ldq arg
-        cpx #0
         beq +
--       aslq
+-       asl arg
+        rol arg+1
+        rol arg+2
+        rol arg+3
         dex
         bne -
-+       stq acc
-        ldz #0
-        rts
++       jmp argtoacc
 i_lsr:  lda acc
         and #31
         tax

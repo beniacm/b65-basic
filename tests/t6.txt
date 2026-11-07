@@ -1,0 +1,5 @@
+DIM A%(10)
+PRINT A%(0)
+P%=?(TOP-2):PRINT P%
+DIM B% 3
+PRINT B%, TOP, LOMEM
