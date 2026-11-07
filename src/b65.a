@@ -19,6 +19,7 @@
 !src "src/font.a"
 !src "src/ovl.a"
 !src "src/m65.a"
+!src "src/sound.a"
 NOVL = 1
 ovltab: !word ovl_asm_img, ovl_asm_end-$e000
 code_end:

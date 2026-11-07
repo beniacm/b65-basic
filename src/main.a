@@ -137,6 +137,7 @@ vermsg: !text "B65 BASIC (45GS02) for MEGA65 - 0.1",CR,LF
 notice: !text "(C) Copyright R.T.Russell 2025",CR,LF,0
         jsr hwdetect
         jsr hwbanner
+        jsr sndinit
         jsr irqinit
         jsr crlf
         jmp clopp

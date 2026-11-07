@@ -1,0 +1,369 @@
+; B65 BASIC - SOUND / ENVELOPE on the MEGA65 SIDs, with per-channel queues
+; (Locomotive BASIC style) played from the raster interrupt.
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+;
+; SOUND chan, amp, pitch, duration   (BBC syntax)
+;   chan 0 = noise, 1..3 = tone (SID 1 voices); add &10 to flush the queue
+;   amp  -15..0 volume, or 1..16 envelope number
+;   pitch 0..255 quarter semitones (89 = 440 Hz), duration in 1/20 s
+; ENVELOPE n, t, pi1,pi2,pi3, pn1,pn2,pn3, aa,ad,as,ar, ala,ald
+;   mapped to a SID ADSR (pitch envelopes are not supported)
+; ADVAL(-5-c) = free slots in the queue of channel c
+
+SNDQ    = $1c00         ; PARBUF slot 6: queues (4 channels x 8 entries x 8 bytes)
+QLEN    = 8
+; entry: freq lo, freq hi, AD, SR, wave, frames lo, frames hi, (unused)
+snd_head = SNDQ+256     ; 4 bytes
+snd_tail = SNDQ+260
+snd_left = SNDQ+264     ; 4 x 2 bytes: frames left of the playing note (0 = idle)
+snd_wave = SNDQ+272     ; 4 bytes: waveform of the playing note
+envtab  = SNDQ+288      ; 16 envelopes x 2 bytes (AD, SR)
+
+sidbase: !byte $20, $00, $07, $0e   ; channel 0: SID 2 voice 1 (noise), 1-3: SID 1 voices
+
+sndinit:
+        ldx #0
+        lda #0
+-       sta SNDQ+256,x
+        inx
+        bne -
+        sta $d404
+        sta $d40b
+        sta $d412
+        sta $d424
+        lda #$0f
+        sta $d418               ; master volume
+        sta $d438
+        ldx #31                 ; default envelopes: fast attack, sustain full
+-       lda #$09
+        sta envtab,x
+        dex
+        lda #$f4
+        sta envtab,x
+        dex
+        bpl -
+        rts
+
+; SOUND statement
+!zone sound
+sound:  jsr expri               ; channel
+        lda acc
+        pha
+        jsr comma
+        jsr expri               ; amplitude / envelope
+        lda acc
+        pha
+        jsr comma
+        jsr expri               ; pitch
+        lda acc
+        pha
+        jsr comma
+        jsr expri               ; duration (1/20 s)
+        lda acc                 ; frames = d * 5 / 2 (PAL 50 Hz)
+        sta tmpw
+        lda acc+1
+        sta tmpw+1
+        lda acc+3
+        bpl +
+        lda #$ff                ; negative: "forever" (until the next note)
+        sta tmpw
+        lda #$7f
+        sta tmpw+1
+        bra .d2
++       asl tmpw
+        rol tmpw+1
+        asl tmpw
+        rol tmpw+1
+        lda tmpw
+        clc
+        adc acc
+        sta tmpw
+        lda tmpw+1
+        adc acc+1
+        lsr
+        sta tmpw+1
+        ror tmpw
+.d2     pla
+        sta tmp4                ; pitch
+        pla
+        sta tmp5                ; amplitude
+        pla
+        sta tmp6                ; channel (+flush)
+        and #3
+        sta tmp3
+        lda tmp6
+        and #$10                ; flush: empty the queue, silence the channel
+        beq +
+        ldx tmp3
+        sei
+        lda snd_tail,x
+        sta snd_head,x
+        txa
+        asl
+        tay
+        lda #1                  ; end the current note next frame
+        sta snd_left,y
+        lda #0
+        sta snd_left+1,y
+        cli
++       ; frequency
+        lda tmp4
+        ldx #0
+-       cmp #48
+        bcc +
+        sbc #48
+        inx
+        bra -
++       asl
+        tay
+        lda sidpitch,y
+        sta acc
+        lda sidpitch+1,y
+        sta acc+1
+-       dex
+        bmi +
+        asl acc
+        rol acc+1
+        bcc -
+        lda #$ff                ; above the SID range: clamp
+        sta acc
+        sta acc+1
++       ; ADSR
+        lda tmp5
+        bmi .vol
+        beq .vol
+        dec                     ; envelope 1..16
+        and #15
+        asl
+        tay
+        lda envtab,y
+        sta acc+2
+        lda envtab+1,y
+        sta acc+3
+        bra .wv
+.vol    eor #$ff                ; -15..0 -> sustain level 15..0
+        inc
+        and #15
+        asl
+        asl
+        asl
+        asl
+        ora #$04                ; short release
+        sta acc+3
+        lda #$00
+        sta acc+2
+.wv     lda #$41                ; pulse
+        ldx tmp3
+        bne +
+        lda #$81                ; channel 0: noise
++       sta tmp2
+        ; wait for a free queue slot (ESCape possible)
+.wait   ldx tmp3
+        lda snd_tail,x
+        inc
+        and #QLEN-1
+        cmp snd_head,x
+        bne .put
+        jsr trap
+        bra .wait
+.put    lda snd_tail,x          ; entry address = SNDQ + chan*64 + tail*8
+        asl
+        asl
+        asl
+        sta tmp0
+        txa
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl
+        clc
+        adc tmp0
+        tay
+        lda acc
+        sta SNDQ,y
+        lda acc+1
+        sta SNDQ+1,y
+        lda acc+2
+        sta SNDQ+2,y
+        lda acc+3
+        sta SNDQ+3,y
+        lda tmp2
+        sta SNDQ+4,y
+        lda tmpw
+        sta SNDQ+5,y
+        lda tmpw+1
+        sta SNDQ+6,y
+        sei
+        lda snd_tail,x
+        inc
+        and #QLEN-1
+        sta snd_tail,x
+        cli
+        jmp xeq
+
+; ENVELOPE n,t,pi1,pi2,pi3,pn1,pn2,pn3,aa,ad,as,ar,ala,ald
+!zone envelope
+envelope:
+        jsr expri
+        lda acc
+        dec
+        and #15
+        pha
+        ldx #13                 ; 13 more parameters
+-       phx
+        jsr comma
+        jsr expri
+        plx
+        lda acc
+        sta NUMBUF,x            ; NUMBUF[13..1]: t, pi1..pn3, aa, ad, as, ar, ala, ald
+        dex
+        bne -
+        pla
+        asl
+        tay
+        ; attack nibble from AA (attack rate): faster rate -> smaller value
+        lda NUMBUF+6            ; aa
+        jsr .rate
+        asl
+        asl
+        asl
+        asl
+        sta tmp0
+        lda NUMBUF+5            ; ad (decay rate)
+        jsr .rate
+        ora tmp0
+        sta envtab,y
+        lda NUMBUF+1            ; ald: decay target level 0..126 -> sustain
+        lsr
+        lsr
+        lsr
+        and #$f0
+        sta tmp0
+        lda NUMBUF+3            ; ar: release rate
+        jsr .rate
+        ora tmp0
+        sta envtab+1,y
+        jmp xeq
+.rate   ; |rate| 0..127 -> SID nibble 15..0 (0 = slowest)
+        bpl +
+        eor #$ff
+        inc
++       lsr
+        lsr
+        lsr
+        eor #$0f
+        and #$0f
+        rts
+
+; ADVAL(n): n = -5..-8: free slots in sound queue 0..3; other values 0
+f_adval:
+        jsr itemi
+        lda acc+3
+        bpl .z
+        lda acc
+        eor #$ff                ; -n-1 = 4..7 for -5..-8
+        sec
+        sbc #4
+        cmp #4
+        bcs .z
+        sta tmp3
+        bra adval_snd
+.z      lda #0
+        tax
+        jmp setw
+adval_snd:
+        ldx tmp3
+        lda snd_head,x
+        sec
+        sbc snd_tail,x
+        dec
+        and #QLEN-1
+        ldx #0
+        jmp setw
+
+; ---- interrupt part: called once per frame ----
+!zone sndirq
+sndirq: ldx #3
+.c      txa
+        asl
+        tay
+        lda snd_left,y
+        ora snd_left+1,y
+        beq .idle
+        lda snd_left,y          ; count down the playing note
+        bne +
+        lda snd_left+1,y
+        dec
+        sta snd_left+1,y
++       lda snd_left,y
+        dec
+        sta snd_left,y
+        ora snd_left+1,y
+        bne .next
+        ; note finished: gate off
+        lda sidbase,x
+        tay
+        lda snd_wave,x
+        and #$fe
+        sta $d404,y
+.idle   lda snd_head,x          ; start the next queued note
+        cmp snd_tail,x
+        beq .next
+        asl
+        asl
+        asl
+        sta snd_tmp
+        txa
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl
+        clc
+        adc snd_tmp
+        sta snd_tmp             ; entry offset
+        phx
+        lda sidbase,x
+        tax                     ; X = SID register offset
+        ldy snd_tmp
+        lda SNDQ,y
+        sta $d400,x
+        lda SNDQ+1,y
+        sta $d401,x
+        lda #$00                ; pulse width 50%
+        sta $d402,x
+        lda #$08
+        sta $d403,x
+        lda SNDQ+2,y
+        sta $d405,x
+        lda SNDQ+3,y
+        sta $d406,x
+        lda SNDQ+4,y
+        sta $d404,x             ; gate on
+        plx
+        sta snd_wave,x
+        phx
+        txa
+        asl
+        tax
+        lda SNDQ+5,y
+        sta snd_left,x
+        lda SNDQ+6,y
+        sta snd_left+1,x
+        ora snd_left,x
+        bne +
+        inc snd_left,x          ; zero duration: one frame
++       plx
+        lda snd_head,x
+        inc
+        and #QLEN-1
+        sta snd_head,x
+.next   dex
+        lbpl .c
+        rts
+snd_tmp = SNDQ+352
+
+!src "src/sndtab.a"

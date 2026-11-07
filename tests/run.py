@@ -56,6 +56,7 @@ def main():
                    '-prgtest', sb + '@$10000', '-dumpmem', mem, '-dumpscreen', scr]
         if a.realtime:
             cmd.remove('-sleepless')
+        cmd += os.environ.get('XEMU_EXTRA', '').split()
         if a.screenshot:
             cmd += ['-screenshot', os.path.abspath(a.screenshot)]
         env = dict(os.environ)

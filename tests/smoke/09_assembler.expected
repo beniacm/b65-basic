@@ -3,7 +3,7 @@ Derived from BBC BASIC (Z80) v5
 (C) Copyright R.T.Russell 2025
 MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
->10 DIM code% 300
+>10 code%=&A000
 >20 FOR pass%=0 TO 3 STEP 3
 >30 P%=code%
 >40 [OPT pass%
@@ -23,71 +23,71 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >180 PRINT ~code%,P%-code%
 >190 FOR I%=code% TO P%-1:PRINT ~?I%;" ";:NEXT
 >RUN
-85C4                         OPT pass%
-85C4 A9 41                   LDA #&41
-85C6 8D 00 08                STA &0800
-85C9 85 12                   STA &12
-85CB A2 03                   LDX #3
-85CD CA                      DEX
-85CE D0 FD                   BNE loop
-85D0 80 FB                   BRA loop
-85D2 42 42 A5 10             LDQ &10
-85D6 42 42 8D 34 12          STQ &1234
-85DB 42 42 B2 20             LDQ (&20)
-85DF 42 42 EA B2 20          LDQ [&20]
-85E4 42 42 65 30             ADCQ &30
-85E8 42 42 0A                ASLQ
-85EB 42 42 1A                INQ
-85EE 42 42 C5 40             CPQ &40
-85F2 EA B2 20                LDA [&20],Z
-85F5 EA 92 22                STA [&22],Z
-85F8 11 22                   ORA (&22),Y
-85FA B2 24                   LDA (&24),Z
-85FC A1 26                   LDA (&26,X)
-85FE E2 28                   LDA (&28,SP),Y
-8600 29 0F                   AND #&0F
-8602 5D 34 12                EOR &1234,X
-8605 19 12 00                ORA &12,Y
-8608 0A                      ASL A
-8609 76 34                   ROR &34,X
-860B 4E 34 12                LSR &1234
-860E 1A                      INC
-860F 3A                      DEC A
-8610 20 53 86                JSR sub
-8613 6C 34 12                JMP (&1234)
-8616 7C 34 12                JMP (&1234,X)
-8619 22 34 12                JSR (&1234)
-861C D3 A6 FF                LBNE start
-861F 63 32 00                BSR sub
-8622 83 A0 FF                LBRA start
-8625 3F 12 9C                BBR3 &12,start
-8628 D7 34                   SMB5 &34
-862A 07 56                   RMB0 &56
-862C F4 34 12                PHW #&1234
-862F FC 78 56                PHW &5678
-8632 62 02                   RTN #2
-8634 42                      NEG
-8635 43                      ASR A
-8636 CB 34 12                ASW &1234
-8639 EB 34 12                ROW &1234
-863C E3 12                   INW &12
-863E C3 14                   DEW &14
-8640 4B                      TAZ
-8641 6B                      TZA
-8642 5B                      TAB
-8643 7B                      TBA
-8644 0B                      TSY
-8645 2B                      TYS
-8646 02                      CLE
-8647 03                      SEE
-8648 5C                      MAP
-8649 EA                      EOM
-864A A3 05                   LDZ #5
-864C AB 34 12                LDZ &1234
-864F C2 01                   CPZ #1
-8651 64 12                   STZ &12
-8653 60                      RTS
-      85C4       144
+A000                         OPT pass%
+A000 A9 41                   LDA #&41
+A002 8D 00 08                STA &0800
+A005 85 12                   STA &12
+A007 A2 03                   LDX #3
+A009 CA                      DEX
+A00A D0 FD                   BNE loop
+A00C 80 FB                   BRA loop
+A00E 42 42 A5 10             LDQ &10
+A012 42 42 8D 34 12          STQ &1234
+A017 42 42 B2 20             LDQ (&20)
+A01B 42 42 EA B2 20          LDQ [&20]
+A020 42 42 65 30             ADCQ &30
+A024 42 42 0A                ASLQ
+A027 42 42 1A                INQ
+A02A 42 42 C5 40             CPQ &40
+A02E EA B2 20                LDA [&20],Z
+A031 EA 92 22                STA [&22],Z
+A034 11 22                   ORA (&22),Y
+A036 B2 24                   LDA (&24),Z
+A038 A1 26                   LDA (&26,X)
+A03A E2 28                   LDA (&28,SP),Y
+A03C 29 0F                   AND #&0F
+A03E 5D 34 12                EOR &1234,X
+A041 19 12 00                ORA &12,Y
+A044 0A                      ASL A
+A045 76 34                   ROR &34,X
+A047 4E 34 12                LSR &1234
+A04A 1A                      INC
+A04B 3A                      DEC A
+A04C 20 8F A0                JSR sub
+A04F 6C 34 12                JMP (&1234)
+A052 7C 34 12                JMP (&1234,X)
+A055 22 34 12                JSR (&1234)
+A058 D3 A6 FF                LBNE start
+A05B 63 32 00                BSR sub
+A05E 83 A0 FF                LBRA start
+A061 3F 12 9C                BBR3 &12,start
+A064 D7 34                   SMB5 &34
+A066 07 56                   RMB0 &56
+A068 F4 34 12                PHW #&1234
+A06B FC 78 56                PHW &5678
+A06E 62 02                   RTN #2
+A070 42                      NEG
+A071 43                      ASR A
+A072 CB 34 12                ASW &1234
+A075 EB 34 12                ROW &1234
+A078 E3 12                   INW &12
+A07A C3 14                   DEW &14
+A07C 4B                      TAZ
+A07D 6B                      TZA
+A07E 5B                      TAB
+A07F 7B                      TBA
+A080 0B                      TSY
+A081 2B                      TYS
+A082 02                      CLE
+A083 03                      SEE
+A084 5C                      MAP
+A085 EA                      EOM
+A086 A3 05                   LDZ #5
+A088 AB 34 12                LDZ &1234
+A08B C2 01                   CPZ #1
+A08D 64 12                   STZ &12
+A08F 60                      RTS
+      A000       144
         A9         41         8D          0          8         85         12    
      A2          3         CA         D0         FD         80         FB       
   42         42         A5         10         42         42         8D         3
@@ -98,7 +98,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
          22         11         22         B2         24         A1         26   
       E2         28         29          F         5D         34         12      
    19         12          0          A         76         34         4E         
-34         12         1A         3A         20         53         86         6C 
+34         12         1A         3A         20         8F         A0         6C 
         34         12         7C         34         12         22         34    
      12         D3         A6         FF         63         32          0       
   83         A0         FF         3F         12         9C         D7         3

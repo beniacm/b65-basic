@@ -439,4 +439,3 @@ lexx:   jsr lex
         sta ptr1+1
         jsr lex0
 +       rts
-sndirq: rts

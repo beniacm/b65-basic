@@ -1,4 +1,4 @@
-10 DIM code% 300
+10 code%=&A000
 20 FOR pass%=0 TO 3 STEP 3
 30 P%=code%
 40 [OPT pass%

@@ -1,0 +1,8 @@
+; *** generated in the build notes (tools inline): SID Fn for BBC pitch 0..47
+sidpitch:
+	!word $0818,$0837,$0855,$0874,$0894,$08b4,$08d4,$08f5
+	!word $0916,$0938,$095a,$097d,$09a0,$09c4,$09e9,$0a0e
+	!word $0a33,$0a59,$0a80,$0aa7,$0ace,$0af7,$0b1f,$0b49
+	!word $0b73,$0b9d,$0bc9,$0bf5,$0c21,$0c4e,$0c7c,$0cab
+	!word $0cda,$0d0a,$0d3a,$0d6b,$0d9d,$0dd0,$0e03,$0e38
+	!word $0e6d,$0ea2,$0ed9,$0f10,$0f48,$0f81,$0fbb,$0ff5

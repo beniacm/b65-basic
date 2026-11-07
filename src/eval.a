@@ -309,10 +309,12 @@ opstab: !word i_or, i_eor, i_and, i_cmp, i_cmp, i_cmp, i_cmp, i_cmp, i_cmp
 i_or:   ldq arg
         orq acc
         stq acc
+        ldz #0
         rts
 i_eor:  ldq arg
         eorq acc
         stq acc
+        ldz #0
         rts
 i_and:  ldq arg
         andq acc
