@@ -294,7 +294,9 @@ mousirq:
         adc #50
         sta $d001
 .x      rts
-.mv     ; A = new pot, Y = old -> X/Y = signed delta, A = new pot (C64 1351 driver)
+.mv     ; A = new pot, Y = old -> X/Y = signed delta, A = the new "old" value.
+        ; As the C64 1351 driver: no movement (|change| < 2) keeps the old
+        ; value, so slow movement accumulates instead of being lost.
         pha
         sty mouse_tmp
         sec
@@ -303,6 +305,7 @@ mousirq:
         cmp #$40
         bcs .neg
         lsr
+        beq .none
         tax
         ldy #0
         pla
@@ -310,10 +313,10 @@ mousirq:
 .neg    ora #$c0
         cmp #$ff
         bne +
-        lda #0
-        tax
-        tay
-        pla
+.none   pla
+        ldx #0
+        ldy #0
+        lda mouse_tmp           ; keep the old value
         rts
 +       sec
         ror
