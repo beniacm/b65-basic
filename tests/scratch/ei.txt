@@ -1,0 +1,14 @@
+10 FOR N%=1 TO 4
+20 IF N%=1 THEN
+30   PRINT "one"
+40 ELSE IF N%=2 THEN
+50   PRINT "two"
+60 ELSE IF N%=3 THEN;
+70   IF N%>0 THEN
+80     PRINT "three (nested)"
+90   ENDIF
+100 ELSE
+110   PRINT "other"
+120 ENDIF
+130 NEXT
+RUN

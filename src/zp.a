@@ -148,6 +148,7 @@ ipcnt   = $f3
 ipbits  = $f4   ; 4 bytes
 DSTK    = $0780 ; STR digit stack (pairs A,F), 24 entries
 rtmp2   = $fc   ; 2
+elseln  = MISC+107       ; current line starts with ELSE (IF scanning)
 casel   = $fe
 retmask = $ff
 ; misc RAM variables (absolute addressing) after NUMBUF

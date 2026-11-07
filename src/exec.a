@@ -976,13 +976,62 @@ skipblk:
 
 ; ---- IF ----
 !zone if
+; THENEOL: tp after THEN: skip spaces and an optional ';' (v5 "ELSE IF c THEN;")
+; Z set if the line ends there (multi-line IF)
+theneol:
+        jsr nxt
+        cmp #';'
+        bne +
+        inw tp
+        jsr nxt
++       cmp #CR
+        rts
+; MLSCAN: skip a multi-line IF block. A = 0: stop at ELSE (line start) or
+; ENDIF of this level; A = 1: stop only at ENDIF. "ELSE IF ... THEN" lines
+; continue the chain and do not open a new level.
+mlscan: sta tmp5
+        lda #0
+        sta tmp6                ; depth
+.ml     jsr scan
+        bcs .miss
+        cmp #CR
+        bne .mc
+        lda #0
+        sta elseln
+        jsr nxt
+        cmp #TELSE
+        bne .ml
+        lda #1
+        sta elseln
+        lda tmp6
+        ora tmp5
+        bne .ml
+        inw tp                  ; ELSE at this level: run what follows it
+        rts
+.mc     cmp #TTHEN
+        bne +
+        jsr theneol
+        bne .ml
+        lda elseln              ; ELSE IF ... THEN: same chain
+        bne .ml
+        inc tmp6
+        bra .ml
++       cmp #TENDIF
+        bne .ml
+        lda tmp6
+        beq +
+        dec tmp6
+        bra .ml
++       rts
+.miss   lda #49
+        jmp error
+
 if:     jsr expri
         jsr nxt
         cmp #TTHEN
         bne .nothen
         inw tp
-        jsr nxt
-        cmp #CR
+        jsr theneol
         beq .multi
 .nothen jsr acczero
         beq .false
@@ -1018,60 +1067,17 @@ if:     jsr expri
 .eol    jmp warm
 .multi  jsr acczero
         bne .mtrue
-        ; false: skip to ELSE at line start or ENDIF (same level)
-        lda #0
-        sta tmp6
-.ml     jsr scan
-        bcs .miss
-        cmp #CR
-        bne .mc
-        jsr nxt
-        cmp #TELSE
-        bne .ml
-        lda tmp6
-        bne .ml
-        inw tp
-        jmp xeq
-.mc     cmp #TTHEN
-        bne +
-        jsr nxt
-        cmp #CR
-        bne .ml
-        inc tmp6
-        bra .ml
-+       cmp #TENDIF
-        bne .ml
-        lda tmp6
-        beq +
-        dec tmp6
-        bra .ml
-+       jmp xeq
+        lda #0                  ; false: to ELSE (maybe ELSE IF) or ENDIF
+        sta elseln
+        jsr mlscan
 .mtrue  jmp xeq
-.miss   lda #49
-        jmp error
 
 !zone mlelse
-; ELSE at start of a line reached in normal flow: skip to matching ENDIF
-mlelse: lda #0
-        sta tmp6
-.ml     jsr scan
-        bcs .miss
-        cmp #TTHEN
-        bne +
-        jsr nxt
-        cmp #CR
-        bne .ml
-        inc tmp6
-        bra .ml
-+       cmp #TENDIF
-        bne .ml
-        lda tmp6
-        beq +
-        dec tmp6
-        bra .ml
-+       jmp xeq
-.miss   lda #49
-        jmp error
+; ELSE at start of a line reached in normal flow: skip to the matching ENDIF
+mlelse: lda #1
+        sta elseln
+        jsr mlscan
+        jmp xeq
 
 f_decode:                       ; TLINO function: tp after token
         jsr decode0
