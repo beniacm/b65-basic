@@ -297,14 +297,15 @@ gx_colour:
         jmp xeq
 !zone gx_origin
 gx_origin:
-        jsr getxy
-        lda gx0
+        lda #2                  ; absolute (not relative to the old origin)
+        jsr getargs
+        lda GARG
         sta gorgx
-        lda gx0+1
+        lda GARG+1
         sta gorgx+1
-        lda gy0
+        lda GARG+2
         sta gorgy
-        lda gy0+1
+        lda GARG+3
         sta gorgy+1
         jmp xeq
 

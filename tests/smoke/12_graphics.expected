@@ -14,5 +14,5 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >90 MODE 0:PRINT A$
 >RUN
 graphics text
-77 0 0 0 3 -1
+200 28 224 3 77 -1
 >
