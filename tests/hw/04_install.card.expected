@@ -16,7 +16,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
       CF00
 >INSTALL "B65LIB1"
 >PRINT ~HIMEM
-      CEAE
+      CF00
 >10 FOR I%=1 TO 2
 >20 INSTALL "B65LIB2"
 >30 PRINT FNlibsq(7):PROClibhi("world"):PROClib3
@@ -35,7 +35,7 @@ lib3 42
         49
 hello world
 lib3 42
-      CE81
+      CF00
 main 9
 trapped No such FN/PROC
 >INSTALL "B65NONE"
@@ -48,7 +48,7 @@ lib3 42
         49
 hello world
 lib3 42
-      CE81
+      CF00
 main 9
 trapped No such FN/PROC
 >

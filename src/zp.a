@@ -9,6 +9,37 @@
         ldz #0
         plp
 }
+; Program text lives in bank PBANK; 16-bit program addresses below PMIN
+; are bank-0 buffers (ACCS, BUFFER, EVBUF).
+PBANK   = 1
+PMIN    = $0800
+PLIM    = $f800         ; end of program space in bank 1 (colour RAM above)
+; LPY p: A = program byte at (p)+Y (flags from it); X, Y kept; Z stays 0
+!macro lpy .p {
+        lda .p
+        sta pp
+        lda .p+1
+        sta pp+1
+        tya
+        taz
+        lda [pp],z
+        php
+        ldz #0
+        plp
+}
+; SPY p: program byte at (p)+Y := A; X, Y kept
+!macro spy .p {
+        pha
+        lda .p
+        sta pp
+        lda .p+1
+        sta pp+1
+        tya
+        taz
+        pla
+        sta [pp],z
+        ldz #0
+}
 !macro setsp {
         sei
         txs
@@ -36,9 +67,13 @@ SCRW    = 80
 SCRH    = 25
 HIMEM0  = $CF00         ; default HIMEM (stack grows down from here)
 
-; test-script / transcript (bank 1, accessed with 32-bit pointers)
-TSTMAGIC = $00010000    ; "B65T" magic, script follows at +4
-TRANSCR  = $00018000    ; transcript of all output (testing only)
+; test-script / transcript (accessed with 32-bit pointers). Xemu puts the
+; script at TSTMAGIC (bank 1, the program bank): test_init copies it to
+; TSTCOPY in attic RAM first. The Xemu transcript is in bank 4 (28 KB).
+TSTMAGIC = $00010000    ; "B65TEST:" magic, script follows
+TSTCOPY  = $08020000    ; attic copy of the script (Xemu)
+TRANSCR  = $00048000    ; transcript of all output (Xemu testing only)
+TRANSEND = $f0          ; ... up to $4F000
 
 ; ---------------- zero page ----------------
 acc     = $04   ; 4 bytes: integer / mantissa

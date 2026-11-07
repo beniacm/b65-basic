@@ -28,7 +28,7 @@ ovltab: !word ovl_asm_img, ovl_asm_end-$e000
 code_end:
         !align 255, 0
 prog_start:
-!if prog_start > $9000 { !error "interpreter too large" }
+!if prog_start > $a000 { !error "interpreter too large" }
 ; ---- overlay images: copied to bank 4 at start-up, then free for programs ----
 !src "src/asm.a"
 !if ovl_asm_end-$e000 > $1ffa { !error "overlay 0 too large" }
@@ -39,4 +39,4 @@ prog_start:
 !src "src/fat.a"
 !if ovl_fat_end-$e000 > $1ffa { !error "overlay 3 too large" }
 ovl_images_end:
-!if ovl_images_end > $c000 { !error "PRG too large" }
+!if ovl_images_end > $cf00 { !error "PRG too large" }

@@ -116,7 +116,7 @@ def main():
             print(r.stdout.decode(errors='replace')[-3000:])
             return 2
         m = open(mem, 'rb').read()
-        t = m[0x18000:0x20000]
+        t = m[0x48000:0x4f000]
         t = t[:t.index(0)] if 0 in t else t
         out = t.decode('latin-1').replace('\r\n', '\n').replace('\r', '')
         sys.stdout.write(out)

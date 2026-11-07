@@ -289,20 +289,18 @@ CR LF. PTR#= beyond EXT extends a writable file with zeros; on a read-only
 one it stops at EXT. Writing to an OPENIN channel gives "Access denied".
 Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
 
-### INSTALL (step 2)
+### INSTALL (step 2, moved in step 3)
 
-`INSTALL "file"` loads a program file as a library. The file is loaded into
-bank 4 (`$48000`) first and its line structure checked ("Bad library"),
-then HIMEM is lowered by its length + 13 and the stack contents are moved
-down with it (interrupts off; `onersp` adjusted). Block layout at the new
-HIMEM: length (2), 8.3 name (11), program. `libase` (`$06C0`) points to the
-lowest library; libraries end at `HIMEM0`. FN/PROC lookup (`finddef`)
-scans the program first, then each library (`libnext`), and caches the DEF
+`INSTALL "file"` loads a program file as a library at the top of the
+program bank: block = length (2), 8.3 name (11), file. The file is loaded
+straight into place below the lowest library (`libase`, `$06C0`; `PLIM` =
+`$F800` when there is none) and above TOP, its line structure is checked
+("Bad library"), then `libase` is lowered. FN/PROC lookup (`finddef`) scans
+the program first, then each library (`libnext`), and caches the DEF
 address in the PROC/FN lists as usual. Installing the same name again does
-nothing. Libraries stay until the next cold start (HIMEM is only reset
-there). Limits: 28 KB per library; DIM LOCAL blocks on the stack are not
-relocated, so INSTALL belongs at the start of a program (it works inside
-loops and PROCs otherwise). Tested by `tests/hw/04_install.txt`.
+nothing. Libraries stay until the next cold start; program lines and LOAD
+must fit below `libase`. Up to 32 KB per library. Tested by
+`tests/hw/04_install.txt`.
 
 ### MEGA65 extensions (M5)
 
@@ -374,15 +372,32 @@ loops and PROCs otherwise). Tested by `tests/hw/04_install.txt`.
 * **Far memory.** `?addr`, `!addr` and `|addr` with 28-bit addresses
   (>= `&10000`) use 32-bit flat addressing, so they reach all chip RAM and
   attic RAM (`&8000000`-). `$addr` strings are limited to bank 0.
-* **Interpreter out of bank 0.** Done only in part: the assembler and
-  graphics run from bank 4 through the overlay mechanism, while the core
-  (`$2000`-`$86FF`, about 26 KB) stays in bank 0. Program space is
-  PAGE=`$8700` to HIMEM=`$CF00`, about 18 KB. Next steps:
-  * move FP formatting/transcendentals and LIST/RENUMBER/editor/files into
-    overlays,
-  * move the text screen and PARBUF out of bank 0 and start the core at
-    `$0800`,
-  * allocate arrays and strings in chip/attic RAM through 28-bit pointers.
+* **Big program space (step 3).** The program text lives in its own bank:
+  bank 1, PAGE = `&10800`, up to `&1F7FF` (the colour RAM mirror starts at
+  `&1F800`), about 60 KB minus installed libraries. Variables, heap and the
+  CPU stack stay in bank 0 (LOMEM = end of the interpreter, about `&8E00`,
+  to HIMEM `&CF00`, about 16 KB).
+  * `tp` is a 32-bit pointer (`$48`-`$4B`) and every text read is
+    `lda [tp],z` (`+ldtpy` for the few Y-indexed reads). Its bank byte is
+    derived from the 16-bit address whenever the high byte is stored
+    (`settph`): below `PMIN` = `$0800` it is a bank-0 buffer (ACCS, BUFFER,
+    EVBUF), otherwise the program bank. So all 16-bit text pointers kept in
+    stack frames, DEF lists, DATA pointers etc. stay valid.
+  * Code that walks program lines through ptr1/2/3 (line store, LIST,
+    RENUMBER, DELETE, OLD, findl, gettop, finddef, libraries, DATA search,
+    RETURN-parameter scan, ERL) reads/writes with `lp1y`..`sp3y`, which go
+    through the 32-bit program pointer `pp` (`$4C`, bank byte fixed at 1).
+  * PAGE and TOP return 28-bit addresses (`&10800`...), so `?PAGE` etc. work
+    through the far indirection. `PAGE=` takes the low 16 bits (>= `&800`).
+  * LOAD/CHAIN load into bank 1 and refuse files that do not fit ("No
+    room"); SAVE writes from bank 1.
+  * INSTALL puts libraries at the top of bank 1 (below `&1F800`): no stack
+    move any more; HIMEM is unchanged.
+  * Tested by `tests/hw/07_bigprog.txt` (a 38.5 KB program written with
+    BPUT#, loaded, edited at both ends, run with GOSUB/PROC to its end,
+    RENUMBERed, saved, reloaded, 30 KB deleted).
+  * Later: more heap by moving cold code (LIST, RENUMBER, editor, errors)
+    into overlays, or arrays in attic RAM.
 
 ### Memory map (current)
 
@@ -398,11 +413,15 @@ loops and PROCs otherwise). Tested by `tests/hw/04_install.txt`.
 | `$1000`-`$1BFF` | PARBUF: 6 parameter slots; during file writes also FAT/dir sector buffers and FAT state (`$1000`-`$147F`) |
 | `$1C00`-`$1DFF` | sound queues, envelopes, graphics argument buffer |
 | `$1E00`-`$1EFF` | FN result slot |
-| `$1F00`-`$1FA3` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries |
-| `$2001`-`$86FF` | PRG stub + resident interpreter |
-| `$8700`-`$CEFF` | PAGE..HIMEM (program, variables, CPU stack from the top) |
+| `$1F00`-`$1FAB` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries, mouse |
+| `$1FB0`-`$1FB7` | testmode, lexmode, AUTO number/step, TRACE limit (moved out of zero page) |
+| `$2001`-`$8DFF` | PRG stub + resident interpreter (overlay images follow in the PRG up to `$CF00` and are copied to bank 4 at start-up) |
+| `$8E00`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
 | `$E000`-`$FFFF` | overlay window (MAP) |
-| bank 1 `$10000`/`$18000` | test script / transcript (test mode only) |
+| bank 1 `$10800`-`$1F7FF` | program text (PAGE..TOP), libraries at the top |
+| bank 1 `$10000` | test script as loaded by Xemu, copied to attic `$8020000` at start-up |
+| bank 4 `$48000`-`$4EFFF` | Xemu test transcript (test mode only) |
+| attic `$8508000` | FILL seed stack |
 | bank 4 `$40000`-`$47FFF` | overlay images (assembler, graphics, array arithmetic, files) |
 | bank 4 `$4F700`/`$4F800` | line history / font |
 | attic `$8100000`-`$84FFFFF` | file channel buffers (1 MB each) |

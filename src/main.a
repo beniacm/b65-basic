@@ -109,10 +109,14 @@ cold_test:
         sta STAVAR+$200,x       ; NUMBUF + MISC variables
         inx
         bne -
-        lda #<HIMEM0            ; no libraries
+        lda #<PLIM              ; no libraries
         sta libase
-        lda #>HIMEM0
+        lda #>PLIM
         sta libase+1
+        lda #PBANK              ; program pointer: bank of the program text
+        sta pp+2
+        lda #0
+        sta pp+3
         lda #0                  ; keyboard ring buffer
         sta kbhead
         sta kbtail
@@ -141,9 +145,9 @@ cold_test:
         sta tracen+1
         sta autono
         sta autono+1
-        lda #<prog_start
+        lda #<PMIN              ; program text in bank PBANK
         sta page
-        lda #>prog_start
+        lda #>PMIN
         sta page+1
         jsr cls
         jsr newit
@@ -237,7 +241,7 @@ clopp:
         lda #<ACCS
         sta tp
         lda #>ACCS
-        sta tp+1
+        jsr settph
         lda autono
         ora autono+1
         bne .notcmd             ; in AUTO: everything is a program line
@@ -258,7 +262,7 @@ clopp:
 .notcmd lda #<ACCS
         sta tp
         lda #>ACCS
-        sta tp+1
+        jsr settph
         lda #0
         sta lnum
         sta lnum+1
@@ -306,7 +310,7 @@ clopp:
         lda #<BUFFER            ; direct mode
         sta tp
         lda #>BUFFER
-        sta tp+1
+        jsr settph
         jmp xeq
 .store  jsr findl
         bne +
@@ -332,22 +336,18 @@ insline:
         adc #4
         sta tmp5                ; total length
         jsr gettop              ; ptr2 = TOP
-        ; check room: TOP + len + 256 < SP
+        ; check room: TOP + len < libase (end of program space)
         lda ptr2
         clc
         adc tmp5
         sta ptr3
         lda ptr2+1
-        adc #1
+        adc #0
         sta ptr3+1
-        tsx
-        stx tmpw
-        tsy
-        sty tmpw+1
         lda ptr3
-        cmp tmpw
+        cmp libase
         lda ptr3+1
-        sbc tmpw+1
+        sbc libase+1
         bcc .room
         lda #0
         jmp error               ; No room
@@ -372,10 +372,10 @@ insline:
         bne +
         dec ptr3+1
 +       dec ptr3
-        lda (ptr3),y
+        jsr lp3y
         phy
         ldy tmp5
-        sta (ptr3),y
+        jsr sp3y
         ply
         lda tmpw
         bne +
@@ -384,17 +384,17 @@ insline:
         bra .mv
 .moved  ldy #0
         lda tmp5
-        sta (ptr1),y
+        jsr sp1y
         iny
         lda lnum
-        sta (ptr1),y
+        jsr sp1y
         iny
         lda lnum+1
-        sta (ptr1),y
+        jsr sp1y
         ldx #0
 .cp     lda BUFFER,x
         iny
-        sta (ptr1),y
+        jsr sp1y
         inx
         cmp #CR
         bne .cp
@@ -414,13 +414,13 @@ old:    ldy #0                  ; OLD: undo NEW if possible
         ldy #1                  ; NEW only zeroed the first length byte; find the CR
 -       iny
         beq .bad
-        lda (ptr1),y
+        jsr lp1y
         cmp #CR
         bne -
         iny
         tya
         ldy #0
-        sta (ptr1),y
+        jsr sp1y
         jsr clean
         jmp clopp
 .bad    jmp bad
@@ -437,13 +437,13 @@ auto:   jsr pair
 ; DELETE a,b
 delete: jsr dlpair
 .d1     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         beq .dx
         iny
-        lda (ptr1),y
+        jsr lp1y
         sta tmpw
         iny
-        lda (ptr1),y
+        jsr lp1y
         sta tmpw+1
         lda lnum2
         cmp tmpw
@@ -473,15 +473,15 @@ renum:  jsr pair
         lda lnum+1
         sta tmpw+1
 .p1     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         beq .p1x
         tax
         iny                     ; table entry: old lo, old hi, new lo, new hi
-        lda (ptr1),y
+        jsr lp1y
         ldy #0
         sta (ptr2),y
         ldy #2
-        lda (ptr1),y
+        jsr lp1y
         ldy #1
         sta (ptr2),y
         lda tmpw
@@ -492,10 +492,10 @@ renum:  jsr pair
         sta (ptr2),y
         lda tmpw                ; set new number in line
         ldy #1
-        sta (ptr1),y
+        jsr sp1y
         lda tmpw+1
         iny
-        sta (ptr1),y
+        jsr sp1y
         lda tmpw
         clc
         adc lnum2
@@ -513,9 +513,9 @@ renum:  jsr pair
         clc
         adc #4
         sta ptr2
-        bcc .p1
+        lbcc .p1
         inc ptr2+1
-        bra .p1
+        lbra .p1
 .toobig lda #20
         jmp error
 .p1x    lda ptr2                ; end of table
@@ -528,16 +528,16 @@ renum:  jsr pair
         lda page+1
         sta ptr1+1
 .p2     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         lbeq .done
         ldy #3
-.p2c    lda (ptr1),y
+.p2c    jsr lp1y
         cmp #CR
         beq .p2n
         cmp #'"'
         bne +
 -       iny                     ; skip string
-        lda (ptr1),y
+        jsr lp1y
         cmp #CR
         beq .p2n
         cmp #'"'
@@ -555,7 +555,7 @@ renum:  jsr pair
         sta tp
         lda ptr1+1
         adc #0
-        sta tp+1
+        jsr settph
         inw tp
         jsr decode0             ; lnum = referenced line
         ; look up in table
@@ -599,9 +599,9 @@ renum:  jsr pair
         iny
         iny
         iny
-        bra .p2c
+        lbra .p2c
 .p2n    ldy #0
-        lda (ptr1),y
+        jsr lp1y
         clc
         adc ptr1
         sta ptr1
@@ -614,20 +614,20 @@ renum:  jsr pair
 ; encode lnum at (ptr1),y (4 bytes: TLINO + 3)
 encodey:
         lda #TLINO
-        sta (ptr1),y
+        jsr sp1y
         iny
         jsr enc3
-        sta (ptr1),y
+        jsr sp1y
         iny
         lda lnum
         and #$3f
         ora #$40
-        sta (ptr1),y
+        jsr sp1y
         iny
         lda lnum+1
         and #$3f
         ora #$40
-        sta (ptr1),y
+        jsr sp1y
         rts
 enc3:   lda lnum+1              ; Z80 ENCODE: ((D&C0)>>2 | (E&C0)) >> 2 ^ $54
         and #$c0
@@ -655,13 +655,13 @@ list:   cmp #'O'
         lda #0
         sta indent
 .l1     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         beq .lx
         iny
-        lda (ptr1),y
+        jsr lp1y
         sta lnum
         iny
-        lda (ptr1),y
+        jsr lp1y
         sta lnum+1
         lda lnum2
         cmp lnum
@@ -671,7 +671,7 @@ list:   cmp #'O'
         jsr trap
         jsr listit
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         clc
         adc ptr1
         sta ptr1
@@ -691,7 +691,7 @@ listit:
         rts
 .li     jsr pbcd
         ldy #3
-        lda (ptr1),y
+        jsr lp1y
         jsr insub_q             ; outdent tokens at line start
         lda listo
         and #1
@@ -705,12 +705,12 @@ listit:
         asl
         jsr spaces
 +       ldy #3
-        lda (ptr1),y
+        jsr lp1y
         jsr inadd_q
         lda #0
         sta tmp6                ; quote flag
         ldy #3
-.l8     lda (ptr1),y
+.l8     jsr lp1y
         iny
         cmp #CR
         beq .l9
@@ -732,7 +732,7 @@ listit:
         sta tp
         lda ptr1+1
         adc #0
-        sta tp+1
+        jsr settph
         lda lnum
         pha
         lda lnum+1
@@ -771,7 +771,7 @@ listit:
 .add    jsr indadd
         bra .l8
 .lit    jsr outchr
-        bra .l8
+        lbra .l8
 .l9     lda tmp5
         cmp #TTHEN              ; multi-line IF
         bne +
@@ -923,7 +923,7 @@ error1: lda curlin              ; ERL
 .go     lda errtrp
         sta tp
         lda errtrp+1
-        sta tp+1
+        jsr settph
         jmp xeq
 error2: jsr resetsp_jsr
         lda #0
@@ -1004,7 +1004,7 @@ setlin: lda #0
         lda page+1
         sta ptr2+1
 .s1     ldy #0
-        lda (ptr2),y
+        jsr lp2y
         beq .x
         clc
         adc ptr2
@@ -1023,10 +1023,10 @@ setlin: lda #0
         sta ptr2+1
         bra .s1
 .found  ldy #1
-        lda (ptr2),y
+        jsr lp2y
         sta erl
         iny
-        lda (ptr2),y
+        jsr lp2y
         sta erl+1
 .x      rts
 
@@ -1267,29 +1267,31 @@ lexlst1: !byte TGOTO, TGOSUB, TRESTORE, TTRACE
 lexlst2: !byte TTHEN, TELSE, TREPEAT, TERROR, ':'
 
 ; ENCODE lnum at ptr2, set bit 4
-encode: lda #$10
+encode: lda #$10                ; (BUFFER is in bank 0: no encodey here)
         tsb lexmode
-        lda ptr1
-        pha
-        lda ptr1+1
-        pha
-        lda ptr2
-        sta ptr1
-        lda ptr2+1
-        sta ptr1+1
         ldy #0
-        jsr encodey
+        lda #TLINO
+        sta (ptr2),y
+        iny
+        jsr enc3
+        sta (ptr2),y
+        iny
+        lda lnum
+        and #$3f
+        ora #$40
+        sta (ptr2),y
+        iny
+        lda lnum+1
+        and #$3f
+        ora #$40
+        sta (ptr2),y
         lda ptr2
         clc
         adc #4
         sta ptr2
         bcc +
         inc ptr2+1
-+       pla
-        sta ptr1+1
-        pla
-        sta ptr1
-        rts
++       rts
 
 ; DECODE: tp -> byte after TLINO; lnum = line number; tp += 3
 decode0:
@@ -1379,17 +1381,17 @@ findl:  lda page
         lda page+1
         sta ptr1+1
 .f1     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         beq .nf
         ldy #1
-        lda (ptr1),y
+        jsr lp1y
         cmp lnum
         iny
-        lda (ptr1),y
+        jsr lp1y
         sbc lnum+1
         bcs .chk                ; line >= lnum
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         clc
         adc ptr1
         sta ptr1
@@ -1397,11 +1399,11 @@ findl:  lda page
         inc ptr1+1
         bra .f1
 .chk    ldy #1
-        lda (ptr1),y
+        jsr lp1y
         cmp lnum
         bne .nf
         iny
-        lda (ptr1),y
+        jsr lp1y
         cmp lnum+1
         rts                     ; Z if equal
 .nf     lda #1                  ; NZ
@@ -1411,7 +1413,7 @@ findl:  lda page
 !zone del
 del:    jsr gettop              ; ptr2 = TOP
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         sta tmp0
         ; copy [ptr1+len, TOP) down to ptr1
         lda ptr1
@@ -1430,9 +1432,9 @@ del:    jsr gettop              ; ptr2 = TOP
         cmp ptr2+1
         beq .dx
 +       ldy tmp0
-        lda (ptr3),y
+        jsr lp3y
         ldy #0
-        sta (ptr3),y
+        jsr sp3y
         inw ptr3
         bra .d1
 .dx     rts
@@ -1444,11 +1446,11 @@ gettop: lda page
         lda page+1
         sta ptr2+1
 .g1     ldy #0
-        lda (ptr2),y
+        jsr lp2y
         beq .g2
         tay
         dey
-        lda (ptr2),y
+        jsr lp2y
         cmp #CR
         beq +
         jmp bad
@@ -1480,38 +1482,92 @@ clean:  jsr gettop
         sta ptr3+1
         ldy #0
         lda #$ff
-        sta (ptr3),y
+        jsr sp3y
         iny
-        sta (ptr3),y
+        jsr sp3y
         jmp clear
 
 newit:  lda page
         sta ptr1
         lda page+1
         sta ptr1+1
-        ldy #0
-        tya
-        sta (ptr1),y
-        iny
-        lda #$ff
-        sta (ptr1),y
-        iny
-        sta (ptr1),y
-; CLEAR: clear dynamic variables, LOMEM=FREE=TOP
+        ldy #0                  ; only the length byte (as Z80 NEWIT: OLD can
+        tya                     ; then restore the first line)
+        jsr sp1y
+; CLEAR: clear dynamic variables; TOP = end of program (bank PBANK),
+; LOMEM = FREE = start of the heap (bank 0, after the interpreter)
 clear:  jsr gettop
         lda ptr2
-        sta lomem
-        sta free
         sta top
         lda ptr2+1
+        sta top+1
+        lda #<prog_start
+        sta lomem
+        sta free
+        lda #>prog_start
         sta lomem+1
         sta free+1
-        sta top+1
         ldx #DYNEND-DYNVAR-1
         lda #0
 -       sta DYNVAR,x
         dex
         bpl -
+        rts
+
+; ---------------- program text access (bank PBANK) ----------------
+; LPnY: A = program byte at (ptrn)+Y, flags from A; X, Y kept, Z stays 0
+; SPnY: program byte at (ptrn)+Y := A
+lp1y:   lda ptr1
+        sta pp
+        lda ptr1+1
+        bra lppy
+lp2y:   lda ptr2
+        sta pp
+        lda ptr2+1
+        bra lppy
+lp3y:   lda ptr3
+        sta pp
+        lda ptr3+1
+lppy:   sta pp+1
+        tya
+        taz
+        lda [pp],z
+        php
+        ldz #0
+        plp
+        rts
+sp1y:   pha
+        lda ptr1
+        sta pp
+        lda ptr1+1
+        bra sppy
+sp2y:   pha
+        lda ptr2
+        sta pp
+        lda ptr2+1
+        bra sppy
+sp3y:   pha
+        lda ptr3
+        sta pp
+        lda ptr3+1
+sppy:   sta pp+1
+        tya
+        taz
+        pla
+        sta [pp],z
+        ldz #0
+        rts
+; SETTPH: tp+1 := A, and the bank of tp from it (keeps A and flags)
+settph: sta tp+1
+        php
+        pha
+        cmp #>PMIN
+        lda #0
+        bcc +
+        lda #PBANK
++       sta tp+2
+        pla
+        plp
         rts
 
 ; ---------------- output ----------------

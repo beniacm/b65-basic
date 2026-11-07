@@ -1,0 +1,63 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>NEW
+>10 F%=OPENOUT "B65BIGP"
+>20 L$=STRING$(50,"x")
+>30 FOR N%=1 TO 700
+>40 BPUT#F%,LEN L$+5:BPUT#F%,(N%*10) AND 255:BPUT#F%,(N%*10) DIV 256:BPUT#F%,&F4
+>50 BPUT#F%,L$;:BPUT#F%,13
+>60 NEXT
+>70 BPUT#F%,0:BPUT#F%,255:BPUT#F%,255
+>80 CLOSE#F%
+>RUN
+>LOAD "B65BIGP"
+>PRINT TOP-PAGE
+     38503
+>5 PRINT "start":GOSUB 7020:PROCfar
+>7010 END
+>7020 PRINT "far sub ";TOP-PAGE:RETURN
+>7030 DEF PROCfar:LOCAL I%:FOR I%=1 TO 3:PRINT I%;:NEXT:PRINT " far proc":ENDPROC
+>RUN
+start
+far sub 38606
+         1         2         3 far proc
+>LIST 6990,7020
+ 6990 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ 7000 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ 7010 END
+ 7020 PRINT "far sub ";TOP-PAGE:RETURN
+>RENUMBER 1000,1
+>LIST 1699,
+ 1699 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ 1700 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ 1701 END
+ 1702 PRINT "far sub ";TOP-PAGE:RETURN
+ 1703 DEF PROCfar:LOCAL I%:FOR I%=1 TO 3:PRINT I%;:NEXT:PRINT " far proc":ENDPRO
+C
+>RUN
+start
+far sub 38606
+         1         2         3 far proc
+>SAVE "B65BIGP2"
+>NEW
+>LOAD "B65BIGP2"
+>PRINT TOP-PAGE
+     38606
+>RUN
+start
+far sub 38606
+         1         2         3 far proc
+>DELETE 1001,1600
+>PRINT TOP-PAGE
+      5606
+>LIST 1000,1601
+ 1000 PRINT "start":GOSUB 1702:PROCfar
+ 1601 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+>RUN
+start
+far sub 5606
+         1         2         3 far proc
+>

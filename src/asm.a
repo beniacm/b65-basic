@@ -748,22 +748,25 @@ listing:
         plx
         inx
         bra -
-+       lda astart              ; source text up to tp
-        sta ptr2
++       lda astart              ; source text up to tp (in tp's bank)
+        sta pp
         lda astart+1
-        sta ptr2+1
--       lda ptr2
+        sta pp+1
+        lda tp+2
+        sta pp+2
+-       lda pp
         cmp tp
         bne +
-        lda ptr2+1
+        lda pp+1
         cmp tp+1
         beq .nl
-+       ldy #0
-        lda (ptr2),y
++       lda [pp],z
         jsr out
-        inw ptr2
+        inw pp
         bra -
-.nl     jsr crlf
+.nl     lda #PBANK
+        sta pp+2
+        jsr crlf
 .x      rts
 hexb:   pha
         lsr

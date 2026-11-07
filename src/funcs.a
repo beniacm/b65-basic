@@ -498,10 +498,10 @@ f_val:  jsr item
         lda #<ACCS
         sta tp
         lda #>ACCS
-        sta tp+1
+        jsr settph
         jsr fpval
         pla
-        sta tp+1
+        jsr settph
         pla
         sta tp
         jmp setnumf
@@ -703,7 +703,10 @@ f_reports:
 
 f_page: lda page
         ldx page+1
-        jmp setw
+setwp:  jsr setw                ; program address: bank PBANK
+        lda #PBANK
+        sta acc+2
+        rts
 f_lomem:
         lda lomem
         ldx lomem+1
@@ -721,7 +724,7 @@ f_top:  lda [tp],z                ; TO P
         jsr gettop
         lda ptr2
         ldx ptr2+1
-        jmp setw
+        jmp setwp
 f_end:  lda free
         ldx free+1
         jmp setw
@@ -803,7 +806,7 @@ f_eval: jsr item
         lda #<ACCS
         sta tp
         lda #>ACCS
-        sta tp+1
+        jsr settph
         lda #<EVBUF
         sta ptr2
         lda #>EVBUF
@@ -817,12 +820,12 @@ f_eval: jsr item
         lda #<EVBUF
         sta tp
         lda #>EVBUF
-        sta tp+1
+        jsr settph
         jsr expr
         pla
         sta lexmode
         pla
-        sta tp+1
+        jsr settph
         pla
         sta tp
         rts

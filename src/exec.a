@@ -93,7 +93,7 @@ run0:   jsr resetsp_jsr
         lda page
         sta tp
         lda page+1
-        sta tp+1
+        jsr settph
 ; XEQ0: tp -> start of a program line (length byte)
 xeq0:   jsr newlin
         jsr nxt
@@ -309,8 +309,13 @@ trace:  cmp #TOFF
         jmp xeq
 TOFF = $87
 
-pagev:  jsr eqexpr
-        lda acc
+pagev:  jsr eqexpr               ; (bank bits ignored: always bank PBANK)
+        lda acc+1
+        cmp #>PMIN
+        bcs +
+        lda #0                  ; below PMIN: No room
+        jmp error
++       lda acc
         sta page
         lda acc+1
         sta page+1
@@ -747,7 +752,7 @@ goto1:  lda acc
 +       lda ptr1
         sta tp
         lda ptr1+1
-        sta tp+1
+        jsr settph
         jmp xeq0
 
 gosub:  jsr itemi
@@ -787,7 +792,7 @@ frametp:                        ; tp := frame bytes 2,3
         sta tp
         iny
         lda (spz),y
-        sta tp+1
+        jsr settph
         rts
 
 ; ---- REPEAT / UNTIL ----
@@ -880,7 +885,7 @@ endwhile:
         lda tmpw2
         sta tp
         lda tmpw2+1
-        sta tp+1
+        jsr settph
         jmp xeq
 
 ; ---- program scanner ----
@@ -1317,7 +1322,7 @@ next:   jsr getsp
         sta tp
         iny
         lda (spz),y
-        sta tp+1
+        jsr settph
         jmp xeq
 .done   lda #16
         jsr drop
@@ -1676,7 +1681,7 @@ libnext:
         lda libcur+1
         sta ptr1+1
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         clc
         adc #13
         php
@@ -1684,15 +1689,15 @@ libnext:
         adc libcur
         sta libcur
         iny
-        lda (ptr1),y
+        jsr lp1y
         adc libcur+1
         plp
         adc #0
         sta libcur+1
 .chk    lda libcur
-        cmp #<HIMEM0
+        cmp #<PLIM
         lda libcur+1
-        sbc #>HIMEM0
+        sbc #>PLIM
         bcs .none
         lda libcur
         clc
@@ -1736,7 +1741,7 @@ finddef:
         lda page+1
         sta ptr1+1
 .ln     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         bne +
         jsr libnext             ; end of program: next library
         bcc .ln
@@ -1745,7 +1750,7 @@ finddef:
         lda #29                 ; No such FN/PROC
         jmp error
 +       ldy #3
--       lda (ptr1),y
+-       jsr lp1y
         cmp #' '
         bne +
         iny
@@ -1753,7 +1758,7 @@ finddef:
 +       cmp #TDEF
         lbne .nx
         iny
--       lda (ptr1),y
+-       jsr lp1y
         cmp #' '
         bne +
         iny
@@ -1764,13 +1769,13 @@ finddef:
         ldx #0
 -       cpx nlen
         beq .end
-        lda (ptr1),y
+        jsr lp1y
         cmp NBUF,x
         bne .nx
         iny
         inx
         bra -
-.end    lda (ptr1),y            ; name must end here
+.end    jsr lp1y            ; name must end here
         jsr range1
         bcc .nx
         tya                     ; found: ptr1 += y
@@ -1831,7 +1836,7 @@ finddef:
         sta ptr1+1
         rts
 .nx     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         clc
         adc ptr1
         sta ptr1
@@ -2017,7 +2022,7 @@ callset:
         lda ptr1
         sta tp
         lda ptr1+1
-        sta tp+1
+        jsr settph
         ; bind formal parameters
         lda #0
         sta tmp2                ; slot index
@@ -2146,19 +2151,19 @@ retscan:
         lda #0
         sta retmask
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         cmp #'('
         bne .x
         ldx #0                  ; formal index
 .f      iny
-        lda (ptr1),y
+        jsr lp1y
         cmp #' '
         beq .f
         cmp #TRETURN
         bne .skip
         lda bitmask6,x
         tsb retmask
-.skip   lda (ptr1),y            ; to ',' or ')'
+.skip   jsr lp1y            ; to ',' or ')'
         cmp #','
         beq .n
         cmp #')'
@@ -2689,7 +2694,7 @@ input:  jsr nxt
         pha
         jsr osline
         pla
-        sta tp+1
+        jsr settph
         pla
         sta tp
         pla
@@ -2713,10 +2718,10 @@ inval:  lda vtype
         lda #<ACCS
         sta tp
         lda #>ACCS
-        sta tp+1
+        jsr settph
         jsr signednum
         pla
-        sta tp+1
+        jsr settph
         pla
         sta tp
         rts
@@ -2776,7 +2781,7 @@ restore:
         ora acc+1
         beq ++
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         beq ++
         clc
         adc ptr1
@@ -2818,7 +2823,7 @@ dsrch:  lda datptr
         lda datptr+1
         sta ptr1+1
 .ln     ldy #0
-        lda (ptr1),y
+        jsr lp1y
         bne +
         lda #0
         sta datptr
@@ -2826,7 +2831,7 @@ dsrch:  lda datptr
         sec
         rts
 +       ldy #3
--       lda (ptr1),y
+-       jsr lp1y
         cmp #' '
         bne +
         iny
@@ -2834,7 +2839,7 @@ dsrch:  lda datptr
 +       cmp #TDATA
         beq .found
         ldy #0
-        lda (ptr1),y
+        jsr lp1y
         clc
         adc ptr1
         sta ptr1
@@ -2875,7 +2880,7 @@ read:   jsr nxt
         lda datptr
         sta tp
         lda datptr+1
-        sta tp+1
+        jsr settph
         jsr nxt
         cmp #CR                 ; end of this DATA line -> next
         bne .item
@@ -2889,7 +2894,7 @@ read:   jsr nxt
         lda datptr
         sta tp
         lda datptr+1
-        sta tp+1
+        jsr settph
         jsr nxt
 .item   lda vtype
         bmi .str0
@@ -2922,7 +2927,7 @@ read:   jsr nxt
         lda tp+1
         sta datptr+1
         pla
-        sta tp+1
+        jsr settph
         pla
         sta tp
         jsr storevar

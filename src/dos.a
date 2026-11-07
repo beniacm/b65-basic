@@ -197,10 +197,27 @@ loadprg:
         jsr fexists
         bcs +
         jmp notfound
++       lda libase              ; must fit below the libraries (PLIM)
+        sec
+        sbc page
+        sta tmpw
+        lda libase+1
+        sbc page+1
+        sta tmpw+1
+        lda DIRENT+84
+        ora DIRENT+85
+        bne .room
+        lda DIRENT+82
+        cmp tmpw
+        lda DIRENT+83
+        sbc tmpw+1
+        bcc +
+.room   lda #0                  ; No room
+        jmp error
 +       jsr setname2
-        ldx page                ; loadfile: load address $ZZYYXX
+        ldx page                ; loadfile: load address $ZZYYXX (bank PBANK)
         ldy page+1
-        ldz #0
+        ldz #PBANK
         lda #$36
         jsr hyppo
         bcs +

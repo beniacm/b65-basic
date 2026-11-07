@@ -200,7 +200,7 @@ test_init:
         lda #0
         ldz #$08
         jsr .chk
-        bcc .no
+        lbcc .no
         lda #$c0                ; hardware test mode
         sta testmode
         lda #0                  ; consume the magic (no re-run after a reset)
@@ -226,7 +226,30 @@ test_init:
         bne --
         stx twp+1
         bra .no
-+       lda #8
++       lda #<TSTCOPY           ; copy 16 KB of script to attic RAM
+        sta twp
+        lda #>TSTCOPY
+        sta twp+1
+        lda #^TSTCOPY
+        sta twp+2
+        lda #TSTCOPY>>24
+        sta twp+3
+        ldx #$40
+--      ldz #0
+-       lda [tsp],z
+        sta [twp],z
+        inz
+        bne -
+        inc tsp+1
+        inc twp+1
+        dex
+        bne --
+        ldx #3
+-       lda .tc,x
+        sta tsp,x
+        dex
+        bpl -
+        lda #8
         sta tsp
         lda #$80
         sta testmode
@@ -238,8 +261,19 @@ test_init:
         sta twp+2
         lda #0
         sta twp+3
+        ldx #TRANSEND-(>TRANSCR) ; clear it
+--      ldz #0
+-       sta [twp],z
+        inz
+        bne -
+        inc twp+1
+        dex
+        bne --
+        lda #>TRANSCR
+        sta twp+1
 .no     ldz #0
         rts
+.tc     !byte <TSTCOPY, >TSTCOPY, ^TSTCOPY, TSTCOPY>>24
 ; .chk: X/Y/A/Z = address bytes 0..3 -> tsp; carry set if "B65TEST:" (Xemu)
 ; or "B65HWTS:" (hardware, then V... carry set too; caller decides by order)
 .chk    stx tsp
@@ -310,7 +344,11 @@ oswrch:
         phy
         bit testmode
         bpl .notest
-        ldz #0
+        bvs +                   ; (hardware: 64 KB in attic RAM)
+        ldx twp+1               ; Xemu: transcript area is limited
+        cpx #TRANSEND
+        bcs .notest
++       ldz #0
         sta [twp],z
         inw twp
         bne .notest

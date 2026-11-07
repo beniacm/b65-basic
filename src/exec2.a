@@ -498,7 +498,7 @@ arrref: lda tp
 .no     lda tmpw
         sta tp
         lda tmpw+1
-        sta tp+1
+        jsr settph
         lda #1
         rts
 ; ARRSIZE: ptr2 = block -> tmpw = number of elements, ptr3 = first element

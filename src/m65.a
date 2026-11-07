@@ -477,7 +477,7 @@ evcheck:
         lda ptr1
         sta tp
         lda ptr1+1
-        sta tp+1
+        jsr settph
         jmp xeq0
 
 ; ---------------- far memory for ?, !, |, $ indirection ----------------
