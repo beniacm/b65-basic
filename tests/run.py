@@ -46,8 +46,12 @@ def main():
                '-dumpscreen', scr]
         if a.screenshot:
             cmd += ['-screenshot', os.path.abspath(a.screenshot)]
-        env = dict(os.environ, XEMU_SKIP_ONBOARDING='')
-        env.pop('XEMU_SKIP_ONBOARDING')
+        env = dict(os.environ)
+        env.pop('XEMU_SKIP_ONBOARDING', None)
+        # private preferences dir: parallel Xemu instances must not share
+        # ~/.local/share/xemu-lgb (SDL pref path follows HOME/XDG_DATA_HOME)
+        env['HOME'] = td
+        env['XDG_DATA_HOME'] = os.path.join(td, 'xdg')
         sock = os.path.join(td, 'uart.sock')
         cmd += ['-uartmon', sock]
         import socket, time, signal
