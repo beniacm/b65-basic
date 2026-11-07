@@ -8,6 +8,7 @@
 !src "src/main.a"
 !src "src/exec.a"
 !src "src/exec2.a"
+!src "src/dos.a"
 !src "src/eval.a"
 !src "src/funcs.a"
 !src "src/fp.a"

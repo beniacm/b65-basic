@@ -75,15 +75,6 @@ NCMD    = $51       ; number of entries in CMDTAB ($C0..$10)
         jmp cold_test           ; $2017 - start from test boot stub
 
 cold_prg:
-        sei
-        lda #0                  ; make sure no stale test magic is honoured
-        sta fptr
-        sta fptr+1
-        sta fptr+3
-        lda #1
-        sta fptr+2
-        ldz #0
-        sta [fptr],z
 cold_test:
         sei
         cld
@@ -383,11 +374,6 @@ insline:
 
 ; ---------------- immediate commands ----------------
 cmdtab: !word auto, delete, list, load, new, old, renum, save
-
-load:
-save:   jsr tell
-        !text "LOAD/SAVE not implemented yet",CR,LF,0
-        jmp clopp
 
 new:    jsr newit
         jmp clopp

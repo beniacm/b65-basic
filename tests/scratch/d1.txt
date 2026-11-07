@@ -1,0 +1,10 @@
+10 PRINT "hello from a saved program"
+20 FOR I%=1 TO 3:PRINT I%;:NEXT:PRINT
+SAVE "TEST1"
+NEW
+LIST
+LOAD "TEST1"
+LIST
+RUN
+*CAT
+CHAIN "TEST1"

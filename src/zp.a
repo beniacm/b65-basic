@@ -149,5 +149,6 @@ acnt    = MISC+8        ; 2 elements left
 alist   = MISC+10       ; init list flag
 llen    = MISC+11       ; line editor: length
 lcur    = MISC+12       ; line editor: cursor
+doserr  = MISC+13       ; last Hyppo DOS error code (?&64D)
 FONTADDR = $05f000      ; 2K charset in chip RAM (bank 5)
 HISTADDR = $05e000      ; line editor history

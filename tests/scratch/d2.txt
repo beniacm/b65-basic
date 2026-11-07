@@ -1,0 +1,2 @@
+SAVE "TEST1"
+PRINT ~?&64D

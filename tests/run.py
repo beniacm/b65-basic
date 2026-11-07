@@ -21,7 +21,7 @@ def build_image(script_bytes):
     img = bytearray(0x8000)
     img[:len(boot)] = boot
     img[0x100:0x100 + len(body)] = body
-    scr = b'B65T' + script_bytes + b'\0'
+    scr = b'B65TEST:' + script_bytes + b'\0'
     assert len(scr) <= 0x7000
     return bytes(img) + scr
 
@@ -31,6 +31,8 @@ def main():
     ap.add_argument('--screenshot')
     ap.add_argument('--timeout', type=float, default=15)
     ap.add_argument('--screen', action='store_true', help='also print final screen')
+    ap.add_argument('--rom', action='store_true',
+                    help='boot the real MEGA65 ROM from an onboarded card image (CARD env, default ~/src/xemu-work/card.img) and RUN the PRG from BASIC 65')
     ap.add_argument('--realtime', action='store_true', help='run at real MEGA65 speed (no -sleepless)')
     ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
@@ -45,6 +47,13 @@ def main():
         cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
                '-virtsd', '-sdimg', sd, '-extonboard', img, '-dumpmem', mem,
                '-dumpscreen', scr]
+        if a.rom:
+            card = os.environ.get('CARD', os.path.expanduser('~/src/xemu-work/card.img'))
+            sb = os.path.join(td, 'script.bin')
+            open(sb, 'wb').write(b'B65TEST:' + script + b'\0')
+            cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
+                   '-sdimg', card, '-prg', os.path.join(ROOT, 'build/b65.prg'),
+                   '-prgtest', sb + '@$10000', '-dumpmem', mem, '-dumpscreen', scr]
         if a.realtime:
             cmd.remove('-sleepless')
         if a.screenshot:
@@ -58,7 +67,8 @@ def main():
         sock = os.path.join(td, 'uart.sock')
         cmd += ['-uartmon', sock]
         import socket, time, signal
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=td)
+        logf = open(os.path.join(td, 'xemu.log'), 'wb')   # never a pipe: Xemu can log a lot
+        p = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, env=env, cwd=td)
         t0 = time.time(); rc = None
         while time.time() - t0 < a.timeout:
             if p.poll() is not None:
@@ -73,9 +83,17 @@ def main():
             except Exception as e:
                 print('[uartmon failed]', e)
             p.send_signal(signal.SIGINT)
-            p.wait(); rc = 124
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                print('[xemu did not exit on SIGINT: killed]')
+                p.kill(); p.wait()
+            rc = 124
         class R: pass
-        r = R(); r.stdout = p.stdout.read()
+        logf.close()
+        if os.environ.get('XEMULOG'):
+            import shutil; shutil.copy(os.path.join(td, 'xemu.log'), os.environ['XEMULOG'])
+        r = R(); r.stdout = open(os.path.join(td, 'xemu.log'), 'rb').read()
         if not os.path.exists(mem):
             print('no memory dump; xemu rc', rc)
             print(r.stdout.decode(errors='replace')[-3000:])

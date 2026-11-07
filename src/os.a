@@ -193,7 +193,15 @@ test_init:
         lda [tsp],z
         cmp #'T'
         bne .no
-        lda #4
+        ldx #0                  ; full magic "B65TEST:"
+-       inz
+        lda [tsp],z
+        cmp .mg,x
+        bne .no
+        inx
+        cpx #4
+        bne -
+        lda #8
         sta tsp
         lda #$ff
         sta testmode
@@ -208,6 +216,7 @@ test_init:
 .no     ldz #0
         rts
 
+.mg     !text "EST:"
 test_exit:                      ; A = exit status
         sta $d6cf
         lda #$42

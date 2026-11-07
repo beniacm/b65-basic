@@ -38,6 +38,10 @@ functab:
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
         !byte TREPORT : !word f_reports
+        !byte $8e     : !word f_openin
+        !byte $9a     : !word f_bget
+        !byte $c5     : !word f_eof
+        !byte TPTR    : !word f_ptr
         !byte $c6     : !word f_sum
         !byte TDIM    : !word f_dimfn
         !byte $95     : !word fn_acs
@@ -577,7 +581,11 @@ strbuf2accs:
 f_get:  jsr osrdch
         ldx #0
         jmp setw
-f_gets: jsr osrdch
+f_gets: lda (tp),z
+        cmp #'#'
+        bne +
+        jmp f_getsch
++       jsr osrdch
         sta ACCS
         lda #1
         sta slen

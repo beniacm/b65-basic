@@ -1,0 +1,663 @@
+; B65 BASIC - file system via MEGA65 Hyppo DOS traps (FAT32 SD card)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+; Replaces the CP/M file layer (CMOS.Z80 OSLOAD/OSSAVE/OSOPEN/OSBGET...).
+; Program files are the tokenised program, byte-compatible with BBC BASIC
+; (Z80) v5. Names are 8.3; ".BBC" is appended when there is no extension.
+
+FNBUF   = $07c0             ; (shared with FP stack area start: only used transiently)
+DIRENT  = $0700             ; Hyppo dirent buffer (87 bytes, page aligned)
+NCHAN   = 4
+CHBUF   = $05c000           ; channel buffers (512 bytes each) in chip RAM, bank 5
+
+; ---- Hyppo trap: A = function; returns carry set on success, A = result/error
+hyppo:  clc
+        sta $d640
+        clv
+        ldz #0
+        rts
+
+; DOSINIT: make sure the default drive is selected (needed when started
+; before the ROM has initialised DOS, e.g. from the test boot stub)
+dosinit:
+        lda #$02                ; get default drive
+        jsr hyppo
+        tax
+        lda #$06                ; select drive X
+        jmp hyppo
+
+; SETFNAME: ACCS/slen -> FNBUF (upper case, default .BBC) and Hyppo setname
+!zone setfname
+setfname:
+        jsr dosinit
+        ldx #0
+        ldy #0
+        lda #0
+        sta tmp3                ; '.' seen
+.l      cpx slen
+        beq .e
+        lda ACCS,x
+        inx
+        cmp #' '
+        beq .l
+        cmp #'"'
+        beq .l
+        cmp #'.'
+        bne +
+        sta tmp3
++       cmp #'a'
+        bcc +
+        cmp #'z'+1
+        bcs +
+        and #$df
++       sta FNBUF,y
+        iny
+        cpy #30
+        bcc .l
+.e      lda tmp3
+        bne +
+        lda #'.'
+        sta FNBUF,y
+        iny
+        lda #'B'
+        sta FNBUF,y
+        iny
+        lda #'B'
+        sta FNBUF,y
+        iny
+        lda #'C'
+        sta FNBUF,y
+        iny
++       lda #0
+        sta FNBUF,y
+        ldx #<FNBUF
+        ldy #>FNBUF
+        lda #$2e                ; setname
+        jsr hyppo
+        bcs +
+        jmp badname
++       rts
+
+; FEXISTS: carry set if FNBUF names an existing file (scans the directory;
+; independent of Hyppo findfile semantics)
+!zone fexists
+fexists:
+        ldx #0                  ; build 8.3 raw name in NUMBUF+64
+        lda #' '
+-       sta NUMBUF+64,x
+        inx
+        cpx #11
+        bne -
+        ldx #0
+        ldy #0
+-       lda FNBUF,x
+        beq .raw
+        cmp #'.'
+        beq .ext
+        cpy #8
+        bcs +
+        sta NUMBUF+64,y
+        iny
++       inx
+        bra -
+.ext    inx
+        ldy #8
+-       lda FNBUF,x
+        beq .raw
+        cpy #11
+        bcs .raw
+        sta NUMBUF+64,y
+        iny
+        inx
+        bra -
+.raw    lda #$12                ; opendir
+        jsr hyppo
+        bcc .no
+        sta tmp6
+.ent    ldx tmp6
+        ldy #>DIRENT
+        lda #$14                ; readdir
+        jsr hyppo
+        bcc .nf
+        ldx #10                 ; short name compare
+-       lda DIRENT+65,x
+        cmp NUMBUF+64,x
+        bne .lfn
+        dex
+        bpl -
+        bra .yes
+.lfn    ldx #0                  ; long name compare (case-insensitive)
+-       lda DIRENT,x
+        jsr .up
+        sta tmp0
+        lda FNBUF,x
+        cmp tmp0
+        bne .ent
+        cmp #0
+        beq .yes
+        inx
+        cpx #63
+        bne -
+        bra .ent
+.yes    jsr .close
+        sec
+        rts
+.nf     jsr .close
+.no     clc
+        rts
+.close  ldx tmp6
+        lda #$16
+        jmp hyppo
+.up     cmp #'a'
+        bcc +
+        cmp #'z'+1
+        bcs +
+        and #$df
++       rts
+
+setname2:                       ; re-issue setname for FNBUF
+        ldx #<FNBUF
+        ldy #>FNBUF
+        lda #$2e
+        jmp hyppo
+
+notfound:
+        lda #<msg_nf
+        ldx #>msg_nf
+        ldy #214
+        bra dosmsg
+badname:
+        lda #<msg_bn
+        ldx #>msg_bn
+        ldy #204
+        bra dosmsg
+diskerr:
+        lda #<msg_de
+        ldx #>msg_de
+        ldy #199
+dosmsg: sta errtxt
+        stx errtxt+1
+        sty errnum
+        lda #$38                ; Hyppo: get last error code -> DOSERR
+        jsr hyppo
+        sta doserr
+        lda errnum
+        jmp exterr
+msg_nf: !text "File not found",0
+msg_bn: !text "Bad name",0
+msg_de: !text "Disk fault",0
+
+; ---- LOAD "name" (command) ----
+load:   jsr fname
+        jsr loadprg
+        jmp clopp
+fname:  jsr exprs
+        jmp setfname
+; LOADPRG: load file at PAGE, check it
+loadprg:
+        jsr fexists
+        bcs +
+        jmp notfound
++       jsr setname2
+        ldx page                ; loadfile: load address $ZZYYXX
+        ldy page+1
+        ldz #0
+        lda #$36
+        jsr hyppo
+        bcs +
+        jsr newit
+        jmp notfound
++       jmp clean               ; checks the program (Bad program) and CLEAR
+
+; ---- SAVE "name" (command) ----
+!zone save
+save:   jsr fname
+        jsr gettop
+        lda ptr2                ; size = TOP - PAGE
+        sec
+        sbc page
+        sta tmpw
+        lda ptr2+1
+        sbc page+1
+        sta tmpw+1
+        jsr fexists             ; existing file: overwrite in place (no rmfile:
+        bcs +                   ; Hyppo's rmfile/mkfile are work in progress)
+        jsr setname2
+        ldx tmpw                ; new file: mkfile, size $ZZYYXX
+        ldy tmpw+1
+        ldz #0
+        lda #$1e
+        jsr hyppo
+        bcs +
+        jmp diskerr
++       jsr setname2
+        lda #$34                ; findfile + openfile
+        jsr hyppo
+        bcc .de
+        lda #$18
+        jsr hyppo
+        bcc .de
+        sta tmp6                ; file descriptor
+        lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+.blk    lda tmpw
+        ora tmpw+1
+        beq .done
+        lda #$81                ; map SD sector buffer at $DE00
+        sta $d680
+        ldx #0                  ; copy 512 bytes (beyond TOP: whatever)
+        ldy #0
+-       lda (ptr1),y
+        sta $de00,x
+        inw ptr1
+        inx
+        bne -
+-       lda (ptr1),y
+        sta $df00,x
+        inw ptr1
+        inx
+        bne -
+        lda #$1c                ; writefile
+        jsr hyppo
+        bcc .de
+        lda tmpw+1              ; size -= 512
+        sec
+        sbc #2
+        sta tmpw+1
+        bcs .blk
+        lda #0
+        sta tmpw
+        sta tmpw+1
+.done   ldx tmp6
+        lda #$20                ; closefile
+        jsr hyppo
+        jmp clopp
+.de     jmp diskerr
+
+; ---- CHAIN "name" / RUN "name" ----
+chain:  jsr fname
+        jsr loadprg
+        jmp run0
+
+; ---- *commands: *CAT (*.), *DELETE name, *DIR (cd root) ----
+!zone star
+star:   ldy #0
+        lda (tp),y
+        cmp #'.'
+        beq .cat
+        jsr .word
+        cmp #'C'
+        bne +
+        jmp .cat
++       cmp #'D'
+        bne .bad
+        jmp .del
+.bad    jmp rem                 ; unknown * command: ignored
+.word   lda (tp),y              ; first letter (upper case), skip the word
+        and #$df
+        pha
+-       inw tp
+        lda (tp),y
+        cmp #' '
+        beq +
+        cmp #CR
+        beq +
+        bra -
++       pla
+        rts
+.cat    lda #$12                ; opendir
+        jsr hyppo
+        bcs +
+        jmp diskerr
++       sta tmp6
+.ent    ldx tmp6
+        ldy #>DIRENT
+        lda #$14                ; readdir
+        jsr hyppo
+        bcc .endc
+        lda DIRENT+86           ; attributes: skip volume labels / hidden
+        and #$0a
+        bne .ent
+        ldx #0                  ; short name: 8 + '.' + 3, blanks trimmed
+        ldy #0
+-       lda DIRENT+65,x
+        cmp #' '
+        beq +
+        jsr outchr
+        iny
++       inx
+        cpx #8
+        bne -
+        lda DIRENT+73
+        cmp #' '
+        beq +
+        lda #'.'
+        jsr outchr
+        iny
+-       lda DIRENT+65,x
+        cmp #' '
+        beq +
+        jsr outchr
+        iny
+        inx
+        cpx #11
+        bne -
++       lda #' '
+-       cpy #14
+        bcs +
+        jsr outchr
+        iny
+        bra -
++       lda DIRENT+82           ; length
+        sta acc
+        lda DIRENT+83
+        sta acc+1
+        lda DIRENT+84
+        sta acc+2
+        lda DIRENT+85
+        sta acc+3
+        lda #0
+        sta accx
+        jsr numstr
+        stx tmp0
+        ldx #0
+-       cpx tmp0
+        beq +
+        lda NUMBUF,x
+        jsr outchr
+        inx
+        bra -
++       jsr crlf
+        bra .ent
+.endc   ldx tmp6
+        lda #$16                ; closedir
+        jsr hyppo
+        jmp rem
+.del    jsr nxt                 ; *DELETE name (rest of line)
+        ldx #0
+-       lda (tp),z
+        cmp #CR
+        beq +
+        sta ACCS,x
+        inx
+        inw tp
+        bra -
++       stx slen
+        jsr setfname
+        jsr fexists
+        bcs +
+        jmp notfound
++       jsr setname2
+        lda #$34
+        jsr hyppo
+        bcs +
+        jmp notfound
++       lda #$26
+        jsr hyppo
+        jmp xeq
+
+; ---- channels: OPENIN, BGET#, GET$#, EOF#, PTR#, EXT#, CLOSE# ----
+; channel table (MISC+16..): fd, open flag, buffer count (2), buffer pos (2), ptr (4), ext (4)
+CHT     = MISC+16           ; 4 channels x 16 bytes
+CH_FD   = 0
+CH_OPEN = 1
+CH_CNT  = 2
+CH_POS  = 4
+CH_PTR  = 6
+CH_EXT  = 10
+
+!zone openin
+f_openin:
+        jsr item
+        jsr chkstr
+        jsr setfname
+        jsr fexists
+        bcs +
+        lda #0                  ; not found -> 0
+        ldx #0
+        jmp setw
++       jsr setname2
+        lda #$34                ; findfile
+        jsr hyppo
+        bcs +
+        lda #0
+        ldx #0
+        jmp setw
++       ldx #0                  ; free channel
+-       lda CHT+CH_OPEN,x
+        beq +
+        txa
+        clc
+        adc #16
+        tax
+        cmp #NCHAN*16
+        bcc -
+        lda #<msg_tm
+        ldx #>msg_tm
+        ldy #192
+        jmp dosmsg
++       stx tmp5
+        lda #$18                ; openfile
+        jsr hyppo
+        bcs +
+        jmp diskerr
++       ldx tmp5
+        sta CHT+CH_FD,x
+        lda #1
+        sta CHT+CH_OPEN,x
+        lda #0
+        sta CHT+CH_CNT,x
+        sta CHT+CH_CNT+1,x
+        sta CHT+CH_POS,x
+        sta CHT+CH_POS+1,x
+        sta CHT+CH_PTR,x
+        sta CHT+CH_PTR+1,x
+        sta CHT+CH_PTR+2,x
+        sta CHT+CH_PTR+3,x
+        lda DIRENT+82           ; (length from the last findfile is not exported:
+        sta CHT+CH_EXT,x        ;  EXT# is updated as the file is read)
+        txa
+        lsr
+        lsr
+        lsr
+        lsr
+        inc
+        ldx #0
+        jmp setw
+msg_tm: !text "Too many open files",0
+
+; CHANNEL: '#' expr -> X = channel table offset (error if not open)
+!zone channel
+channel:
+        jsr nxt
+        cmp #'#'
+        beq +
+        lda #45                 ; Missing #
+        jmp error
++       inw tp
+        jsr itemi
+chanx:  lda acc
+        beq .bad
+        cmp #NCHAN+1
+        bcs .bad
+        dec
+        asl
+        asl
+        asl
+        asl
+        tax
+        lda CHT+CH_OPEN,x
+        beq .bad
+        rts
+.bad    lda #<msg_ch
+        ldx #>msg_ch
+        ldy #222
+        jmp dosmsg
+msg_ch: !text "Channel",0
+
+; BGETC: X = channel offset -> A = byte, carry set at end of file
+!zone bgetc
+bgetc:  lda CHT+CH_POS,x        ; buffer exhausted?
+        cmp CHT+CH_CNT,x
+        bne .have
+        lda CHT+CH_POS+1,x
+        cmp CHT+CH_CNT+1,x
+        bne .have
+        stx tmp5                ; read next sector
+        lda CHT+CH_FD,x
+        tax
+        lda #$1a                ; readfile -> sector buffer, X/Y = bytes read
+        jsr hyppo
+        txa
+        ldx tmp5
+        bcs +
+        lda #0
+        tay
++       sta CHT+CH_CNT,x
+        tya
+        sta CHT+CH_CNT+1,x
+        lda #0
+        sta CHT+CH_POS,x
+        sta CHT+CH_POS+1,x
+        lda CHT+CH_CNT,x
+        ora CHT+CH_CNT+1,x
+        bne +
+        sec                     ; EOF
+        rts
++       ; copy the sector to the channel buffer (far memory)
+        lda #$81
+        sta $d680
+        jsr .fp
+        ldy #0
+        ldz #0
+-       lda $de00,y
+        sta [fptr],z
+        iny
+        inz
+        bne -
+        inc fptr+1
+-       lda $df00,y
+        sta [fptr],z
+        iny
+        inz
+        bne -
+        lda #$82
+        sta $d680
+.have   jsr .fp                 ; byte = buffer[pos]
+        lda fptr+1
+        clc
+        adc CHT+CH_POS+1,x
+        sta fptr+1
+        lda CHT+CH_POS,x
+        taz
+        lda [fptr],z
+        ldz #0
+        pha
+        inc CHT+CH_POS,x
+        bne +
+        inc CHT+CH_POS+1,x
++       inc CHT+CH_PTR,x
+        bne +
+        inc CHT+CH_PTR+1,x
++       pla
+        clc
+        rts
+
+.fp     txa                     ; fptr = CHBUF + channel*512
+        lsr
+        lsr
+        lsr
+        clc
+        adc #>CHBUF
+        sta fptr+1
+        lda #<CHBUF
+        sta fptr
+        lda #^CHBUF
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        rts
+
+f_bget: jsr channel
+        jsr bgetc
+        bcc +
+        lda #$fe                ; read past end
+        jmp eoferr
++       ldx #0
+        jmp setw
+eoferr: lda #<msg_eof
+        ldx #>msg_eof
+        ldy #223
+        jmp dosmsg
+msg_eof: !text "Eof",0
+f_eof:  jsr channel             ; EOF#: TRUE if no more bytes
+        jsr bgetc
+        bcs .t
+        lda CHT+CH_POS,x        ; un-read the byte
+        bne +
+        dec CHT+CH_POS+1,x
++       dec CHT+CH_POS,x
+        lda CHT+CH_PTR,x
+        bne +
+        dec CHT+CH_PTR+1,x
++       dec CHT+CH_PTR,x
+        lda #0
+        jmp setint8
+.t      lda #$ff
+        jmp setint8
+f_ptr:  jsr channel
+        lda CHT+CH_PTR,x
+        pha
+        lda CHT+CH_PTR+1,x
+        tax
+        pla
+        jmp setw
+; GET$#ch : read a line (to CR or LF)
+f_getsch:
+        jsr channel
+        lda #0
+        sta slen
+-       jsr bgetc
+        bcs +
+        cmp #CR
+        beq +
+        cmp #LF
+        beq +
+        ldy slen
+        sta ACCS,y
+        inc slen
+        bne -
++       jmp setstr
+; CLOSE#ch (0 = all)
+close:  jsr nxt
+        cmp #'#'
+        beq +
+        jmp syntax
++       inw tp
+        jsr itemi
+        lda acc
+        bne +
+        ldx #0                  ; close all
+-       jsr .cl1
+        txa
+        clc
+        adc #16
+        tax
+        cpx #NCHAN*16
+        bcc -
+        jmp xeq
++       jsr chanx
+        jsr .cl1
+        jmp xeq
+.cl1    lda CHT+CH_OPEN,x
+        beq +
+        lda #0
+        sta CHT+CH_OPEN,x
+        phx
+        lda CHT+CH_FD,x
+        tax
+        lda #$20                ; closefile
+        jsr hyppo
+        plx
++       rts
