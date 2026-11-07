@@ -1,0 +1,20 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 A=1:B$="x":C%=5
+>20 PROCchg(A,B$,C%)
+>30 PRINT A;" ";B$;" ";C%
+>40 X=FNtwice(A):PRINT X;" ";A
+>50 DIM Q(3):Q(2)=7:PROCchg(Q(2),B$,C%):PRINT Q(2)
+>60 END
+>70 DEF PROCchg(RETURN p, RETURN q$, r%)
+>80 p=p*10:q$=q$+"y":r%=99
+>90 ENDPROC
+>100 DEF FNtwice(RETURN v):v=v*2:=v+1
+>RUN
+        10 xy 5
+        21 20
+        70
+>

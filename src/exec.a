@@ -1636,6 +1636,9 @@ fn_call:
         lda #TFN
         jsr finddef
 callset:
+        jsr retscan             ; retmask: formals declared RETURN
+        lda retmask
+        pha
         lda fnlev
         pha
         lda ptr1                ; DEF text pointer
@@ -1646,7 +1649,7 @@ callset:
         sta cnt
         lda (tp),z
         cmp #'('
-        bne .noargs
+        lbne .noargs
         inw tp
 .a1     lda cnt
         cmp #6                  ; at most 6 parameters (PARBUF slots 0-5)
@@ -1667,22 +1670,60 @@ callset:
         lda #$40
         sta etype
         bra .ad
-.ae     jsr expr
+.ae     pla                     ; RETURN parameter?
+        pha
+        tax
+        lda bitmask6,x
+        and retmask
+        beq .ae2
+        lda retmask             ; (nested calls may change retmask)
+        pha
+        jsr getvar              ; actual must be a variable
+        bcc +
+        jmp syntax
++       beq +
+        jsr putvar
++       pla
+        sta retmask
+        lda vptr
+        sta rtmp2
+        lda vptr+1
+        sta rtmp2+1
+        lda vtype
+        pha
+        jsr loadvar             ; current value goes in
+        pla
+        sta tmp3
+        pla
+        sta cnt
+        jsr pushval_keep
+        lda rtmp2               ; then the variable's address (3 bytes)
+        pha
+        lda rtmp2+1
+        pha
+        lda tmp3
+        pha
+        bra .ad2
+.ae2    lda retmask
+        pha
+        jsr expr
+        pla
+        sta retmask
 .ad     pla
         sta cnt
         jsr pushval_keep        ; value stays on stack under the counters
-        inc cnt
+.ad2    inc cnt
         jsr nxt
         cmp #','
         bne +
         inw tp
-        bra .a1
+        lbra .a1
 +       jsr braket
 .noargs ; pop args into PARBUF slots (last arg first)
         ldx cnt
         stx tmp2
 .p1     ldx tmp2
-        beq .p2
+        lbeq .p2
         dex
         stx tmp2
         txa
@@ -1692,7 +1733,24 @@ callset:
         sta ptr2+1
         lda #0
         sta ptr2
-        jsr popval              ; -> arg/argx or STRBUF/tmp6 ; tmp5 = type
+        ldx tmp2                ; RETURN slot: variable address on top
+        lda bitmask6,x
+        and retmask
+        beq +
+        ldy #1
+        pla
+        sta (ptr2),y            ; slot+256: actual vtype, vptr hi, vptr lo
+        inc ptr2+1
+        ldy #0
+        sta (ptr2),y
+        pla
+        iny
+        sta (ptr2),y
+        pla
+        iny
+        sta (ptr2),y
+        dec ptr2+1
++       jsr popval              ; -> arg/argx or STRBUF/tmp6 ; tmp5 = type
         ldy #0
         lda tmp5
         sta (ptr2),y
@@ -1722,6 +1780,8 @@ callset:
         sta ptr1
         pla
         sta fnlev
+        pla
+        sta retmask
         ; push call frame
         lda #3
         jsr alloc
@@ -1749,7 +1809,11 @@ callset:
         cmp cnt
         lbcs .badarg
         jsr nxt
-        jsr arrref              ; formal array parameter name()
+        cmp #TRETURN            ; RETURN formal: value comes back at exit
+        bne +
+        inw tp
+        jsr nxt
++       jsr arrref              ; formal array parameter name()
         bne .fv
         lda #2
         sta vtype
@@ -1800,12 +1864,49 @@ callset:
         lda #0
         sta etype
 +       jsr storevar
-        inc tmp2
+        ldx tmp2                ; RETURN formal: push a copy-back frame
+        lda bitmask6,x
+        and retmask
+        beq .nr
+        lda #7
+        jsr alloc
+        lda vtype
+        ldy #4
+        sta (spz),y             ; formal vtype
+        lda vptr+1
+        dey
+        sta (spz),y
+        lda vptr
+        dey
+        sta (spz),y             ; formal vptr
+        lda tmp2
+        asl
+        clc
+        adc #(>PARBUF)+1
+        sta ptr2+1
+        lda #0
+        sta ptr2
+        ldy #0
+        lda (ptr2),y            ; actual vtype
+        ldy #7
+        sta (spz),y
+        ldy #1
+        lda (ptr2),y            ; actual vptr hi
+        ldy #6
+        sta (spz),y
+        ldy #2
+        lda (ptr2),y
+        ldy #5
+        sta (spz),y
+        ldy #1
+        lda #TRETURN
+        sta (spz),y
+.nr     inc tmp2
         jsr nxt
         cmp #','
         bne +
         inw tp
-        bra .b1
+        lbra .b1
 +       jsr braket
         lda tmp2
         cmp cnt
@@ -1817,6 +1918,39 @@ callset:
 .badarg2
 .badarg lda #31                 ; Bad arguments
         jmp error
+
+bitmask6: !byte 1,2,4,8,16,32
+; RETSCAN: ptr1 -> DEF text after the name; retmask bit n = formal n is RETURN
+!zone retscan
+retscan:
+        lda #0
+        sta retmask
+        ldy #0
+        lda (ptr1),y
+        cmp #'('
+        bne .x
+        ldx #0                  ; formal index
+.f      iny
+        lda (ptr1),y
+        cmp #' '
+        beq .f
+        cmp #TRETURN
+        bne .skip
+        lda bitmask6,x
+        tsb retmask
+.skip   lda (ptr1),y            ; to ',' or ')'
+        cmp #','
+        beq .n
+        cmp #')'
+        beq .x
+        cmp #CR
+        beq .x
+        iny
+        bra .skip
+.n      inx
+        cpx #6
+        bcc .f
+.x      rts
 
 ; pushval variant used inside callset (keeps cnt etc. on top: they are
 ; pulled before the call, so plain pushval is fine)
@@ -1932,7 +2066,50 @@ unwind: pla
         sty spz+1
         ldy #1
         lda (spz),y
-        cmp #TLOCAL
+        cmp #TRETURN            ; RETURN parameter: copy formal -> actual
+        bne .nret
+        ldy #2
+        lda (spz),y
+        sta vptr
+        iny
+        lda (spz),y
+        sta vptr+1
+        iny
+        lda (spz),y
+        sta vtype
+        lda tmpw2
+        pha
+        lda tmpw2+1
+        pha
+        jsr loadvar
+        jsr tspz
+        ldy #5
+        lda (spz),y
+        sta vptr
+        iny
+        lda (spz),y
+        sta vptr+1
+        iny
+        lda (spz),y
+        sta vtype
+        lda #0
+        sta farflag
+        jsr storevar
+        pla
+        sta tmpw2+1
+        pla
+        sta tmpw2
+        tsx                     ; drop the 7-byte frame
+        txa
+        clc
+        adc #7
+        tax
+        tsy
+        bcc +
+        iny
++       +setsp
+        bra .l
+.nret   cmp #TLOCAL
         lbne .x
         iny
         lda (spz),y
@@ -1972,7 +2149,7 @@ unwind: pla
         bcc +
         iny
 +       +setsp
-        bra .l
+        lbra .l
 .s      lda #$80
         sta etype
         ldy #5
@@ -2017,6 +2194,19 @@ unwind: pla
         lda tmpw2
         pha
         rts
+
+; TSPZ: spz = stack top below our return address and 2 pushed bytes
+tspz:   tsx
+        stx spz
+        tsy
+        sty spz+1
+        lda spz
+        clc
+        adc #4
+        sta spz
+        bcc +
+        inc spz+1
++       rts
 
 !zone endproc
 endproc:

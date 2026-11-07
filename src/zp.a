@@ -149,6 +149,7 @@ ipbits  = $f4   ; 4 bytes
 DSTK    = $0780 ; STR digit stack (pairs A,F), 24 entries
 rtmp2   = $fc   ; 2
 casel   = $fe
+retmask = $ff
 ; misc RAM variables (absolute addressing) after NUMBUF
 MISC    = $0640
 avp     = MISC+0        ; 2 whole-array: pointer field
