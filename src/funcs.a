@@ -38,6 +38,7 @@ functab:
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
         !byte TREPORT : !word f_reports
+        !byte TTLEFT  : !word f_tleft
         !byte TUSR    : !word f_usr
         !byte $8e     : !word f_openin
         !byte $9a     : !word f_bget
@@ -646,66 +647,19 @@ wait1cs:                        ; ~1/100 s: two raster lines wraps... use frame/
 !zone time
 f_time: jsr readtime
         jmp setnum
-readtime:                       ; acc = centiseconds since TIME base
-        lda $dc0b               ; hours (reading latches the clock)
-        and #$1f
-        jsr bcd2bin
-        sta arg
-        lda #0
-        sta arg+1
-        sta arg+2
-        sta arg+3
-        lda $dc0a
-        jsr bcd2bin
-        sta tmp1
-        lda $dc09
-        jsr bcd2bin
-        sta tmp2
-        lda $dc08               ; tenths (unlatches)
-        and #$0f
-        sta tmp3
-        lda #60
-        jsr mulsmall
-        lda tmp1
-        jsr addsmall
-        lda #60
-        jsr mulsmall
-        lda tmp2
-        jsr addsmall
-        lda #10
-        jsr mulsmall
-        lda tmp3
-        jsr addsmall
-        lda #10
-        jsr mulsmall
-        sec
-        ldq arg
-        sbcq timebase
-        stq acc
-        ldz #0
-        rts
-mulsmall:                       ; arg *= A (hardware multiplier)
-        sta $d774
-        lda #0
-        sta $d775
-        sta $d776
-        sta $d777
-        ldq arg
-        stq $d770
-        ldq $d778
-        stq arg
-        ldz #0
-        rts
-addsmall:
-        clc
-        adc arg
-        sta arg
-        bcc +
-        inc arg+1
-        bne +
-        inc arg+2
-        bne +
-        inc arg+3
+readtime:                       ; acc = TIME (centiseconds, raster interrupt)
+        sei
+        lda tcs
+        sta acc
+        lda tcs+1
+        sta acc+1
+        lda tcs+2
+        sta acc+2
+        lda tcs+3
+        sta acc+3
+        bit irqon
+        bpl +
+        cli
 +       rts
 zero32: !32 0
 timebase: !32 0
@@ -942,4 +896,19 @@ div10:  lda #0
         inc arg
 +       dey
         bne -
+        rts
+
+mulsmall:                       ; arg *= A (hardware multiplier)
+        sta $d774
+        lda #0
+        sta $d775
+        sta $d776
+        sta $d777
+        ldq arg
+        stq $d770
+-       bit $d70f
+        bvs -
+        ldq $d778
+        stq arg
+        ldz #0
         rts

@@ -5,6 +5,7 @@
 ; (Z80) v5. Names are 8.3; ".BBC" is appended when there is no extension.
 
 FNBUF   = $07c0             ; (shared with FP stack area start: only used transiently)
+FEXBUF  = $0760             ; 11 bytes: 8.3 name for directory compare
 DIRENT  = $0700             ; Hyppo dirent buffer (87 bytes, page aligned)
 NCHAN   = 4
 CHBUF   = $05c000           ; channel buffers (512 bytes each) in chip RAM, bank 5
@@ -81,9 +82,9 @@ setfname:
 ; independent of Hyppo findfile semantics)
 !zone fexists
 fexists:
-        ldx #0                  ; build 8.3 raw name in NUMBUF+64
+        ldx #0                  ; build 8.3 raw name in FEXBUF
         lda #' '
--       sta NUMBUF+64,x
+-       sta FEXBUF,x
         inx
         cpx #11
         bne -
@@ -95,7 +96,7 @@ fexists:
         beq .ext
         cpy #8
         bcs +
-        sta NUMBUF+64,y
+        sta FEXBUF,y
         iny
 +       inx
         bra -
@@ -105,7 +106,7 @@ fexists:
         beq .raw
         cpy #11
         bcs .raw
-        sta NUMBUF+64,y
+        sta FEXBUF,y
         iny
         inx
         bra -
@@ -120,7 +121,7 @@ fexists:
         bcc .nf
         ldx #10                 ; short name compare
 -       lda DIRENT+65,x
-        cmp NUMBUF+64,x
+        cmp FEXBUF,x
         bne .lfn
         dex
         bpl -

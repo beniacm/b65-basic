@@ -248,7 +248,9 @@ check:  tsx
 ;      Z set = found: vptr, vtype
 ;      Z clear = not found (name scanned; call PUTVAR to create)
 !zone getvar
-getvar: lda (tp),z
+getvar: lda #0
+        sta farflag
+        lda (tp),z
         cmp #'!'
         beq .ind4
         cmp #'?'
@@ -286,7 +288,26 @@ getvar: lda (tp),z
         sta vptr+1
         pla
         sta vtype
-        clc
+        lda acc+2               ; 28-bit address: far access through FARBUF
+        ora acc+3
+        beq .near
+        lda vtype
+        bpl +
+        lda #14                 ; ($ indirection is bank 0 only)
+        jmp error
++       ldx #3
+-       lda acc,x
+        sta farad,x
+        dex
+        bpl -
+        lda #$ff
+        sta farflag
+        lda #<FARBUF
+        sta vptr
+        lda #>FARBUF
+        sta vptr+1
+        jsr farld
+.near   clc
         lda #0
         rts
 .post   ; binary indirection: var?n  var!n

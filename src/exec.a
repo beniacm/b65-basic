@@ -33,8 +33,7 @@ alloc:  sta tmp0
         sbc #0
         sta spz+1
         tay
-        txs
-        tys
+        +setsp
         lda tmpw+1
         pha
         lda tmpw
@@ -59,8 +58,7 @@ drop:   sta tmp0
         adc #0
         sta spz+1
         tay
-        txs
-        tys
+        +setsp
         lda tmpw+1
         pha
         lda tmpw
@@ -112,6 +110,9 @@ xeq:    lda tp
         lda tp+1
         sta curlin+1
         jsr trap
+        lda evpend
+        beq xeq1
+        jsr evcheck
 xeq1:   jsr nxt
         inw tp
         cmp #':'
@@ -132,7 +133,19 @@ xeq1:   jsr nxt
         jsr nxt
         jmp (tmpw)
 .extras txa
-        cmp #TELSE
+        cmp #TEVERY
+        bne +
+        jmp every
++       cmp #TAFTER
+        bne +
+        jmp after
++       cmp #TDI
+        bne +
+        jmp evdi
++       cmp #TEI
+        bne +
+        jmp evei
++       cmp #TELSE
         bne +
         jmp rem
 +       cmp #TERROR
@@ -298,34 +311,19 @@ pagev:  jsr eqexpr
         jmp xeq
 himemv: jmp noimp
 timev:  jsr eqexpr
-        lda #0
-        sta timebase
-        sta timebase+1
-        sta timebase+2
-        sta timebase+3
+        sei
         lda acc
-        pha
+        sta tcs
         lda acc+1
-        pha
+        sta tcs+1
         lda acc+2
-        pha
+        sta tcs+2
         lda acc+3
-        pha
-        jsr readtime            ; raw time in acc
-        pla
-        sta arg+3
-        pla
-        sta arg+2
-        pla
-        sta arg+1
-        pla
-        sta arg
-        sec                     ; base = raw - wanted
-        ldq acc
-        sbcq arg
-        stq timebase
-        ldz #0
-        jmp xeq
+        sta tcs+3
+        bit irqon
+        bpl +
+        cli
++       jmp xeq
 eqexpr: jsr nxt
         cmp #'='
         beq +
@@ -389,7 +387,16 @@ let:    jsr arrlet              ; whole-array assignment?
         jmp mistake
 +       beq +
         jsr putvar
-+       lda vptr
++       lda farflag             ; far target: keep its address
+        beq +
+        ldx #3
+-       lda farad,x
+        pha
+        dex
+        bpl -
++       lda farflag
+        pha
+        lda vptr
         pha
         lda vptr+1
         pha
@@ -443,7 +450,19 @@ let:    jsr arrlet              ; whole-array assignment?
         sta vptr+1
         pla
         sta vptr
-        cpx #$ff
+        pla
+        sta farflag
+        beq +
+        stx fpopc               ; (scratch) keep the op
+        ldx #0                  ; restore the far address (and its data)
+-       pla
+        sta farad,x
+        inx
+        cpx #4
+        bne -
+        jsr farld
+        ldx fpopc
++       cpx #$ff
         beq .store
         ; compound: var OP= rhs
         phx
@@ -488,8 +507,12 @@ loadvar:
 storevar:
         lda vtype
         bmi +
-        jmp storen
+        jsr storen
+        lda farflag
+        beq ++
+        jmp farst
 +       jmp stores
+++      rts
 
 ; current value -> left operand (arg/argx or STRBUF/tmp6), tmp5 = type
 movleft:
@@ -738,7 +761,12 @@ gosub:  jsr itemi
 return: jsr getsp
         cmp #TGOSUB
         beq +
-        lda #38                 ; No GOSUB
+        cmp #TEVT               ; end of an EVERY/AFTER handler
+        bne .ng
+        lda #0
+        sta inevt
+        bra +
+.ng     lda #38                 ; No GOSUB
         jmp error
 +       jsr frametp
         lda #3
@@ -1937,8 +1965,7 @@ unwind: pla
         tsy
         bcc +
         iny
-+       txs
-        tys
++       +setsp
         bra .l
 .s      lda #$80
         sta etype
@@ -1977,8 +2004,7 @@ unwind: pla
         lda spz+1
         adc #0
         tay
-        txs
-        tys
+        +setsp
         jmp .l
 .x      lda tmpw2+1
         pha

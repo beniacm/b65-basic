@@ -1,0 +1,442 @@
+; B65 BASIC - MEGA65 extensions: hardware detection, raster interrupt,
+; TIME, EVERY/AFTER timer events (Locomotive BASIC style), far memory.
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+
+; MEGA65 information block (documented, PEEKable): see docs/DESIGN.md
+HWINFO  = $06e0
+hw_model = HWINFO+0     ; $D629 board/target id
+hw_k325t = HWINFO+1     ; $FF if the K325T variant was detected
+hw_chip  = HWINFO+2     ; chip RAM in KB (2 bytes): 384 or 1024
+hw_attic = HWINFO+4     ; attic RAM in MB: 8 or 64
+; interrupt state (absolute addresses: the IRQ never touches the zero page)
+tcs     = HWINFO+8      ; 4 bytes: TIME in centiseconds
+nframe  = HWINFO+12     ; frame phase for NTSC (5/3 cs per frame)
+evpend  = HWINFO+13     ; pending timer events (bit n = timer n)
+evon    = HWINFO+14     ; events enabled (EI/DI)
+inevt   = HWINFO+15     ; currently in an event handler
+ev_mode = HWINFO+16     ; 4 bytes: 0 off, 1 AFTER, 2 EVERY
+ev_cnt  = HWINFO+20     ; 4 x 2 bytes count down (frames)
+ev_rel  = MISC+114        ; 4 x 2 bytes reload (frames), $06B2-$06B9
+ev_line = $06c0         ; 4 x 2 bytes: target text pointer of GOSUB line (program)
+irqon   = HWINFO+31     ; interrupts set up
+
+TEVERY  = $11
+TAFTER  = $12
+TTLEFT  = $13
+TDI     = $14
+TEI     = $15
+TEVT    = $11           ; marker of an event GOSUB frame
+
+; ---------------- hardware detection ----------------
+!zone hwdetect
+hwdetect:
+        lda $d629
+        sta hw_model
+        lda #0
+        sta hw_k325t
+        lda #<384
+        sta hw_chip
+        lda #>384
+        sta hw_chip+1
+        lda #8
+        sta hw_attic
+        lda hw_model
+        cmp #$62                ; K325T core id
+        bne .x
+        ; confirm with XCTL ($FFD71F0): write bit 0, read back, restore
+        lda #$f0
+        sta fptr
+        lda #$71
+        sta fptr+1
+        lda #$fd
+        sta fptr+2
+        lda #$0f
+        sta fptr+3
+        ldz #0
+        lda [fptr],z
+        sta tmp0
+        ora #$01                ; bit 0: 1 MB chip RAM
+        sta [fptr],z
+        lda [fptr],z
+        and #$01
+        beq .rest
+        lda #$ff
+        sta hw_k325t
+        lda #<1024
+        sta hw_chip
+        lda #>1024
+        sta hw_chip+1
+        bra .attic              ; keep 1 MB enabled on the K325T
+.rest   lda tmp0
+        sta [fptr],z
+        bra .x
+.attic  lda #$fc                ; attic size: write 64 to $BFFFFFC, read back
+        sta fptr
+        lda #$ff
+        sta fptr+1
+        lda #$ff
+        sta fptr+2
+        lda #$0b
+        sta fptr+3
+        lda #64
+        sta [fptr],z
+        lda [fptr],z
+        cmp #64
+        bne .x
+        sta hw_attic
+.x      ldz #0
+        rts
+
+; banner line: "MEGA65 (model $xx), 384K chip RAM, 8MB attic" / "MEGA65 K325T, ..."
+hwbanner:
+        jsr tell
+        !text "MEGA65",0
+        bit hw_k325t
+        bpl +
+        jsr tell
+        !text " K325T",0
+        bra ++
++       jsr tell
+        !text " (model $",0
+        lda hw_model
+        jsr hexb_core
+        lda #')'
+        jsr outchr
+++      jsr tell
+        !text ", ",0
+        lda hw_chip
+        ldx hw_chip+1
+        jsr prdec16
+        jsr tell
+        !text "K chip RAM, ",0
+        lda hw_attic
+        ldx #0
+        jsr prdec16
+        jsr tell
+        !text "MB attic RAM",CR,LF,0
+        rts
+prdec16:                        ; print A/X as decimal
+        sta lnum
+        stx lnum+1
+        jmp pbcdl
+hexb_core:
+        pha
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr .d
+        pla
+        and #$0f
+.d      cmp #10
+        bcc +
+        adc #6
++       adc #'0'
+        jmp outchr
+
+; ---------------- raster interrupt ----------------
+!zone irqinit
+irqinit:
+        sei
+        lda #$7f                ; no CIA interrupts
+        sta $dc0d
+        sta $dd0d
+        lda $dc0d
+        lda $dd0d
+        lda #<irqhandler
+        sta $fffe
+        lda #>irqhandler
+        sta $ffff
+        lda #<nmihandler
+        sta $fffa
+        lda #>nmihandler
+        sta $fffb
+        lda $d011               ; raster line 251 (below the text area)
+        and #$7f
+        sta $d011
+        lda #251
+        sta $d012
+        lda #$01
+        sta $d01a
+        lda #$ff
+        sta $d019
+        lda #$ff
+        sta irqon
+        lda #$ff
+        sta evon
+        cli
+        rts
+
+nmihandler:
+        rti
+
+irqhandler:
+        pha
+        phx
+        phy
+        phz
+        lda $d019
+        sta $d019               ; acknowledge
+        ; TIME: +2 cs per PAL frame, NTSC: 2,2,1 (= 5/3)
+        ldx #2
+        bit $d06f               ; bit 7: NTSC
+        bpl .pal
+        inc nframe
+        lda nframe
+        cmp #3
+        bcc .pal
+        lda #0
+        sta nframe
+        dex
+.pal    txa
+        clc
+        adc tcs
+        sta tcs
+        bcc +
+        inc tcs+1
+        bne +
+        inc tcs+2
+        bne +
+        inc tcs+3
++       ; timer events (Y = timer, X = 2*timer)
+        ldy #3
+.t      lda ev_mode,y
+        beq .tn
+        tya
+        asl
+        tax
+        lda ev_cnt,x
+        bne +
+        lda ev_cnt+1,x
+        beq .fire
+        dec ev_cnt+1,x
++       dec ev_cnt,x
+        lda ev_cnt,x
+        ora ev_cnt+1,x
+        bne .tn
+.fire   lda bitmask,y
+        tsb evpend
+        lda ev_mode,y
+        cmp #2
+        beq .rl
+        lda #0                  ; AFTER: once
+        sta ev_mode,y
+        bra .tn
+.rl     lda ev_rel,x            ; EVERY: reload
+        sta ev_cnt,x
+        lda ev_rel+1,x
+        sta ev_cnt+1,x
+.tn     dey
+        bpl .t
+        jsr sndirq
+        plz
+        ply
+        plx
+        pla
+        rti
+bitmask: !byte 1,2,4,8
+
+; ---------------- EVERY / AFTER / TIMELEFT / DI / EI ----------------
+; AFTER t[,n] GOSUB line   EVERY t[,n] GOSUB line   (t in 1/50 s, n = 0..3)
+!zone everyafter
+every:  lda #2
+        bra +
+after:  lda #1
++       sta tmp4
+        jsr expri
+        lda acc
+        sta tmpw
+        lda acc+1
+        sta tmpw+1
+        lda #0
+        sta tmp5                ; timer number
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr expri
+        lda acc
+        and #3
+        sta tmp5
++       jsr nxt
+        cmp #TGOSUB
+        beq +
+        jmp syntax
++       inw tp
+        jsr itemi               ; line number
+        lda acc
+        sta lnum
+        lda acc+1
+        sta lnum+1
+        jsr findl
+        beq +
+        lda #41                 ; No such line
+        jmp error
++       ldx tmp5
+        sei
+        lda #0
+        sta ev_mode,x
+        txa
+        asl
+        tay
+        lda ptr1
+        sta ev_line,y
+        lda ptr1+1
+        sta ev_line+1,y
+        lda tmpw
+        sta ev_cnt,y
+        sta ev_rel,y
+        lda tmpw+1
+        sta ev_cnt+1,y
+        sta ev_rel+1,y
+        lda tmpw                ; zero delay: never fires
+        ora tmpw+1
+        beq +
+        lda tmp4
+        sta ev_mode,x
++       lda bitmask,x
+        trb evpend
+        cli
+        jmp xeq
+evdi:   lda #0
+        sta evon
+        jmp xeq
+evei:   lda #$ff
+        sta evon
+        jmp xeq
+; TIMELEFT(n): remaining 1/50 s of timer n, and disables it
+f_tleft:
+        jsr expri
+        jsr braket
+        lda acc
+        and #3
+        tax
+        asl
+        tay
+        sei
+        lda ev_mode,x
+        bne +
+        lda #0
+        sta acc
+        sta acc+1
+        bra ++
++       lda #0
+        sta ev_mode,x
+        lda ev_cnt,y
+        sta acc
+        lda ev_cnt+1,y
+        sta acc+1
+++      cli
+        lda acc
+        ldx acc+1
+        jmp setw
+
+; EVCHECK: called from XEQ between statements when evpend <> 0
+!zone evcheck
+evcheck:
+        lda evon
+        beq .x
+        lda inevt
+        bne .x
+        ldx #3                  ; highest timer number first (Locomotive priority)
+-       lda bitmask,x
+        bit evpend
+        bne .go
+        dex
+        bpl -
+.x      rts
+.go     sei
+        trb evpend
+        cli
+        txa
+        asl
+        tay
+        lda ev_line,y           ; target line
+        sta ptr1
+        lda ev_line+1,y
+        sta ptr1+1
+        pla                     ; discard our return address (we jump to the line)
+        pla
+        lda #$ff
+        sta inevt
+        lda #3                  ; GOSUB frame with the event marker
+        jsr alloc
+        ldy #1
+        lda #TEVT
+        sta (spz),y
+        iny
+        lda tp
+        sta (spz),y
+        iny
+        lda tp+1
+        sta (spz),y
+        lda ptr1
+        sta tp
+        lda ptr1+1
+        sta tp+1
+        jmp xeq0
+
+; ---------------- far memory for ?, !, |, $ indirection ----------------
+; FARLD: copy vtype-size bytes from 28-bit address farad into FARBUF
+; FARST: copy FARBUF back. (Addresses >= $10000 use 32-bit flat addressing.)
+FARBUF  = $06d0         ; 16 bytes (strings: whole ACCS is used directly)
+farad   = MISC+108      ; 4 bytes
+farflag = MISC+112
+!zone far
+farsz:  lda vtype
+        and #$7f
+        bne +
+        lda #1
++       rts
+farptr: ldx #3
+-       lda farad,x
+        sta fptr,x
+        dex
+        bpl -
+        rts
+farld:  jsr farptr
+        jsr farsz
+        tax
+        ldy #0
+        ldz #0
+-       lda [fptr],z
+        sta FARBUF,y
+        iny
+        inz
+        dex
+        bne -
+        ldz #0
+        rts
+farst:  jsr farptr
+        jsr farsz
+        tax
+        ldy #0
+        ldz #0
+-       lda FARBUF,y
+        sta [fptr],z
+        iny
+        inz
+        dex
+        bne -
+        ldz #0
+        rts
+
+; extension keywords (tokens $11-$1F are free in program text; $11-$1B are
+; only used as message fragments inside error texts)
+EXTWDS: !byte TAFTER : !text "AFTER"
+        !byte TDI    : !text "DI "
+        !byte TEI    : !text "EI "
+        !byte TEVERY : !text "EVERY"
+        !byte TTLEFT : !text "TIMELEFT("
+        !byte $ff,$ff
+EXTWDL = * - EXTWDS
+; LEXX: keyword lookup in KEYWDS, then EXTWDS
+lexx:   jsr lex
+        beq +
+        lda #<EXTWDS
+        sta ptr1
+        lda #>EXTWDS
+        sta ptr1+1
+        jsr lex0
++       rts
+sndirq: rts

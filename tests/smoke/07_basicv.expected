@@ -1,6 +1,7 @@
 B65 BASIC (45GS02) for MEGA65 - 0.1
 Derived from BBC BASIC (Z80) v5
 (C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
 >10 FOR I%=1 TO 4
 >20   CASE I% OF

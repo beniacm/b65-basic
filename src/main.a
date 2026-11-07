@@ -135,6 +135,9 @@ cold_test:
 vermsg: !text "B65 BASIC (45GS02) for MEGA65 - 0.1",CR,LF
         !text "Derived from BBC BASIC (Z80) v5",CR,LF
 notice: !text "(C) Copyright R.T.Russell 2025",CR,LF,0
+        jsr hwdetect
+        jsr hwbanner
+        jsr irqinit
         jsr crlf
         jmp clopp
 
@@ -164,8 +167,7 @@ resetsp:
         lda himem+1
         sbc #0
         tay
-        txs
-        tys
+        +setsp
         lda tmpw2+1
         pha
         lda tmpw2
@@ -184,6 +186,12 @@ clopp:
         sta listo
         lda #0
         sta asmq
+        sta inevt
+        sta evpend
+        sta ev_mode
+        sta ev_mode+1
+        sta ev_mode+2
+        sta ev_mode+3
         sta errtrp
         sta errtrp+1
         sta onersp
@@ -658,7 +666,13 @@ list:   cmp #'O'
 ; LISTIT: list line at ptr1 (lnum = number). Uses indent.
 !zone listit
 listit:
-        jsr pbcd
+        lda #1
+        sta listflg
+        jsr .li
+        lda #0
+        sta listflg
+        rts
+.li     jsr pbcd
         ldy #3
         lda (ptr1),y
         jsr insub_q             ; outdent tokens at line start
@@ -886,8 +900,7 @@ error1: lda curlin              ; ERL
         ldx onersp
         ldy onersp+1
         cle
-        txs
-        tys
+        +setsp
         bra .go
 .gl     jsr resetsp_jsr
 .go     lda errtrp
@@ -1171,7 +1184,7 @@ lexan2: lda ptr2
         bne lexan1
         cmp #$80
         bcs .l8
-        jsr lex
+        jsr lexx
         bra .l8
 .left   lda #0
         sta lexmode
@@ -1180,7 +1193,7 @@ lexan2: lda ptr2
         beq .l9
         cmp #$80
         bcs +
-        jsr lex
+        jsr lexx
 +       cmp #TDATA
         beq .l9
         cmp #TOKLO
@@ -1526,6 +1539,18 @@ out:    cmp #$20
         sta optr
         lda #>KEYWDS
         sta optr+1
+        lda listflg             ; listing: $11-$1F are extension keywords
+        beq .kw
+        lda tmp0
+        cmp #$11
+        bcc .kw
+        cmp #$20
+        bcs .kw
+        lda #<EXTWDS
+        sta optr
+        lda #>EXTWDS
+        sta optr+1
+.kw
         ldy #0
 .s      lda (optr),y
         cmp tmp0

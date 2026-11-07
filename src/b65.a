@@ -18,7 +18,7 @@
 !src "src/tables.a"
 !src "src/font.a"
 !src "src/ovl.a"
-irqhandler = irq_rti
+!src "src/m65.a"
 NOVL = 1
 ovltab: !word ovl_asm_img, ovl_asm_end-$e000
 code_end:

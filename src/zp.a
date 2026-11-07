@@ -1,3 +1,14 @@
+; SETSP: X/Y -> 16-bit SP atomically (an IRQ between TXS and TYS would push
+; to a wrong address)
+!macro setsp {
+        sei
+        txs
+        tys
+        bit irqon
+        bpl .ss
+        cli
+.ss
+}
 ; B65 BASIC - zero page and fixed memory map
 ; Derived from BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
 
