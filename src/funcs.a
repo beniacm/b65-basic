@@ -43,6 +43,9 @@ functab:
         !byte TTLEFT  : !word f_tleft
         !byte TUSR    : !word f_usr
         !byte $8e     : !word f_openin
+        !byte $ae     : !word f_openout
+        !byte $ad     : !word f_openup
+        !byte $a2     : !word f_ext
         !byte $9a     : !word f_bget
         !byte $c5     : !word f_eof
         !byte TPTR    : !word f_ptr

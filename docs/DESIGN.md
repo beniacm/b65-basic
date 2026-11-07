@@ -247,25 +247,47 @@ to chip RAM bank 4 (`$40000 + n*$2000`), and mapped into CPU block 7
 (`$2000`-`$7EFF`) and leaves PAGE..HIMEM for programs, while larger modules
 are added.
 
-### Files (M3)
+### Files (M3, rewritten in step 2)
 
-Files use the Hyppo DOS traps on the FAT32 SD card:
+Reading uses the Hyppo DOS traps (setname, loadfile, opendir/readdir,
+findfile, openfile, readfile). **Writing does not**: on the board, Hyppo's
+`mkfile` (work in progress upstream) failed with "Disk fault", so files are
+written by our own FAT32 code in overlay 3 (`src/fat.a`):
 
-* setname, loadfile, opendir, readdir, openfile, readfile, mkfile and
-  writefile.
-* File existence is checked by scanning the directory, because the Hyppo
-  build in Xemu reports "found" for missing names. SAVE overwrites an
-  existing file in place; only new files go through `mkfile`.
-* `rmfile` is not used, so SAVE never deletes anything.
-* Program files are the tokenised program, the same format as BBC BASIC
-  (Z80) v5. `.BBC` is added when the name has no extension.
-* Files only work after the ROM has booted DOS (the normal case on a
-  MEGA65). The `tests/smoke_rom.sh` tests boot the ROM from an onboarded card
-  image.
-* **Known problem:** Hyppo's mkfile is marked work-in-progress upstream. In
-  Xemu, once files without long names exist, it reports "file exists" for
-  new names, so SAVE of a *new* file can fail with "Disk fault". Needs a test
-  on real hardware.
+* SD sector I/O through `$D680` exactly as Hyppo does it: write gate `$57`
+  before every `$03`; sector 0 (MBR) is never written; buffer at `$DE00`
+  (`$D689` bit 7 = SD buffer, `$D030` bit 0 cleared); ready = `$D680` bits
+  0-1 clear, error = bit 6, ~4 s timeout (then reset and "Disk fault").
+* Mounted fresh for every write: the first partition of type `$0B`/`$0C`,
+  512-byte sectors only. Only the **root directory**, only **8.3 names**
+  (no long names are created; an existing file with a long name keeps it).
+* A file is written as: find the 8.3 entry (or the first free one), free the
+  old cluster chain, allocate clusters from the FSInfo next-free hint
+  (bounded by the real cluster count, wraps once to cluster 2), write the
+  data, update **both FATs**, then the directory entry, then FSInfo (free
+  count adjusted by the net change, next-free hint). Directories, volume
+  labels and read-only files are never touched ("Bad name").
+* Dates are fixed at 2025-01-01 00:00 (no RTC dependency).
+* Tested by `tests/cardtest.py` on a copy of an FDISK-formatted MEGA65 card
+  image (4 KB clusters, multi-cluster root with long names): fsck.fat
+  findings unchanged, all B65 files readable with mtools, a 602,400-byte
+  file spanning several FAT sectors.
+
+SAVE uses this writer for new and existing files (an existing file is
+replaced, also when it gets shorter). `.BBC` is added when the name has no
+extension (SAVE, LOAD, CHAIN, OPENxx alike).
+
+Channels (OPENIN, OPENUP, OPENOUT; BGET#, BPUT#, PRINT#, INPUT#, READ#,
+GET$#, PTR# and PTR#=, EXT#, EOF#, CLOSE#) are buffered whole in attic RAM:
+channel n uses `$8100000 + (n-1)*$100000`, files up to 960 KB, 4 channels.
+OPENIN/OPENUP read the file at open time (Hyppo readfile); CLOSE# writes a
+changed file back with the FAT writer (if that fails, the channel stays open
+so CLOSE# can be retried). PRINT# writes the Z80 format (numbers 5 bytes,
+mantissa LSB first then exponent; strings + CR), INPUT#/READ# read it.
+BPUT#c,s$ writes s$ + LF (no LF with `;`). GET$# ends a line at CR, LF or
+CR LF. PTR#= beyond EXT extends a writable file with zeros; on a read-only
+one it stops at EXT. Writing to an OPENIN channel gives "Access denied".
+Files stay open after END/errors (as in BBC BASIC); CLOSE#0 closes all.
 
 ### MEGA65 extensions (M5)
 
@@ -338,15 +360,16 @@ Files use the Hyppo DOS traps on the FAT32 SD card:
 | `$0640`-`$06FF` | MISC variables, channel table, IRQ state, `HWINFO` at `$06E0` |
 | `$0700`-`$07FF` | EVAL buffer / dirent, STR digit stack, FP stack |
 | `$0800`-`$0FCF` | text screen, or the 16-bit character map in MODE 1 |
-| `$1000`-`$1BFF` | PARBUF: 6 parameter slots |
+| `$1000`-`$1BFF` | PARBUF: 6 parameter slots; during file writes also FAT/dir sector buffers and FAT state (`$1000`-`$147F`) |
 | `$1C00`-`$1DFF` | sound queues, envelopes, graphics argument buffer |
 | `$1E00`-`$1FFF` | FN result slot |
 | `$2001`-`$86FF` | PRG stub + resident interpreter |
 | `$8700`-`$CEFF` | PAGE..HIMEM (program, variables, CPU stack from the top) |
 | `$E000`-`$FFFF` | overlay window (MAP) |
 | bank 1 `$10000`/`$18000` | test script / transcript (test mode only) |
-| bank 4 `$40000`-`$43FFF` | overlay images (assembler, graphics) |
-| bank 4 `$4E000`/`$4F700`/`$4F800` | file channel buffers / line history / font |
+| bank 4 `$40000`-`$47FFF` | overlay images (assembler, graphics, array arithmetic, files) |
+| bank 4 `$4F700`/`$4F800` | line history / font |
+| attic `$8100000`-`$84FFFFF` | file channel buffers (1 MB each) |
 | bank 5 `$50000`-`$5F9FF` | MODE 1 bitmap |
 
 ### Needs a hardware test
@@ -362,7 +385,8 @@ These cannot be checked in Xemu, or only partly:
 * Math unit timing: the code polls MULBUSY/DIVBUSY (`$D70F`), and the
   divider correction path. The multiplier is also used without polling in
   screen and array code, which relies on its 1-cycle latency.
-* Hyppo file I/O: SAVE of new files (mkfile/writefile), OPENIN/BGET, *CAT.
+* SD writes with our FAT32 writer (SAVE, CLOSE# of changed files) on the
+  real card: `tests/hw/02_save.txt`, `tests/hw/03_chan.txt`.
 * 16-bit stack (CLE) with deep recursion on real silicon.
 * The MAP-based overlays on real hardware.
 * K325T: detection through `$D629`/XCTL `$FFD71F0`, enabling 1 MB chip RAM,

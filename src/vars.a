@@ -694,11 +694,10 @@ stores: lda etype
         lda slen
         clc
         adc #7
-        bcc +
-        lda #$ff
-+       and #$f8
+        bcs .max                ; (249..255 -> 255)
+        and #$f8
         bne +
-        lda #$ff
+.max    lda #$ff
 +       sta tmp0
         ldy #3
         sta (vptr),y

@@ -34,6 +34,7 @@ def main():
     ap.add_argument('--rom', action='store_true',
                     help='boot the real MEGA65 ROM from an onboarded card image (CARD env, default ~/src/xemu-work/card.img) and RUN the PRG from BASIC 65')
     ap.add_argument('--realtime', action='store_true', help='run at real MEGA65 speed (no -sleepless)')
+    ap.add_argument('--card', help='use this SD card image (written to!) instead of the virtual SD directory')
     ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
     script = open(a.script, 'rb').read()
@@ -47,6 +48,8 @@ def main():
         cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
                '-virtsd', '-sdimg', sd, '-extonboard', img, '-dumpmem', mem,
                '-dumpscreen', scr]
+        if a.card:
+            i = cmd.index('-virtsd'); cmd[i:i+3] = ['-sdimg', os.path.abspath(a.card)]
         if a.rom:
             card = os.environ.get('CARD', os.path.expanduser('~/src/xemu-work/card.img'))
             sb = os.path.join(td, 'script.bin')

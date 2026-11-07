@@ -1,0 +1,1711 @@
+; B65 BASIC - overlay 3: FAT32 file writing and buffered file channels
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+;
+; Hyppo's mkfile is work in progress (fails on hardware), so new files are
+; written here directly with SD sector I/O ($D680, as Hyppo does it): the
+; first FAT32 partition, the root directory, clusters taken from the FAT
+; (both copies updated), FSInfo free count kept consistent.
+;
+; Channels: OPENIN/OPENUP read the whole file into an attic RAM buffer
+; ($8100000 + ch*$100000, 1 MB per channel); OPENOUT starts empty. All
+; access goes to the buffer; CLOSE# writes the file back if it was changed.
+
+FATBUF  = $1000         ; 512: cached FAT sector (PARBUF slots are free here)
+DIRBUF  = $1200         ; 512: directory sector
+SECBUF  = $de00         ; SD controller sector buffer (mapped with $81)
+
+; FAT state (bank 0 scratch, PARBUF slot 2 = $1400.., not used during statements)
+fs_part = $1401         ; 4 partition LBA
+fs_spc  = $1405         ; sectors per cluster
+fs_spcs = $1406         ; log2(spc)
+fs_fat  = $1407         ; 4 FAT1 LBA
+fs_fsz  = $140b         ; 4 FAT size (sectors)
+fs_data = $140f         ; 4 first data sector
+fs_root = $1413         ; 4 root cluster
+fs_info = $1417         ; 4 FSInfo LBA
+fs_hint = $141b         ; 4 next free cluster hint
+fs_sec  = $141f         ; 4 cached FAT sector number ($ffffffff none)
+fs_dirty = $1423
+sdlba   = $1424         ; 4 LBA for sdread/sdwrite
+fc      = $1428         ; 4 cluster
+fv      = $142c         ; 4 value
+fprev   = $1430         ; 4 previous cluster in a chain
+ffirst  = $1434         ; 4 first cluster of the new file
+flen    = $1438         ; 4 file length
+fsrc    = $143c         ; 4 source (28-bit) of the data
+fn83    = $1440         ; 11 8.3 name
+dmatch  = $144b         ; 4 LBA of the sector with the matching entry (or 0)
+dmoff   = $144f         ; 2 offset in that sector
+dfree   = $1451         ; 4 LBA of the sector with a free entry (or 0)
+dfoff   = $1455         ; 2
+dclus   = $1457         ; 4 directory cluster being scanned
+dsec    = $145b         ; sector index in the cluster
+nclus   = $145c         ; 4 clusters needed
+fcnt    = $1460         ; 4 counter
+fsec    = $1464         ; sector index within cluster
+ftmp    = $1465         ; 4
+fs_max  = $1469         ; 4 highest cluster number + 1
+fsnet   = $146d         ; 4 signed change of the free cluster count
+omode   = $1471         ; OPENxx mode (set by the core stub)
+ochan   = $1472         ; channel table offset
+ofd     = $1473         ; Hyppo file descriptor
+ocnt    = $1474         ; 2
+sdto    = $1476         ; 3 SD timeout counter
+CMAX    = $0f           ; files up to $F0000 bytes (the name is kept at +$F0000)
+
+ovl_fat_img:
+!pseudopc $e000 {
+; ---------------- SD sector I/O ----------------
+!zone sdio
+sdwait: lda #0                  ; wait until ready (about 4 s timeout)
+        sta sdto
+        sta sdto+1
+        lda #$f0
+        sta sdto+2
+-       lda $d680
+        and #$03
+        beq +
+        inc sdto
+        bne -
+        inc sdto+1
+        bne -
+        inc sdto+2
+        bne -
+        lda #$00                ; timeout: reset the card interface, Disk fault
+        sta $d680
+        lda #$01
+        sta $d680
+        jmp sderr
++       rts
+sdread: jsr sdwait
+        jsr .lba
+        lda #$02
+        sta $d680
+        jsr sdwait
+        lda $d680
+        and #$40                ; error
+        bne sderr
+sdmap:  lda #$01                ; (colour RAM at $DC00 hides the buffer)
+        trb $d030
+        lda #$80                ; SD card buffer, not the floppy buffer
+        tsb $d689
+        lda #$81                ; map the buffer at $DE00
+        sta $d680
+        rts
+sdwrite:
+        jsr sdwait
+        jsr .lba
+        lda #$57                ; write gate
+        sta $d680
+        lda #$03
+        sta $d680
+        jsr sdwait
+        lda $d680
+        and #$40
+        bne sderr
+        rts
+.lba    ldx #3
+-       lda sdlba,x
+        sta $d681,x
+        dex
+        bpl -
+        rts
+sderr:  lda #$82
+        sta $d680
+        jmp diskerr
+
+; copy SECBUF <-> 512 bytes at (ptr3)
+bufin:  jsr sdmap
+        ldy #0                  ; SECBUF -> (ptr3)
+-       lda SECBUF,y
+        sta (ptr3),y
+        iny
+        bne -
+        inc ptr3+1
+-       lda SECBUF+$100,y
+        sta (ptr3),y
+        iny
+        bne -
+        dec ptr3+1
+        rts
+bufout: jsr sdmap
+        ldy #0                  ; (ptr3) -> SECBUF
+-       lda (ptr3),y
+        sta SECBUF,y
+        iny
+        bne -
+        inc ptr3+1
+-       lda (ptr3),y
+        sta SECBUF+$100,y
+        iny
+        bne -
+        dec ptr3+1
+        rts
+
+; 32-bit helpers on absolute variables: X/Y = address of a 4-byte value
+; add4: (dst at ptr1) += (src at ptr2)
+!zone mount
+; ---------------- mount: MBR + volume boot record (every time: the card may change) ----------------
+fatmount:
+        lda #0
+        ldx #3
+-       sta fsnet,x
+        dex
+        bpl -
+        jsr sdmap             ; same drive Hyppo uses (default drive 0)
+        lda #0
+        ldx #3
+-       sta sdlba,x
+        dex
+        bpl -
+        jsr sdread              ; MBR
+        ldx #0                  ; first FAT32 partition (type $0B or $0C)
+.p      lda SECBUF+$1be+4,x
+        cmp #$0b
+        beq .f
+        cmp #$0c
+        beq .f
+        txa
+        clc
+        adc #16
+        tax
+        cpx #64
+        bcc .p
+        jmp diskerr
+.f      ldy #0
+-       lda SECBUF+$1be+8,x
+        sta fs_part,y
+        sta sdlba,y
+        inx
+        iny
+        cpy #4
+        bne -
+        jsr sdread              ; volume boot record
+        lda SECBUF+$0b          ; 512 bytes per sector only
+        lbne .bad
+        lda SECBUF+$0c
+        cmp #2
+        lbne .bad
+        lda SECBUF+$0d
+        sta fs_spc
+        ldx #0                  ; log2(spc)
+        lsr
+-       beq +
+        inx
+        lsr
+        bra -
++       stx fs_spcs
+        ldx #3                  ; FAT size, root cluster; fs_max = part + total
+-       lda SECBUF+$24,x
+        sta fs_fsz,x
+        lda SECBUF+$2c,x
+        sta fs_root,x
+        dex
+        bpl -
+        clc
+        ldx #0
+        ldy #4
+-       lda SECBUF+$20,x
+        adc fs_part,x
+        sta fs_max,x
+        inx
+        dey
+        bne -
+        ; fat = part + reserved
+        lda fs_part
+        clc
+        adc SECBUF+$0e
+        sta fs_fat
+        lda fs_part+1
+        adc SECBUF+$0f
+        sta fs_fat+1
+        lda fs_part+2
+        adc #0
+        sta fs_fat+2
+        lda fs_part+3
+        adc #0
+        sta fs_fat+3
+        ; info = part + fsinfo sector
+        lda fs_part
+        clc
+        adc SECBUF+$30
+        sta fs_info
+        lda fs_part+1
+        adc SECBUF+$31
+        sta fs_info+1
+        lda fs_part+2
+        adc #0
+        sta fs_info+2
+        lda fs_part+3
+        adc #0
+        sta fs_info+3
+        ; data = fat + nfats * fsz
+        ldx #3
+-       lda fs_fat,x
+        sta fs_data,x
+        dex
+        bpl -
+        lda SECBUF+$10          ; number of FATs
+        sta ftmp
+-       clc
+        ldx #0
+        ldy #4
+--      lda fs_data,x
+        adc fs_fsz,x
+        sta fs_data,x
+        inx
+        dey
+        bne --
+        dec ftmp
+        bne -
+        ; fs_max = ((part + total) - data) >> spcs + 2
+        sec
+        ldx #0
+        ldy #4
+-       lda fs_max,x
+        sbc fs_data,x
+        sta fs_max,x
+        inx
+        dey
+        bne -
+        ldx fs_spcs
+        beq +
+-       lsr fs_max+3
+        ror fs_max+2
+        ror fs_max+1
+        ror fs_max
+        dex
+        bne -
++       lda fs_max
+        clc
+        adc #2
+        sta fs_max
+        bcc +
+        inc fs_max+1
+        bne +
+        inc fs_max+2
++       lda #2                  ; free cluster hint: FSInfo's, if valid
+        sta fs_hint
+        lda #0
+        sta fs_hint+1
+        sta fs_hint+2
+        sta fs_hint+3
+        jsr infoload
+        bcc +
+        ldx #3
+-       lda SECBUF+$1ec,x
+        sta fc,x
+        dex
+        bpl -
+        jsr inrange
+        bcc +
+        ldx #3
+-       lda fc,x
+        sta fs_hint,x
+        dex
+        bpl -
++
+        lda #$ff
+        sta fs_sec
+        sta fs_sec+1
+        sta fs_sec+2
+        sta fs_sec+3
+        lda #0
+        sta fs_dirty
+        rts
+.bad    jmp diskerr
+
+; INRANGE: carry set if 2 <= fc < fs_max
+inrange:
+        lda fc+3
+        ora fc+2
+        ora fc+1
+        bne +
+        lda fc
+        cmp #2
+        bcc .no
++       ldx #3
+-       lda fc,x
+        cmp fs_max,x
+        bcc .yes
+        bne .no
+        dex
+        bpl -
+.no     clc
+        rts
+.yes    sec
+        rts
+; INFOLOAD: read the FSInfo sector; carry set if both signatures are right
+infoload:
+        ldx #3
+-       lda fs_info,x
+        sta sdlba,x
+        dex
+        bpl -
+        jsr sdread
+        ldx #3
+-       lda SECBUF,x
+        cmp .s1,x
+        bne .no
+        lda SECBUF+$1e4,x
+        cmp .s2,x
+        bne .no
+        dex
+        bpl -
+        sec
+        rts
+.s1     !byte $52,$52,$61,$41
+.s2     !byte $72,$72,$41,$61
+; FSUPD: FSInfo free count += fsnet (unless unknown), next free = hint
+fsupd:  jsr infoload
+        bcc .x
+        lda SECBUF+$1e8
+        and SECBUF+$1e9
+        and SECBUF+$1ea
+        and SECBUF+$1eb
+        cmp #$ff
+        beq +
+        clc
+        ldx #0
+        ldy #4
+-       lda SECBUF+$1e8,x
+        adc fsnet,x
+        sta SECBUF+$1e8,x
+        inx
+        dey
+        bne -
++       ldx #3
+-       lda fs_hint,x
+        sta SECBUF+$1ec,x
+        dex
+        bpl -
+        jmp sdwrite
+.x      rts
+
+; ---------------- FAT access (one cached sector) ----------------
+!zone fatent
+; FATSECT: cluster fc -> sector index ftmp (fc >> 7), offset Y (4*(fc&127))
+fatpos: lda fc
+        asl
+        asl
+        tay                     ; offset low 8 bits (of 512)
+        lda fc
+        and #$40                ; bit 6 -> offset bit 8 (second half)
+        sta ftmp+3              ; (temporarily)
+        ; ftmp = fc >> 7
+        lda fc+1
+        asl
+        lda fc+2
+        rol
+        sta ftmp+1
+        lda fc+3
+        rol
+        sta ftmp+2
+        lda fc
+        asl
+        lda fc+1
+        rol
+        sta ftmp
+        lda ftmp+3
+        pha
+        lda #0
+        sta ftmp+3
+        pla
+        rts                     ; A <> 0: entry in the second 256 bytes
+; FATLOAD: make sector ftmp the cached one
+fatload:
+        ldx #3
+-       lda ftmp,x
+        cmp fs_sec,x
+        bne .ld
+        dex
+        bpl -
+        rts
+.ld     jsr fatflush
+        ldx #3
+-       lda ftmp,x
+        sta fs_sec,x
+        dex
+        bpl -
+        clc
+        ldx #0
+        ldy #4
+-       lda fs_fat,x
+        adc fs_sec,x
+        sta sdlba,x
+        inx
+        dey
+        bne -
+        jsr sdread
+        lda #<FATBUF
+        sta ptr3
+        lda #>FATBUF
+        sta ptr3+1
+        jmp bufin
+; FATFLUSH: write the cached sector to both FATs if changed
+fatflush:
+        lda fs_dirty
+        beq .x
+        lda #0
+        sta fs_dirty
+        lda #<FATBUF
+        sta ptr3
+        lda #>FATBUF
+        sta ptr3+1
+        jsr bufout
+        clc
+        ldx #0
+        ldy #4
+-       lda fs_fat,x
+        adc fs_sec,x
+        sta sdlba,x
+        inx
+        dey
+        bne -
+        jsr sdwrite             ; FAT 1
+        clc
+        ldx #0
+        ldy #4
+-       lda sdlba,x
+        adc fs_fsz,x
+        sta sdlba,x
+        inx
+        dey
+        bne -
+        jsr sdwrite             ; FAT 2 (same buffer)
+.x      rts
+; FATGET: fv = FAT[fc]
+fatget: jsr fatpos
+        pha
+        phy
+        jsr fatload
+        ply
+        pla
+        beq +
+        ldx #0
+-       lda FATBUF+$100,y
+        sta fv,x
+        iny
+        inx
+        cpx #4
+        bne -
+        bra ++
++       ldx #0
+-       lda FATBUF,y
+        sta fv,x
+        iny
+        inx
+        cpx #4
+        bne -
+++      lda fv+3
+        and #$0f
+        sta fv+3
+        rts
+; FATSET: FAT[fc] = fv
+fatset: jsr fatpos
+        pha
+        phy
+        jsr fatload
+        ply
+        pla
+        beq +
+        ldx #0
+-       lda fv,x
+        sta FATBUF+$100,y
+        iny
+        inx
+        cpx #4
+        bne -
+        bra ++
++       ldx #0
+-       lda fv,x
+        sta FATBUF,y
+        iny
+        inx
+        cpx #4
+        bne -
+++      lda #$ff
+        sta fs_dirty
+        rts
+; ISEOC: carry set if fv >= $0FFFFFF8 (end of chain) or < 2
+iseoc:  lda fv+3
+        cmp #$0f
+        bne +
+        lda fv+2
+        and fv+1
+        cmp #$ff
+        bne +
+        lda fv
+        cmp #$f8
+        bcs .y
++       lda fv+3
+        ora fv+2
+        ora fv+1
+        bne .n
+        lda fv
+        cmp #2
+        bcc .y
+.n      clc
+        rts
+.y      sec
+        rts
+; FREECHAIN: free the chain starting at fc
+freechain:
+.lp     lda fc+3
+        ora fc+2
+        ora fc+1
+        bne +
+        lda fc
+        cmp #2
+        lbcc .x
++       jsr fatget              ; next
+        ldx #3
+-       lda fv,x                ; keep the next cluster in fprev
+        sta fprev,x
+        dex
+        bpl -
+        lda #0
+        sta fv
+        sta fv+1
+        sta fv+2
+        sta fv+3
+        jsr fatset
+        jsr fsinc
+        ldx #3
+-       lda fprev,x
+        sta fc,x
+        sta fv,x
+        dex
+        bpl -
+        jsr iseoc
+        bcc .lp
+.fx     rts
+; ALLOC: fc = a free cluster (marked end of chain), linked from fprev if fprev<>0
+alloc1: lda #0
+        sta dsec                ; (wrapped once from the hint back to cluster 2)
+        ldx #3
+-       lda fs_hint,x
+        sta fc,x
+        dex
+        bpl -
+.l      jsr inrange
+        bcs +
+        lda dsec
+        beq .wr
+        jmp dfull
+.wr     inc dsec
+        lda #2
+        sta fc
+        lda #0
+        sta fc+1
+        sta fc+2
+        sta fc+3
++       jsr fatget
+        lda fv
+        ora fv+1
+        ora fv+2
+        ora fv+3
+        beq .got
+        inc fc                  ; next cluster
+        bne .l
+        inc fc+1
+        bne .l
+        inc fc+2
+        bra .l
+.got    lda #$ff                ; mark end of chain
+        sta fv
+        sta fv+1
+        sta fv+2
+        lda #$0f
+        sta fv+3
+        jsr fatset
+        jsr fsdec
+        ldx #3                  ; hint = fc + 1
+-       lda fc,x
+        sta fs_hint,x
+        dex
+        bpl -
+        inc fs_hint
+        bne +
+        inc fs_hint+1
++       lda fprev               ; link the previous cluster to this one
+        ora fprev+1
+        ora fprev+2
+        ora fprev+3
+        beq .first
+        ldx #3
+-       lda fc,x
+        sta fv,x
+        lda fprev,x
+        sta ftmp,x
+        dex
+        bpl -
+        ldx #3                  ; FAT[fprev] = fc  (swap fc/fprev around fatset)
+-       lda fprev,x
+        pha
+        lda fc,x
+        sta fprev,x
+        pla
+        sta fc,x
+        dex
+        bpl -
+        jsr fatset
+        ldx #3
+-       lda fprev,x
+        sta fc,x
+        dex
+        bpl -
+        bra .lk
+.first  ldx #3
+-       lda fc,x
+        sta ffirst,x
+        dex
+        bpl -
+.lk     ldx #3
+-       lda fc,x
+        sta fprev,x
+        dex
+        bpl -
+        rts
+dfull:  lda #<msg_df
+        ldx #>msg_df
+        ldy #198
+; OVMSG: error with a message text from this overlay (copied to STRBUF so
+; that REPORT still works when another overlay is mapped)
+ovmsg:  sta ptr1
+        stx ptr1+1
+        sty errnum
+        lda #$82                ; unmap the SD buffer
+        sta $d680
+        ldy #0
+-       lda (ptr1),y
+        sta STRBUF,y
+        beq +
+        iny
+        bra -
++       lda #<STRBUF
+        sta errtxt
+        lda #>STRBUF
+        sta errtxt+1
+        lda #0
+        sta doserr
+        lda errnum
+        jmp exterr
+msg_df: !text "Disk full",0
+; FSInfo free count -1 / +1 (only if known)
+fsdec:  ldx #0
+-       dec fsnet,x             ; 32-bit decrement
+        lda fsnet,x
+        cmp #$ff
+        bne +
+        inx
+        cpx #4
+        bne -
++       rts
+fsinc:  ldx #0
+-       inc fsnet,x
+        bne +
+        inx
+        cpx #4
+        bne -
++       rts
+; CLUS2LBA: sdlba = data + (fc-2) << spcs
+clus2lba:
+        sec
+        lda fc
+        sbc #2
+        sta sdlba
+        lda fc+1
+        sbc #0
+        sta sdlba+1
+        lda fc+2
+        sbc #0
+        sta sdlba+2
+        lda fc+3
+        sbc #0
+        sta sdlba+3
+        ldx fs_spcs
+        beq +
+-       asl sdlba
+        rol sdlba+1
+        rol sdlba+2
+        rol sdlba+3
+        dex
+        bne -
++       clc
+        ldx #0
+        ldy #4
+-       lda sdlba,x
+        adc fs_data,x
+        sta sdlba,x
+        inx
+        dey
+        bne -
+        rts
+
+; ---------------- directory: find name fn83 / a free entry ----------------
+!zone dirscan
+dirscan:
+        lda #0
+        ldx #3
+-       sta dmatch,x
+        sta dfree,x
+        dex
+        bpl -
+        ldx #3
+-       lda fs_root,x
+        sta dclus,x
+        dex
+        bpl -
+.cl     lda #0
+        sta dsec
+.sc     ldx #3
+-       lda dclus,x
+        sta fc,x
+        dex
+        bpl -
+        jsr clus2lba
+        lda dsec
+        clc
+        adc sdlba
+        sta sdlba
+        bcc +
+        inc sdlba+1
+        bne +
+        inc sdlba+2
++       jsr sdread
+        lda #<DIRBUF
+        sta ptr3
+        lda #>DIRBUF
+        sta ptr3+1
+        jsr bufin
+        lda #<DIRBUF            ; 16 entries
+        sta ptr2
+        lda #>DIRBUF
+        sta ptr2+1
+        ldx #16
+.e      ldy #0
+        lda (ptr2),y
+        beq .end                ; end of directory: free here
+        cmp #$e5
+        beq .fr
+        ldy #11
+        lda (ptr2),y
+        cmp #$0f                ; long name part
+        beq .nx
+        and #$08                ; volume label
+        bne .nx
+        ldy #10                 ; compare 8.3 name
+-       lda (ptr2),y
+        cmp fn83,y
+        bne .nx
+        dey
+        bpl -
+        ldy #11                 ; a directory or read-only file: refuse
+        lda (ptr2),y
+        and #$11
+        beq +
+        lda #$82
+        sta $d680
+        jmp badname
++       jsr .rec                ; match
+        sta dmoff
+        sty dmoff+1
+        ldx #3
+-       lda sdlba,x
+        sta dmatch,x
+        dex
+        bpl -
+        rts
+.fr     jsr .setfree
+.nx     lda ptr2
+        clc
+        adc #32
+        sta ptr2
+        bcc +
+        inc ptr2+1
++       dex
+        bne .e
+        inc dsec                ; next sector / cluster
+        lda dsec
+        cmp fs_spc
+        lbne .sc
+        ldx #3
+-       lda dclus,x
+        sta fc,x
+        dex
+        bpl -
+        jsr fatget
+        jsr iseoc
+        bcs .x
+        ldx #3
+-       lda fv,x
+        sta dclus,x
+        dex
+        bpl -
+        jmp .cl
+.end    jsr .setfree
+.x      rts
+.setfree
+        lda dfree               ; keep the first free entry
+        ora dfree+1
+        ora dfree+2
+        ora dfree+3
+        bne +
+        jsr .rec
+        sta dfoff
+        sty dfoff+1
+        phx
+        ldx #3
+-       lda sdlba,x
+        sta dfree,x
+        dex
+        bpl -
+        plx
++       rts
+.rec    lda ptr2                ; offset of the entry in the sector -> A/Y
+        sec
+        sbc #<DIRBUF
+        pha
+        lda ptr2+1
+        sbc #>DIRBUF
+        tay
+        pla
+        rts
+
+; ---------------- write a file: fn83, data at fsrc (28-bit), length flen ----------------
+!zone wfile
+wfile:  jsr fatmount
+        jsr dirscan
+        lda dmatch              ; existing file: free its clusters, reuse the entry
+        ora dmatch+1
+        ora dmatch+2
+        ora dmatch+3
+        beq .new
+        ldx #3
+-       lda dmatch,x
+        sta sdlba,x
+        sta dfree,x
+        dex
+        bpl -
+        lda dmoff
+        sta dfoff
+        lda dmoff+1
+        sta dfoff+1
+        jsr sdread
+        jsr .entp
+        ldy #26                 ; first cluster lo
+        lda (ptr2),y
+        sta fc
+        iny
+        lda (ptr2),y
+        sta fc+1
+        ldy #20                 ; hi
+        lda (ptr2),y
+        sta fc+2
+        iny
+        lda (ptr2),y
+        sta fc+3
+        jsr freechain
+        bra .alloc
+.new    lda dfree
+        ora dfree+1
+        ora dfree+2
+        ora dfree+3
+        bne .alloc
+        lda #<msg_dirf          ; no free entry in the allocated directory clusters
+        ldx #>msg_dirf
+        ldy #199
+        jmp ovmsg
+.alloc  lda #0
+        ldx #3
+-       sta ffirst,x
+        sta fprev,x
+        dex
+        bpl -
+        ; write the data cluster by cluster
+        ldx #3
+-       lda flen,x
+        sta fcnt,x              ; bytes left
+        dex
+        bpl -
+.cl     lda fcnt
+        ora fcnt+1
+        ora fcnt+2
+        ora fcnt+3
+        beq .dir
+        jsr alloc1
+        jsr fatflush            ; (the SD buffer is needed for the data)
+        jsr clus2lba
+        lda #0
+        sta fsec
+.sec    lda fcnt
+        ora fcnt+1
+        ora fcnt+2
+        ora fcnt+3
+        beq .dir
+        jsr srcsect             ; 512 bytes from fsrc to SECBUF
+        jsr sdwrite
+        inc sdlba
+        bne +
+        inc sdlba+1
+        bne +
+        inc sdlba+2
++       inc fsec
+        lda fsec
+        cmp fs_spc
+        bne .sec
+        bra .cl
+.dir    jsr fatflush
+        ldx #3                  ; directory entry
+-       lda dfree,x
+        sta sdlba,x
+        dex
+        bpl -
+        jsr sdread
+        jsr .entp
+        ldy #0
+-       lda fn83,y
+        sta (ptr2),y
+        iny
+        cpy #11
+        bne -
+        lda #$20                ; archive
+        sta (ptr2),y
+        iny
+        lda #0
+-       sta (ptr2),y            ; reserved, times, dates
+        iny
+        cpy #20
+        bne -
+        lda ffirst+2
+        sta (ptr2),y
+        iny
+        lda ffirst+3
+        sta (ptr2),y
+        iny
+        lda #0                  ; write time 00:00, date 2025-01-01
+        sta (ptr2),y
+        iny
+        sta (ptr2),y
+        iny
+        lda #<((2025-1980)<<9 | 1<<5 | 1)
+        sta (ptr2),y
+        iny
+        lda #>((2025-1980)<<9 | 1<<5 | 1)
+        sta (ptr2),y
+        iny
+        lda ffirst
+        sta (ptr2),y
+        iny
+        lda ffirst+1
+        sta (ptr2),y
+        iny
+        ldx #0
+-       lda flen,x
+        sta (ptr2),y
+        iny
+        inx
+        cpx #4
+        bne -
+        jsr sdwrite
+        jsr fsupd
+        lda #$82
+        sta $d680
+        rts
+.entp   lda dfoff               ; ptr2 -> entry in SECBUF
+        clc
+        adc #<SECBUF
+        sta ptr2
+        lda dfoff+1
+        adc #>SECBUF
+        sta ptr2+1
+        rts
+msg_dirf: !text "Directory full",0
+
+
+; SRCSECT: copy 512 bytes from fsrc (28-bit) into SECBUF, advance; count fcnt
+srcsect:
+        ldx #3
+-       lda fsrc,x
+        sta fptr,x
+        dex
+        bpl -
+        ldy #0
+        ldz #0
+-       lda [fptr],z
+        sta SECBUF,y
+        inz
+        iny
+        bne -
+        inc fptr+1
+-       lda [fptr],z
+        sta SECBUF+$100,y
+        inz
+        iny
+        bne -
+        ldz #0
+        lda fsrc+1              ; fsrc += 512
+        clc
+        adc #2
+        sta fsrc+1
+        bcc +
+        inc fsrc+2
+        bne +
+        inc fsrc+3
++       sec                     ; fcnt -= 512 (clamped at 0)
+        lda fcnt+1
+        sbc #2
+        sta fcnt+1
+        lda fcnt+2
+        sbc #0
+        sta fcnt+2
+        lda fcnt+3
+        sbc #0
+        sta fcnt+3
+        bcs +
+        lda #0
+        sta fcnt
+        sta fcnt+1
+        sta fcnt+2
+        sta fcnt+3
++       rts
+
+; ---------------- SAVE "name" ----------------
+!zone fsave
+fsave:  jsr fname               ; FNBUF (Hyppo setname checks the name too)
+        jsr mk83
+        jsr gettop
+        lda ptr2
+        sec
+        sbc page
+        sta flen
+        lda ptr2+1
+        sbc page+1
+        sta flen+1
+        lda #0
+        sta flen+2
+        sta flen+3
+        lda page
+        sta fsrc
+        lda page+1
+        sta fsrc+1
+        lda #0
+        sta fsrc+2
+        sta fsrc+3
+        jsr wfile
+        jmp clopp
+; MK83: FNBUF -> fn83 (upper case, space padded); Bad name unless a plain 8.3 name
+mk83:   ldx #10
+        lda #' '
+-       sta fn83,x
+        dex
+        bpl -
+        ldx #0
+        ldy #0
+.b      lda FNBUF,x
+        beq .end
+        cmp #'.'
+        beq .ext
+        cpy #8
+        bcs .bad
+        jsr .ch
+        sta fn83,y
+        iny
+        inx
+        bra .b
+.ext    cpy #0
+        beq .bad
+        inx
+        ldy #8
+.e      lda FNBUF,x
+        beq .x
+        cpy #11
+        bcs .bad
+        jsr .ch
+        sta fn83,y
+        iny
+        inx
+        bra .e
+.end    cpy #0
+        beq .bad
+.x      rts
+.ch     cmp #'a'                ; upper case; refuse characters FAT does not allow
+        bcc +
+        cmp #'z'+1
+        bcs +
+        and #$df
++       cmp #'!'
+        bcc .bad2
+        cmp #$7f
+        bcs .bad2
+        phx
+        ldx #.badn-1
+-       cmp .badc,x
+        beq .bad3
+        dex
+        bpl -
+        plx
+        rts
+.bad3   plx
+.bad2
+.bad    jmp badname
+.badc   !byte $5c,$2a,$2b,$2c,$2f,$3a,$3b,$3c,$3d,$3e,$3f,$5b,$5d,$7c,$2e,$22
+.badn = * - .badc
+
+; ================= file channels =================
+; CHT entry (X = (channel-1)*16): CH_OPEN bit 0 open, bit 6 writable,
+; bit 7 changed; CH_PTR, CH_EXT (3 bytes used). Data in attic RAM at
+; $8100000 + (channel-1)*$100000, the 8.3 name at +$F0000.
+!zone chan
+; CHPOS: fptr = buffer + PTR
+chpos:  lda CHT+CH_PTR,x
+        sta fptr
+        lda CHT+CH_PTR+1,x
+        sta fptr+1
+        txa
+        clc
+        adc #$10
+        adc CHT+CH_PTR+2,x
+        sta fptr+2
+        lda #$08
+        sta fptr+3
+        rts
+; CHNAME: fptr = the name slot of the channel
+chname: lda #0
+        sta fptr
+        sta fptr+1
+        txa
+        clc
+        adc #$10+CMAX
+        sta fptr+2
+        lda #$08
+        sta fptr+3
+        rts
+; ATEOF: carry set if PTR >= EXT
+ateof:  lda CHT+CH_PTR+2,x
+        cmp CHT+CH_EXT+2,x
+        bne +
+        lda CHT+CH_PTR+1,x
+        cmp CHT+CH_EXT+1,x
+        bne +
+        lda CHT+CH_PTR,x
+        cmp CHT+CH_EXT,x
++       rts
+incptr: inc CHT+CH_PTR,x
+        bne +
+        inc CHT+CH_PTR+1,x
+        bne +
+        inc CHT+CH_PTR+2,x
++       rts
+; RDB: A = next byte; carry set at end of file
+rdb:    jsr ateof
+        bcs +
+        jsr chpos
+        lda [fptr],z
+        pha
+        jsr incptr
+        pla
+        clc
++       rts
+; RDBE: as RDB, Eof error at the end
+rdbe:   jsr rdb
+        bcc +
+        lda #<msg_eof
+        ldx #>msg_eof
+        ldy #223
+        jmp ovmsg
++       rts
+; WRB: write A at PTR
+wrb:    pha
+        lda CHT+CH_OPEN,x
+        and #$40
+        bne +
+        pla
+        lda #<msg_ad
+        ldx #>msg_ad
+        ldy #189
+        jmp ovmsg
++       lda CHT+CH_PTR+2,x
+        cmp #CMAX
+        bcc +
+        pla
+        jmp dfull
++       jsr chpos
+        pla
+        sta [fptr],z
+        lda #$80
+        ora CHT+CH_OPEN,x
+        sta CHT+CH_OPEN,x
+        jsr incptr
+        jsr ateof               ; past the end: EXT = PTR
+        bcc +
+        lda CHT+CH_PTR,x
+        sta CHT+CH_EXT,x
+        lda CHT+CH_PTR+1,x
+        sta CHT+CH_EXT+1,x
+        lda CHT+CH_PTR+2,x
+        sta CHT+CH_EXT+2,x
++       rts
+msg_eof: !text "Eof",0
+msg_ad: !text "Access denied",0
+msg_tm: !text "Too many open files",0
+msg_na: !text "No attic RAM",0
+
+; ---- OPENIN / OPENOUT / OPENUP (omode 1 / 0 / 2) ----
+!zone zopen
+o_open: lda omode
+        pha
+        jsr item
+        jsr chkstr
+        jsr setfname
+        pla
+        sta omode
+        lda hw_attic
+        bne +
+        lda #<msg_na
+        ldx #>msg_na
+        ldy #192
+        jmp ovmsg
++       ldx #0                  ; free channel
+-       lda CHT+CH_OPEN,x
+        beq .fr
+        txa
+        clc
+        adc #16
+        tax
+        cpx #NCHAN*16
+        bcc -
+        lda #<msg_tm
+        ldx #>msg_tm
+        ldy #192
+        jmp ovmsg
+.fr     stx ochan
+        lda #0
+        sta CHT+CH_PTR,x
+        sta CHT+CH_PTR+1,x
+        sta CHT+CH_PTR+2,x
+        sta CHT+CH_PTR+3,x
+        sta CHT+CH_EXT,x
+        sta CHT+CH_EXT+1,x
+        sta CHT+CH_EXT+2,x
+        sta CHT+CH_EXT+3,x
+        lda omode
+        bne .rd
+        jsr mk83                ; OPENOUT: plain 8.3 name, not a directory or read-only
+        jsr fatmount
+        jsr dirscan
+        lda #$82
+        sta $d680
+        lda #$c1                ; open, writable, changed (created even if empty)
+        jmp .set
+.rd     jsr fexists
+        bcs +
+.zero   lda #0                  ; not found: 0
+        ldx #0
+        jmp setw
++       ldx #10                 ; the entry's 8.3 name (for writing it back)
+-       lda DIRENT+65,x
+        sta fn83,x
+        dex
+        bpl -
+        lda DIRENT+85
+        bne .big
+        lda DIRENT+84
+        cmp #CMAX
+        bcs .big
+        jsr setname2
+        lda #$34                ; findfile
+        jsr hyppo
+        bcc .zero
+        lda #$18                ; openfile
+        jsr hyppo
+        bcs +
+        jmp diskerr
++       sta ofd
+.rl     ldx ofd                 ; read it all into the buffer
+        lda #$1a                ; readfile -> SD buffer, X/Y = bytes
+        jsr hyppo
+        bcc .eof
+        stx ocnt
+        sty ocnt+1
+        txa
+        ora ocnt+1
+        beq .eof
+        ldx ochan
+        jsr chpos
+        jsr sdmap
+        ldy #0
+-       lda SECBUF,y
+        sta [fptr],z
+        inz
+        iny
+        bne -
+        inc fptr+1
+-       lda SECBUF+$100,y
+        sta [fptr],z
+        inz
+        iny
+        bne -
+        ldz #0
+        lda CHT+CH_PTR,x
+        clc
+        adc ocnt
+        sta CHT+CH_PTR,x
+        lda CHT+CH_PTR+1,x
+        adc ocnt+1
+        sta CHT+CH_PTR+1,x
+        bcc .rl
+        inc CHT+CH_PTR+2,x
+        lda CHT+CH_PTR+2,x
+        cmp #CMAX
+        bcc .rl
+        ldx ofd
+        lda #$20
+        jsr hyppo
+.big    lda #<msg_big
+        ldx #>msg_big
+        ldy #198
+        jmp ovmsg
+.eof    ldx ofd                 ; closefile
+        lda #$20
+        jsr hyppo
+        lda #$82
+        sta $d680
+        ldx ochan
+        lda CHT+CH_PTR,x        ; EXT = bytes read, PTR = 0
+        sta CHT+CH_EXT,x
+        lda CHT+CH_PTR+1,x
+        sta CHT+CH_EXT+1,x
+        lda CHT+CH_PTR+2,x
+        sta CHT+CH_EXT+2,x
+        lda #0
+        sta CHT+CH_PTR,x
+        sta CHT+CH_PTR+1,x
+        sta CHT+CH_PTR+2,x
+        lda #$01                ; OPENIN: read only
+        ldy omode
+        cpy #1
+        beq .set
+        lda #$41                ; OPENUP: writable
+.set    ldx ochan
+        sta CHT+CH_OPEN,x
+        jsr chname              ; keep the name with the data
+        ldy #0
+-       lda fn83,y
+        sta [fptr],z
+        inz
+        iny
+        cpy #11
+        bne -
+        ldz #0
+        txa                     ; channel number
+        lsr
+        lsr
+        lsr
+        lsr
+        inc
+        ldx #0
+        jmp setw
+msg_big: !text "File too big",0
+
+; ---- functions ----
+!zone zfn
+o_bget: jsr channel
+        jsr rdbe
+        ldx #0
+        jmp setw
+o_eof:  jsr channel
+        jsr ateof
+        lda #0
+        bcc +
+        lda #$ff
++       jmp setint8
+o_ptr:  jsr channel
+        lda CHT+CH_PTR,x
+        sta acc
+        lda CHT+CH_PTR+1,x
+        sta acc+1
+        lda CHT+CH_PTR+2,x
+        bra o_ext3
+o_ext:  jsr channel
+        lda CHT+CH_EXT,x
+        sta acc
+        lda CHT+CH_EXT+1,x
+        sta acc+1
+        lda CHT+CH_EXT+2,x
+o_ext3  sta acc+2
+        lda #0
+        sta acc+3
+        jmp setnum
+o_gets: jsr channel             ; GET$#: a line, ended by CR, LF, CR LF or the end
+        lda #0
+        sta slen
+-       jsr rdb
+        bcs .sx
+        cmp #LF
+        beq .sx
+        cmp #CR
+        beq .cr
+        ldy slen
+        sta ACCS,y
+        inc slen
+        bne -
+        bra .sx
+.cr     jsr ateof               ; CR LF: skip the LF too
+        bcs .sx
+        jsr chpos
+        lda [fptr],z
+        cmp #LF
+        bne .sx
+        jsr incptr
+.sx     jmp setstr
+
+; ---- statements ----
+; PTR#c=n
+!zone zptr
+o_ptrset:
+        jsr channel
+        phx
+        jsr eqexpr
+        plx
+        lda acc+3               ; (0 <= n < CMAX*64K)
+        bne .bad
+        lda acc+2
+        cmp #CMAX
+        bcs .bad
+        lda CHT+CH_OPEN,x
+        and #$40
+        beq .clamp
+-       lda CHT+CH_EXT+2,x      ; writable: beyond EXT -> extend with zeros
+        cmp acc+2
+        bne +
+        lda CHT+CH_EXT+1,x
+        cmp acc+1
+        bne +
+        lda CHT+CH_EXT,x
+        cmp acc
++       lbcs .set
+        lda CHT+CH_EXT,x
+        sta CHT+CH_PTR,x
+        lda CHT+CH_EXT+1,x
+        sta CHT+CH_PTR+1,x
+        lda CHT+CH_EXT+2,x
+        sta CHT+CH_PTR+2,x
+        lda #0
+        jsr wrb
+        bra -
+.clamp  lda CHT+CH_EXT+2,x      ; read only: at most EXT
+        cmp acc+2
+        bne +
+        lda CHT+CH_EXT+1,x
+        cmp acc+1
+        bne +
+        lda CHT+CH_EXT,x
+        cmp acc
++       lbcs .set
+        lda CHT+CH_EXT,x
+        sta acc
+        lda CHT+CH_EXT+1,x
+        sta acc+1
+        lda CHT+CH_EXT+2,x
+        sta acc+2
+.set    lda acc
+        sta CHT+CH_PTR,x
+        lda acc+1
+        sta CHT+CH_PTR+1,x
+        lda acc+2
+        sta CHT+CH_PTR+2,x
+        jmp xeq
+.bad    lda #<msg_big
+        ldx #>msg_big
+        ldy #198
+        jmp ovmsg
+
+; BPUT#c,n  /  BPUT#c,s$[;]
+!zone zbput
+o_bput: jsr channel
+        phx
+        jsr comma
+        jsr expr
+        plx
+        lda etype
+        bmi .s
+        phx
+        jsr toint
+        plx
+        lda acc
+        jsr wrb
+        jmp xeq
+.s      ldy #0
+-       cpy slen
+        beq +
+        phy
+        lda ACCS,y
+        jsr wrb
+        ply
+        iny
+        bra -
++       phx
+        jsr nxt
+        plx
+        cmp #';'
+        beq +
+        lda #LF
+        jsr wrb
+        jmp xeq
++       inw tp
+        jmp xeq
+
+; PRINT#c, list: numbers as 5 bytes (mantissa LSB first, exponent), strings + CR
+!zone zprh
+o_printh:
+        jsr channel
+.l      phx
+.c      jsr nxt                 ; skip commas
+        cmp #','
+        bne +
+        inw tp
+        bra .c
++       jsr termq
+        bne +
+        plx
+        jmp xeq
++       jsr expr
+        plx
+        lda etype
+        bmi .s
+        lda acc
+        jsr wrb
+        lda acc+1
+        jsr wrb
+        lda acc+2
+        jsr wrb
+        lda acc+3
+        jsr wrb
+        lda accx
+        jsr wrb
+        bra .l
+.s      ldy #0
+-       cpy slen
+        beq +
+        phy
+        lda ACCS,y
+        jsr wrb
+        ply
+        iny
+        bra -
++       lda #CR
+        jsr wrb
+        bra .l
+
+; INPUT#c / READ#c, list of variables
+!zone zinh
+o_inputh:
+        jsr channel
+.l      phx
+.c      jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        bra .c
++       jsr termq
+        bne +
+        plx
+        jmp xeq
++       jsr getvar
+        bcc +
+        jmp syntax
++       beq +
+        jsr putvar
++       plx
+        lda vtype
+        lbmi .s
+        jsr rdbe
+        sta acc
+        jsr rdbe
+        sta acc+1
+        jsr rdbe
+        sta acc+2
+        jsr rdbe
+        sta acc+3
+        jsr rdbe
+        sta accx
+        lda #0
+        sta etype
+        bra .st
+.s      lda #0
+        sta slen
+-       jsr rdbe
+        cmp #CR
+        beq +
+        ldy slen
+        sta ACCS,y
+        inc slen
+        bne -
++       lda #$80
+        sta etype
+.st     phx
+        jsr storevar
+        plx
+        lbra .l
+
+; CLOSE#c (0: all): changed files are written back
+!zone zclose
+o_close:
+        jsr nxt
+        cmp #'#'
+        beq +
+        jmp syntax
++       inw tp
+        jsr itemi
+        lda acc
+        bne +
+        ldx #0
+-       jsr .cl1
+        txa
+        clc
+        adc #16
+        tax
+        cpx #NCHAN*16
+        bcc -
+        jmp xeq
++       jsr chanx
+        jsr .cl1
+        jmp xeq
+.cl1    lda CHT+CH_OPEN,x
+        bpl .done               ; not changed (or not open)
+        stx ochan
+        jsr chname
+        ldy #0
+-       lda [fptr],z
+        sta fn83,y
+        inz
+        iny
+        cpy #11
+        bne -
+        ldz #0
+        lda #0
+        sta fsrc
+        sta fsrc+1
+        txa
+        clc
+        adc #$10
+        sta fsrc+2
+        lda #$08
+        sta fsrc+3
+        lda CHT+CH_EXT,x
+        sta flen
+        lda CHT+CH_EXT+1,x
+        sta flen+1
+        lda CHT+CH_EXT+2,x
+        sta flen+2
+        lda #0
+        sta flen+3
+        jsr wfile               ; (on an error the channel stays open: CLOSE again)
+        ldx ochan
+.done   lda #0
+        sta CHT+CH_OPEN,x
+        rts
+ovl_fat_end:
+}

@@ -1,0 +1,33 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 PRINT "hello from B65FILE1"
+>20 FOR I%=1 TO 3:PRINT I%;:NEXT:PRINT
+>SAVE "B65FILE1"
+>NEW
+>LOAD "B65FILE1"
+>LIST
+   10 PRINT "hello from B65FILE1"
+   20 FOR I%=1 TO 3:PRINT I%;:NEXT:PRINT
+>RUN
+hello from B65FILE1
+         1         2         3
+>NEW
+>10 F%=OPENIN "B65FILE1"
+>20 IF F%=0 THEN PRINT "OPENIN failed":END
+>30 N%=0:REPEAT B%=BGET#F%:N%+=1:UNTIL EOF#F%
+>40 PRINT "read ";N%;" bytes, PTR=";PTR#F%
+>50 CLOSE#F%
+>60 PRINT "missing file gives ";OPENIN "B65NONE"
+>70 CHAIN "B65FILE1"
+>RUN
+read 54 bytes, PTR=54
+missing file gives 0
+hello from B65FILE1
+         1         2         3
+>LOAD "B65NONE"
+
+File not found
+>*CAT

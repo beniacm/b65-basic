@@ -8,7 +8,6 @@ FNBUF   = $07c0             ; (shared with FP stack area start: only used transi
 FEXBUF  = $0760             ; 11 bytes: 8.3 name for directory compare
 DIRENT  = $0700             ; Hyppo dirent buffer (87 bytes, page aligned)
 NCHAN   = 4
-CHBUF   = $04e000           ; channel buffers (4 x 512 bytes) in chip RAM, bank 4
 
 ; ---- Hyppo trap: A = function; returns carry set on success, A = result/error
 hyppo:  clc
@@ -211,70 +210,9 @@ loadprg:
 
 ; ---- SAVE "name" (command) ----
 !zone save
-save:   jsr fname
-        jsr gettop
-        lda ptr2                ; size = TOP - PAGE
-        sec
-        sbc page
-        sta tmpw
-        lda ptr2+1
-        sbc page+1
-        sta tmpw+1
-        jsr fexists             ; existing file: overwrite in place (no rmfile:
-        bcs +                   ; Hyppo's rmfile/mkfile are work in progress)
-        jsr setname2
-        ldx tmpw                ; new file: mkfile, size $ZZYYXX
-        ldy tmpw+1
-        ldz #0
-        lda #$1e
-        jsr hyppo
-        bcs +
-        jmp diskerr
-+       jsr setname2
-        lda #$34                ; findfile + openfile
-        jsr hyppo
-        bcc .de
-        lda #$18
-        jsr hyppo
-        bcc .de
-        sta tmp6                ; file descriptor
-        lda page
-        sta ptr1
-        lda page+1
-        sta ptr1+1
-.blk    lda tmpw
-        ora tmpw+1
-        beq .done
-        lda #$81                ; map SD sector buffer at $DE00
-        sta $d680
-        ldx #0                  ; copy 512 bytes (beyond TOP: whatever)
-        ldy #0
--       lda (ptr1),y
-        sta $de00,x
-        inw ptr1
-        inx
-        bne -
--       lda (ptr1),y
-        sta $df00,x
-        inw ptr1
-        inx
-        bne -
-        lda #$1c                ; writefile
-        jsr hyppo
-        bcc .de
-        lda tmpw+1              ; size -= 512
-        sec
-        sbc #2
-        sta tmpw+1
-        bcs .blk
-        lda #0
-        sta tmpw
-        sta tmpw+1
-.done   ldx tmp6
-        lda #$20                ; closefile
-        jsr hyppo
-        jmp clopp
-.de     jmp diskerr
+save:   jsr ovjmp           ; own FAT32 writer (Hyppo's mkfile does not work)
+        !byte 3
+        !word fsave
 
 ; ---- CHAIN "name" / RUN "name" ----
 chain:  jsr fname
@@ -398,75 +336,61 @@ star:   ldy #0
         jsr hyppo
         jmp xeq
 
-; ---- channels: OPENIN, BGET#, GET$#, EOF#, PTR#, EXT#, CLOSE# ----
-; channel table (MISC+16..): fd, open flag, buffer count (2), buffer pos (2), ptr (4), ext (4)
+; ---- channels: implemented in overlay 3 (fat.a); buffers in attic RAM ----
 CHT     = MISC+16           ; 4 channels x 16 bytes
-CH_FD   = 0
 CH_OPEN = 1
-CH_CNT  = 2
-CH_POS  = 4
 CH_PTR  = 6
 CH_EXT  = 10
 
-!zone openin
 f_openin:
-        jsr item
-        jsr chkstr
-        jsr setfname
-        jsr fexists
-        bcs +
-        lda #0                  ; not found -> 0
-        ldx #0
-        jmp setw
-+       jsr setname2
-        lda #$34                ; findfile
-        jsr hyppo
-        bcs +
-        lda #0
-        ldx #0
-        jmp setw
-+       ldx #0                  ; free channel
--       lda CHT+CH_OPEN,x
-        beq +
-        txa
-        clc
-        adc #16
-        tax
-        cmp #NCHAN*16
-        bcc -
-        lda #<msg_tm
-        ldx #>msg_tm
-        ldy #192
-        jmp dosmsg
-+       stx tmp5
-        lda #$18                ; openfile
-        jsr hyppo
-        bcs +
-        jmp diskerr
-+       ldx tmp5
-        sta CHT+CH_FD,x
         lda #1
-        sta CHT+CH_OPEN,x
+        bra +
+f_openout:
         lda #0
-        sta CHT+CH_CNT,x
-        sta CHT+CH_CNT+1,x
-        sta CHT+CH_POS,x
-        sta CHT+CH_POS+1,x
-        sta CHT+CH_PTR,x
-        sta CHT+CH_PTR+1,x
-        sta CHT+CH_PTR+2,x
-        sta CHT+CH_PTR+3,x
-        lda DIRENT+82           ; (length from the last findfile is not exported:
-        sta CHT+CH_EXT,x        ;  EXT# is updated as the file is read)
-        txa
-        lsr
-        lsr
-        lsr
-        lsr
-        inc
-        ldx #0
-        jmp setw
-msg_tm: !text "Too many open files",0
+        bra +
+f_openup:
+        lda #2
++       sta omode
+        jsr ovjsr
+        !byte 3
+        !word o_open
+        rts
+f_bget: jsr ovjsr
+        !byte 3
+        !word o_bget
+        rts
+f_eof:  jsr ovjsr
+        !byte 3
+        !word o_eof
+        rts
+f_ptr:  jsr ovjsr
+        !byte 3
+        !word o_ptr
+        rts
+f_ext:  jsr ovjsr
+        !byte 3
+        !word o_ext
+        rts
+f_getsch:
+        jsr ovjsr
+        !byte 3
+        !word o_gets
+        rts
+close:  jsr ovjmp
+        !byte 3
+        !word o_close
+ptrset: jsr ovjmp
+        !byte 3
+        !word o_ptrset
+bput:   jsr ovjmp
+        !byte 3
+        !word o_bput
+printh: jsr ovjmp
+        !byte 3
+        !word o_printh
+inputh: jsr ovjmp
+        !byte 3
+        !word o_inputh
 
 ; CHANNEL: '#' expr -> X = channel table offset (error if not open)
 !zone channel
@@ -497,168 +421,3 @@ chanx:  lda acc
         jmp dosmsg
 msg_ch: !text "Channel",0
 
-; BGETC: X = channel offset -> A = byte, carry set at end of file
-!zone bgetc
-bgetc:  lda CHT+CH_POS,x        ; buffer exhausted?
-        cmp CHT+CH_CNT,x
-        bne .have
-        lda CHT+CH_POS+1,x
-        cmp CHT+CH_CNT+1,x
-        bne .have
-        stx tmp5                ; read next sector
-        lda CHT+CH_FD,x
-        tax
-        lda #$1a                ; readfile -> sector buffer, X/Y = bytes read
-        jsr hyppo
-        txa
-        ldx tmp5
-        bcs +
-        lda #0
-        tay
-+       sta CHT+CH_CNT,x
-        tya
-        sta CHT+CH_CNT+1,x
-        lda #0
-        sta CHT+CH_POS,x
-        sta CHT+CH_POS+1,x
-        lda CHT+CH_CNT,x
-        ora CHT+CH_CNT+1,x
-        bne +
-        sec                     ; EOF
-        rts
-+       ; copy the sector to the channel buffer (far memory)
-        lda #$81
-        sta $d680
-        jsr .fp
-        ldy #0
-        ldz #0
--       lda $de00,y
-        sta [fptr],z
-        iny
-        inz
-        bne -
-        inc fptr+1
--       lda $df00,y
-        sta [fptr],z
-        iny
-        inz
-        bne -
-        lda #$82
-        sta $d680
-.have   jsr .fp                 ; byte = buffer[pos]
-        lda fptr+1
-        clc
-        adc CHT+CH_POS+1,x
-        sta fptr+1
-        lda CHT+CH_POS,x
-        taz
-        lda [fptr],z
-        ldz #0
-        pha
-        inc CHT+CH_POS,x
-        bne +
-        inc CHT+CH_POS+1,x
-+       inc CHT+CH_PTR,x
-        bne +
-        inc CHT+CH_PTR+1,x
-+       pla
-        clc
-        rts
-
-.fp     txa                     ; fptr = CHBUF + channel*512
-        lsr
-        lsr
-        lsr
-        clc
-        adc #>CHBUF
-        sta fptr+1
-        lda #<CHBUF
-        sta fptr
-        lda #^CHBUF
-        sta fptr+2
-        lda #0
-        sta fptr+3
-        rts
-
-f_bget: jsr channel
-        jsr bgetc
-        bcc +
-        lda #$fe                ; read past end
-        jmp eoferr
-+       ldx #0
-        jmp setw
-eoferr: lda #<msg_eof
-        ldx #>msg_eof
-        ldy #223
-        jmp dosmsg
-msg_eof: !text "Eof",0
-f_eof:  jsr channel             ; EOF#: TRUE if no more bytes
-        jsr bgetc
-        bcs .t
-        lda CHT+CH_POS,x        ; un-read the byte
-        bne +
-        dec CHT+CH_POS+1,x
-+       dec CHT+CH_POS,x
-        lda CHT+CH_PTR,x
-        bne +
-        dec CHT+CH_PTR+1,x
-+       dec CHT+CH_PTR,x
-        lda #0
-        jmp setint8
-.t      lda #$ff
-        jmp setint8
-f_ptr:  jsr channel
-        lda CHT+CH_PTR,x
-        pha
-        lda CHT+CH_PTR+1,x
-        tax
-        pla
-        jmp setw
-; GET$#ch : read a line (to CR or LF)
-f_getsch:
-        jsr channel
-        lda #0
-        sta slen
--       jsr bgetc
-        bcs +
-        cmp #CR
-        beq +
-        cmp #LF
-        beq +
-        ldy slen
-        sta ACCS,y
-        inc slen
-        bne -
-+       jmp setstr
-; CLOSE#ch (0 = all)
-close:  jsr nxt
-        cmp #'#'
-        beq +
-        jmp syntax
-+       inw tp
-        jsr itemi
-        lda acc
-        bne +
-        ldx #0                  ; close all
--       jsr .cl1
-        txa
-        clc
-        adc #16
-        tax
-        cpx #NCHAN*16
-        bcc -
-        jmp xeq
-+       jsr chanx
-        jsr .cl1
-        jmp xeq
-.cl1    lda CHT+CH_OPEN,x
-        beq +
-        lda #0
-        sta CHT+CH_OPEN,x
-        phx
-        lda CHT+CH_FD,x
-        tax
-        lda #$20                ; closefile
-        jsr hyppo
-        plx
-+       rts

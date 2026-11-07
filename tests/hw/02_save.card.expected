@@ -1,0 +1,202 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 REM line 001 abcdefg
+>20 REM line 002 abcdefghijklmn
+>30 REM line 003 abcdefghijklmnopqrstu
+>40 REM line 004 abcdefghijklmnopqrstuvwxyz01
+>50 REM line 005 abcdefghijklmnopqrstuvwxyz012345678
+>60 REM line 006 abcde
+>70 REM line 007 abcdefghijkl
+>80 REM line 008 abcdefghijklmnopqrs
+>90 REM line 009 abcdefghijklmnopqrstuvwxyz
+>100 REM line 010 abcdefghijklmnopqrstuvwxyz0123456
+>110 REM line 011 abc
+>120 REM line 012 abcdefghij
+>130 REM line 013 abcdefghijklmnopq
+>140 REM line 014 abcdefghijklmnopqrstuvwx
+>150 REM line 015 abcdefghijklmnopqrstuvwxyz01234
+>160 REM line 016 a
+>170 REM line 017 abcdefgh
+>180 REM line 018 abcdefghijklmno
+>190 REM line 019 abcdefghijklmnopqrstuv
+>200 REM line 020 abcdefghijklmnopqrstuvwxyz012
+>210 REM line 021 abcdefghijklmnopqrstuvwxyz0123456789
+>220 REM line 022 abcdef
+>230 REM line 023 abcdefghijklm
+>240 REM line 024 abcdefghijklmnopqrst
+>250 REM line 025 abcdefghijklmnopqrstuvwxyz0
+>260 REM line 026 abcdefghijklmnopqrstuvwxyz01234567
+>270 REM line 027 abcd
+>280 REM line 028 abcdefghijk
+>290 REM line 029 abcdefghijklmnopqr
+>300 REM line 030 abcdefghijklmnopqrstuvwxy
+>310 REM line 031 abcdefghijklmnopqrstuvwxyz012345
+>320 REM line 032 ab
+>330 REM line 033 abcdefghi
+>340 REM line 034 abcdefghijklmnop
+>350 REM line 035 abcdefghijklmnopqrstuvw
+>360 REM line 036 abcdefghijklmnopqrstuvwxyz0123
+>370 REM line 037 
+>380 REM line 038 abcdefg
+>390 REM line 039 abcdefghijklmn
+>400 REM line 040 abcdefghijklmnopqrstu
+>410 REM line 041 abcdefghijklmnopqrstuvwxyz01
+>420 REM line 042 abcdefghijklmnopqrstuvwxyz012345678
+>430 REM line 043 abcde
+>440 REM line 044 abcdefghijkl
+>450 REM line 045 abcdefghijklmnopqrs
+>460 REM line 046 abcdefghijklmnopqrstuvwxyz
+>470 REM line 047 abcdefghijklmnopqrstuvwxyz0123456
+>480 REM line 048 abc
+>490 REM line 049 abcdefghij
+>500 REM line 050 abcdefghijklmnopq
+>510 REM line 051 abcdefghijklmnopqrstuvwx
+>520 REM line 052 abcdefghijklmnopqrstuvwxyz01234
+>530 REM line 053 a
+>540 REM line 054 abcdefgh
+>550 REM line 055 abcdefghijklmno
+>560 REM line 056 abcdefghijklmnopqrstuv
+>570 REM line 057 abcdefghijklmnopqrstuvwxyz012
+>580 REM line 058 abcdefghijklmnopqrstuvwxyz0123456789
+>590 REM line 059 abcdef
+>600 REM line 060 abcdefghijklm
+>610 REM line 061 abcdefghijklmnopqrst
+>620 REM line 062 abcdefghijklmnopqrstuvwxyz0
+>630 REM line 063 abcdefghijklmnopqrstuvwxyz01234567
+>640 REM line 064 abcd
+>650 REM line 065 abcdefghijk
+>660 REM line 066 abcdefghijklmnopqr
+>670 REM line 067 abcdefghijklmnopqrstuvwxy
+>680 REM line 068 abcdefghijklmnopqrstuvwxyz012345
+>690 REM line 069 ab
+>700 REM line 070 abcdefghi
+>710 REM line 071 abcdefghijklmnop
+>720 REM line 072 abcdefghijklmnopqrstuvw
+>730 REM line 073 abcdefghijklmnopqrstuvwxyz0123
+>740 REM line 074 
+>750 REM line 075 abcdefg
+>760 REM line 076 abcdefghijklmn
+>770 REM line 077 abcdefghijklmnopqrstu
+>780 REM line 078 abcdefghijklmnopqrstuvwxyz01
+>790 REM line 079 abcdefghijklmnopqrstuvwxyz012345678
+>800 REM line 080 abcde
+>810 REM line 081 abcdefghijkl
+>820 REM line 082 abcdefghijklmnopqrs
+>830 REM line 083 abcdefghijklmnopqrstuvwxyz
+>840 REM line 084 abcdefghijklmnopqrstuvwxyz0123456
+>850 REM line 085 abc
+>860 REM line 086 abcdefghij
+>870 REM line 087 abcdefghijklmnopq
+>880 REM line 088 abcdefghijklmnopqrstuvwx
+>890 REM line 089 abcdefghijklmnopqrstuvwxyz01234
+>900 REM line 090 a
+>910 REM line 091 abcdefgh
+>920 REM line 092 abcdefghijklmno
+>930 REM line 093 abcdefghijklmnopqrstuv
+>940 REM line 094 abcdefghijklmnopqrstuvwxyz012
+>950 REM line 095 abcdefghijklmnopqrstuvwxyz0123456789
+>960 REM line 096 abcdef
+>970 REM line 097 abcdefghijklm
+>980 REM line 098 abcdefghijklmnopqrst
+>990 REM line 099 abcdefghijklmnopqrstuvwxyz0
+>1000 REM line 100 abcdefghijklmnopqrstuvwxyz01234567
+>1010 REM line 101 abcd
+>1020 REM line 102 abcdefghijk
+>1030 REM line 103 abcdefghijklmnopqr
+>1040 REM line 104 abcdefghijklmnopqrstuvwxy
+>1050 REM line 105 abcdefghijklmnopqrstuvwxyz012345
+>1060 REM line 106 ab
+>1070 REM line 107 abcdefghi
+>1080 REM line 108 abcdefghijklmnop
+>1090 REM line 109 abcdefghijklmnopqrstuvw
+>1100 REM line 110 abcdefghijklmnopqrstuvwxyz0123
+>1110 REM line 111 
+>1120 REM line 112 abcdefg
+>1130 REM line 113 abcdefghijklmn
+>1140 REM line 114 abcdefghijklmnopqrstu
+>1150 REM line 115 abcdefghijklmnopqrstuvwxyz01
+>1160 REM line 116 abcdefghijklmnopqrstuvwxyz012345678
+>1170 REM line 117 abcde
+>1180 REM line 118 abcdefghijkl
+>1190 REM line 119 abcdefghijklmnopqrs
+>1200 REM line 120 abcdefghijklmnopqrstuvwxyz
+>1210 REM line 121 abcdefghijklmnopqrstuvwxyz0123456
+>1220 REM line 122 abc
+>1230 REM line 123 abcdefghij
+>1240 REM line 124 abcdefghijklmnopq
+>1250 REM line 125 abcdefghijklmnopqrstuvwx
+>1260 REM line 126 abcdefghijklmnopqrstuvwxyz01234
+>1270 REM line 127 a
+>1280 REM line 128 abcdefgh
+>1290 REM line 129 abcdefghijklmno
+>1300 REM line 130 abcdefghijklmnopqrstuv
+>1310 REM line 131 abcdefghijklmnopqrstuvwxyz012
+>1320 REM line 132 abcdefghijklmnopqrstuvwxyz0123456789
+>1330 REM line 133 abcdef
+>1340 REM line 134 abcdefghijklm
+>1350 REM line 135 abcdefghijklmnopqrst
+>1360 REM line 136 abcdefghijklmnopqrstuvwxyz0
+>1370 REM line 137 abcdefghijklmnopqrstuvwxyz01234567
+>1380 REM line 138 abcd
+>1390 REM line 139 abcdefghijk
+>1400 REM line 140 abcdefghijklmnopqr
+>1410 REM line 141 abcdefghijklmnopqrstuvwxy
+>1420 REM line 142 abcdefghijklmnopqrstuvwxyz012345
+>1430 REM line 143 ab
+>1440 REM line 144 abcdefghi
+>1450 REM line 145 abcdefghijklmnop
+>1460 REM line 146 abcdefghijklmnopqrstuvw
+>1470 REM line 147 abcdefghijklmnopqrstuvwxyz0123
+>1480 REM line 148 
+>1490 REM line 149 abcdefg
+>1500 REM line 150 abcdefghijklmn
+>1510 REM line 151 abcdefghijklmnopqrstu
+>1520 REM line 152 abcdefghijklmnopqrstuvwxyz01
+>1530 REM line 153 abcdefghijklmnopqrstuvwxyz012345678
+>1540 REM line 154 abcde
+>1550 REM line 155 abcdefghijkl
+>1560 REM line 156 abcdefghijklmnopqrs
+>1570 REM line 157 abcdefghijklmnopqrstuvwxyz
+>1580 REM line 158 abcdefghijklmnopqrstuvwxyz0123456
+>1590 REM line 159 abc
+>1600 REM line 160 abcdefghij
+>SAVE "B65BIG"
+>S%=0:FOR A%=PAGE TO TOP-1:S%+=?A%:NEXT:PRINT "size ";TOP-PAGE;" sum ";S%
+size 5280 sum 469446
+>NEW
+>LOAD "B65BIG"
+>S%=0:FOR A%=PAGE TO TOP-1:S%+=?A%:NEXT:PRINT "size ";TOP-PAGE;" sum ";S%
+size 5280 sum 469446
+>LIST 1590,
+ 1590 REM line 159 abc
+ 1600 REM line 160 abcdefghij
+>NEW
+>10 PRINT "small"
+>SAVE "B65BIG"
+>NEW
+>LOAD "B65BIG"
+>LIST
+   10 PRINT "small"
+>RUN
+small
+>SAVE "b65low"
+>NEW
+>LOAD "B65LOW"
+>LIST
+   10 PRINT "small"
+>SAVE "B65TOOLONG"
+
+Bad name
+>SAVE "B65.ABCD"
+
+Bad name
+>SAVE "B6*X"
+
+Bad name
+>SAVE ""
+
+Bad name
+>
