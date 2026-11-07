@@ -31,7 +31,7 @@ hw_init:
         sta $d021
         lda #$1b
         sta $d011
-        lda #$c8
+        lda #$c9                ; XSCROLL=1 compensates the VIC-III 80-column 2-pixel shift
         sta $d016
         lda #$80                ; H640
         tsb $d031
@@ -48,11 +48,12 @@ hw_init:
         lda $d063
         and #$f0
         sta $d063
-        lda #$00
+        jsr fontinit            ; ASCII font at FONTADDR
+        lda #<FONTADDR
         sta $d068
-        lda #$18                ; $1800 = lowercase set in char WOM
+        lda #>FONTADDR
         sta $d069
-        lda #$00
+        lda #^FONTADDR
         sta $d06a
         lda #SCRW
         sta $d058
@@ -94,6 +95,71 @@ hw_init:
         rts
 irq_rti:
         rti
+
+; build 256-glyph charset at FONTADDR: 32..127 from font8x8, +128 inverted
+!zone fontinit
+fontinit:
+        lda #<FONTADDR
+        sta fptr
+        lda #>FONTADDR
+        sta fptr+1
+        lda #^FONTADDR
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldx #0                  ; character code
+.c      txa
+        and #$7f
+        sec
+        sbc #32
+        bcc .blank
+        sta tmp0                ; glyph index * 8
+        lda #0
+        sta tmp1
+        ldy #3
+-       asl tmp0
+        rol tmp1
+        dey
+        bne -
+        lda tmp0
+        clc
+        adc #<font8x8
+        sta ptr3
+        lda tmp1
+        adc #>font8x8
+        sta ptr3+1
+        ldy #0
+-       tya
+        taz
+        lda (ptr3),y
+        cpx #$80
+        bcc +
+        eor #$ff
++       sta [fptr],z
+        iny
+        cpy #8
+        bne -
+        bra .n
+.blank  ldz #0
+        lda #0
+        cpx #$80
+        bcc +
+        lda #$ff
++
+-       sta [fptr],z
+        inz
+        cpz #8
+        bne -
+.n      ldz #0
+        lda fptr
+        clc
+        adc #8
+        sta fptr
+        bcc +
+        inc fptr+1
++       inx
+        bne .c
+        rts
 
 ; ---------------- test mode support ----------------
 ; In test mode the input comes from a script in bank 1 and every output byte
@@ -242,10 +308,8 @@ oswrch:
 vdulen: !byte 0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         !byte 0,1,2,5,0,0,1,9,8,5,0,0,4,4,0,2
 
-; ASCII -> screen code (C64 lowercase charset)
+; ASCII font: screen code = ASCII (bit 7 = reverse)
 putglyph:
-        tax
-        lda asc2scr-32,x
         ldy ccol
         sta (scrp),y
 curright:
@@ -410,6 +474,14 @@ osrdch:
 +       cmp #$03                ; RUN/STOP -> ESC
         bne +
         lda #27
+        rts
++       cmp #$13                ; HOME
+        bne +
+        lda #130
+        rts
++       cmp #$94                ; INST (shift+DEL): delete under cursor
+        bne +
+        lda #131
 +       rts
 
 ; INKEY-style poll: returns A=char or 0, no wait
@@ -434,42 +506,209 @@ trap:   bit testmode
         jmp error
 .r      rts
 
-; OSLINE: read line into ACCS, terminated by CR. Echoes.
+; OSLINE: line editor into ACCS (terminated by CR).
+; Keys: cursor left/right, HOME, DEL (backspace), INST (delete at cursor),
+; cursor up (recall previous line), ctrl-U (clear), ESC, RETURN.
 !zone osline
-osline:
-        ldx #0
+osline: lda #0
+        sta llen
+        sta lcur
 .l      jsr osrdch
         cmp #13
-        beq .cr
+        lbeq .cr
         cmp #27
-        beq .esc
+        lbeq .esc
         cmp #127
-        beq .bs
+        lbeq .bs
+        cmp #131
+        lbeq .delc
+        cmp #136
+        beq .left
+        cmp #137
+        beq .right
+        cmp #130
+        beq .home
+        cmp #139
+        lbeq .hist
         cmp #21                 ; ctrl-U
-        beq .kill
+        lbeq .kill
         cmp #32
         bcc .l
         cmp #127
         bcs .l
+        ldx llen                ; insert at cursor
         cpx #255
         beq .l
+        pha
+-       cpx lcur                ; shift tail right
+        beq +
+        lda ACCS-1,x
         sta ACCS,x
-        inx
+        dex
+        bra -
++       pla
+        sta ACCS,x
+        inc llen
+        jsr .tail               ; print from cursor, cursor ends after inserted char
+        inc lcur
+        jsr .back
+        bra .l
+.left   lda lcur
+        beq .l
+        dec lcur
+        lda #8
         jsr oswrch
         bra .l
-.bs     cpx #0
+.right  lda lcur
+        cmp llen
         beq .l
-        dex
+        ldx lcur
+        lda ACCS,x
         jsr oswrch
-        bra .l
-.kill   cpx #0
-        beq .l
-        dex
-        lda #127
+        inc lcur
+        lbra .l
+.home   lda lcur
+        lbeq .l
+        dec lcur
+        lda #8
         jsr oswrch
-        bra .kill
-.cr     sta ACCS,x
-        jsr crlf
-        rts
+        bra .home
+.bs     lda lcur
+        lbeq .l
+        dec lcur
+        lda #8
+        jsr oswrch
+.delc   ldx lcur                ; delete char at cursor
+        cpx llen
+        lbeq .l
+-       inx
+        cpx llen
+        beq +
+        lda ACCS,x
+        sta ACCS-1,x
+        bra -
++       dec llen
+        jsr .tail
+        lda #' '
+        jsr oswrch
+        inc tmp5
+        jsr .back1
+        jmp .l
+.kill   jsr .home2
+        jsr .erase
+        lda #0
+        sta llen
+        sta lcur
+        jmp .l
+.hist   jsr .home2              ; recall previous line from HIST
+        jsr .erase
+        jsr histget
+        lda #0
+        sta lcur
+        jsr .tail
+        lda llen
+        sta lcur
+        jmp .l
+.cr     jsr .end                ; move to end, store CR, remember line
+        ldx llen
+        lda #CR
+        sta ACCS,x
+        jsr histput
+        jmp crlf
 .esc    lda #17
         jmp error
+; print ACCS[lcur..llen), tmp5 = number printed
+.tail   ldx lcur
+        lda #0
+        sta tmp5
+-       cpx llen
+        beq +
+        lda ACCS,x
+        jsr oswrch
+        inc tmp5
+        inx
+        bra -
++       rts
+; move the screen cursor back tmp5 places, then forward to lcur
+.back   lda tmp5                ; after .tail with lcur advanced by one
+        sec
+        sbc #1
+        sta tmp5
+.back1  ldx tmp5
+        beq +
+-       lda #8
+        jsr oswrch
+        dex
+        bne -
++       rts
+.home2  ldx lcur                ; cursor to start of line
+        beq +
+-       lda #8
+        jsr oswrch
+        dex
+        bne -
++       stx lcur
+        rts
+.erase  ldx llen                ; blank the old text, cursor back to start
+        beq +
+-       lda #' '
+        jsr oswrch
+        dex
+        bne -
+        ldx llen
+-       lda #8
+        jsr oswrch
+        dex
+        bne -
++       rts
+.end    ldx lcur
+-       cpx llen
+        beq +
+        lda ACCS,x
+        jsr oswrch
+        inx
+        bra -
++       stx lcur
+        rts
+
+; history: one previous line, kept in chip RAM at HISTADDR (len, bytes)
+histput:
+        jsr histptr
+        ldz #0
+        lda llen
+        sta [fptr],z
+        ldx #0
+-       cpx llen
+        beq +
+        inz
+        lda ACCS,x
+        sta [fptr],z
+        inx
+        bra -
++       ldz #0
+        rts
+histget:
+        jsr histptr
+        ldz #0
+        lda [fptr],z
+        sta llen
+        ldx #0
+-       cpx llen
+        beq +
+        inz
+        lda [fptr],z
+        sta ACCS,x
+        inx
+        bra -
++       ldz #0
+        rts
+histptr:
+        lda #<HISTADDR
+        sta fptr
+        lda #>HISTADDR
+        sta fptr+1
+        lda #^HISTADDR
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        rts

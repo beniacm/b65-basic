@@ -15,6 +15,7 @@
 !src "src/vars.a"
 !src "src/os.a"
 !src "src/tables.a"
+!src "src/font.a"
 code_end:
         !align 255, 0
 prog_start:

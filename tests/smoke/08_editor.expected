@@ -1,0 +1,16 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+
+>PRINT 12322
+       132
+>PRINT 1234 
+       123
+>PRINT 1235
+      1235
+>PRINT 99RINT 99 ?RINT 99RINT 99
+
+No such variable
+>PRINT 1       PRINT 77
+        77
+>
