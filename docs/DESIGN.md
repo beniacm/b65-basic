@@ -155,7 +155,9 @@ Xemu command used: `xmega65.native -skipconfigfile -headless -sleepless
 -besure -testing -virtsd -sdimg <empty dir> -extonboard <image> -dumpmem
 <file> -uartmon <sock>`. If the run times out, the harness asks the uartmon
 for the registers (`r`) and prints them, which helps with debugging hangs.
-One run takes about 0.5 s.
+One run takes about 0.5 s. Each run gets a private `HOME`/`XDG_DATA_HOME`
+(temporary directory), so parallel Xemu instances never share
+`~/.local/share/xemu-lgb`.
 
 The normal start path (C65 mode, BASIC 65 `RUN` of the PRG) was also checked
 with the real MEGA65 ROM and an onboarded card image (private copy, not in
