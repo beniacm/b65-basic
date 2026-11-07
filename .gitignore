@@ -3,3 +3,5 @@ rom/
 *.rom
 build/
 out/
+*.img
+*.d81
