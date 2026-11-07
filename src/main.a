@@ -105,6 +105,10 @@ cold_test:
         sta STAVAR+$200,x       ; NUMBUF + MISC variables
         inx
         bne -
+        lda #80                 ; text screen state (MISC area)
+        sta scrcols
+        lda #1
+        sta tcolour
         lda #<($90a)            ; @% = &90A
         sta STAVAR
         lda #>($90a)

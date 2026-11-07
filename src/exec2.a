@@ -966,3 +966,42 @@ f_usr:  jsr itemi
         sta accx
         sta etype
         rts
+
+; ---- graphics statement stubs (overlay 1) ----
+gs_mode:   jsr ovjmp
+           !byte 1
+           !word gx_mode
+gs_clg:    jsr ovjmp
+           !byte 1
+           !word gx_clg
+gs_gcol:   jsr ovjmp
+           !byte 1
+           !word gx_gcol
+gs_colour: jsr ovjmp
+           !byte 1
+           !word gx_colour
+gs_origin: jsr ovjmp
+           !byte 1
+           !word gx_origin
+gs_move:   jsr ovjmp
+           !byte 1
+           !word gx_move
+gs_draw:   jsr ovjmp
+           !byte 1
+           !word gx_draw
+gs_plot:   jsr ovjmp
+           !byte 1
+           !word gx_plot
+gs_line:   jsr ovjmp
+           !byte 1
+           !word gx_line
+gs_circle: jsr ovjmp
+           !byte 1
+           !word gx_circle
+gs_rect:   jsr ovjmp
+           !byte 1
+           !word gx_rect
+f_point:   jsr ovjsr
+           !byte 1
+           !word gx_point
+           rts

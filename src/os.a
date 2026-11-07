@@ -48,6 +48,12 @@ hw_init:
         lda $d063
         and #$f0
         sta $d063
+        lda #80
+        sta scrcols
+        lda #1
+        sta tcolour
+        lda #0
+        sta gmode
         jsr fontinit            ; ASCII font at FONTADDR
         lda #<FONTADDR
         sta $d068
@@ -254,7 +260,7 @@ oswrch:
         bne .done
         ; VDU 31,x,y  (params stored: vdup+1 = x, vdup = y)
         lda vdup+1
-        cmp #SCRW
+        cmp scrcols
         bcs .done
         sta ccol
         lda vdup
@@ -319,12 +325,35 @@ vdulen: !byte 0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; ASCII font: screen code = ASCII (bit 7 = reverse)
 putglyph:
-        ldy ccol
+        bit gmode
+        bpl +
+        sta gchar
+        jsr ovjsr
+        !byte 1
+        !word gx_glyph
+        bra curright
++       ldy ccol
         sta (scrp),y
+        lda scrp                ; colour RAM ($FF80000 + offset)
+        sec
+        sbc #<SCREEN
+        sta fptr
+        lda scrp+1
+        sbc #>SCREEN
+        sta fptr+1
+        lda #$f8
+        sta fptr+2
+        lda #$0f
+        sta fptr+3
+        tya
+        taz
+        lda tcolour
+        sta [fptr],z
+        ldz #0
 curright:
         inc ccol
         lda ccol
-        cmp #SCRW
+        cmp scrcols
         bcc +
         lda #0
         sta ccol
@@ -339,7 +368,8 @@ curleft:
 +       lda crow
         beq +
         dec crow
-        lda #SCRW-1
+        lda scrcols
+        dec
         sta ccol
         jmp setscrp
 +       rts
@@ -371,7 +401,13 @@ setscrp:                        ; scrp = SCREEN + crow*80
         sta scrp+1
         rts
 
-scroll: lda #<SCREEN
+scroll: bit gmode
+        bpl +
+        jsr ovjsr
+        !byte 1
+        !word gx_scroll
+        rts
++       lda #<SCREEN
         sta ptr3
         lda #>SCREEN
         sta ptr3+1
@@ -400,7 +436,13 @@ scroll: lda #<SCREEN
         bpl -
         rts
 
-cls:    lda #<SCREEN
+cls:    bit gmode
+        bpl +
+        jsr ovjsr
+        !byte 1
+        !word gx_cls
+        rts
++       lda #<SCREEN
         sta ptr3
         lda #>SCREEN
         sta ptr3+1
@@ -447,18 +489,23 @@ osrdch:
 .eos    lda #0
         jmp test_exit
 .kbd    phy
-        ldy ccol                ; show cursor
+        ldy ccol                ; show cursor (text mode only)
         lda (scrp),y
         pha
+        bit gmode
+        bmi +
         ora #$80
         sta (scrp),y
++
 -       lda $d610
         beq -
         sta $d610               ; dequeue
         tax
         pla
+        bit gmode
+        bmi +
         sta (scrp),y
-        ply
++       ply
         txa
         cmp #$14                ; DEL
         bne +

@@ -20,8 +20,9 @@
 !src "src/ovl.a"
 !src "src/m65.a"
 !src "src/sound.a"
-NOVL = 1
+NOVL = 2
 ovltab: !word ovl_asm_img, ovl_asm_end-$e000
+        !word ovl_gfx_img, ovl_gfx_end-$e000
 code_end:
         !align 255, 0
 prog_start:
@@ -29,5 +30,7 @@ prog_start:
 ; ---- overlay images: copied to bank 4 at start-up, then free for programs ----
 !src "src/asm.a"
 !if ovl_asm_end-$e000 > $1ffa { !error "overlay 0 too large" }
+!src "src/gfx.a"
+!if ovl_gfx_end-$e000 > $1ffa { !error "overlay 1 too large" }
 ovl_images_end:
 !if ovl_images_end > $c000 { !error "PRG too large" }

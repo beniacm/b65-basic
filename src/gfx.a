@@ -1,0 +1,1056 @@
+; B65 BASIC - MEGA65 graphics (overlay 1)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+; Implements the HOOK.Z80 entry points for the VIC-IV:
+;   MODE 0  80x25 text          MODE 1  320x200, 256 colours (full-colour chars)
+;   CLG, GCOL [m,]c, COLOUR c, ORIGIN x,y, MOVE x,y, DRAW x,y, PLOT k,x,y,
+;   LINE x1,y1,x2,y2, CIRCLE [FILL] x,y,r, RECTANGLE [FILL] x,y,w,h, POINT(x,y)
+; Coordinates are pixels (0..319, 0..199), origin top left (+ ORIGIN).
+; The bitmap lives in chip RAM at GBASE: 1000 full-colour characters of 64
+; bytes, character n = row*40+column; screen RAM ($0800) holds 16-bit
+; character numbers GBASE/64+n.
+
+GBASE   = $050000
+GCHR0   = GBASE/64              ; first character number ($1400)
+
+; graphics state (MISC area)
+gmode   = MISC+124      ; 0 text, $80 graphics
+gfg     = MISC+125      ; graphics colour
+gbg     = MISC+126      ; background colour
+gtfg    = MISC+127      ; text colour in graphics mode
+gorgx   = $06c8         ; 2 ORIGIN
+gorgy   = $06ca         ; 2
+glx     = $06cc         ; 2 last point (MOVE/DRAW)
+gly     = $06ce         ; 2
+; temporaries (zero page is fine: only used inside the overlay)
+gx0     = NBUF          ; 2 each
+gy0     = NBUF+2
+gx1     = NBUF+4
+gy1     = NBUF+6
+gdx     = NBUF+8
+gdy     = NBUF+10
+gsx     = NBUF+12
+gsy     = NBUF+14
+gerr    = NBUF+16
+gtmp    = NBUF+18
+gr      = NBUF+20
+gfill   = NBUF+22
+
+ovl_gfx_img:
+!pseudopc $e000 {
+; ---------------- statements ----------------
+!zone gx_mode
+gx_mode:
+        jsr expri
+        lda acc
+        beq .text
+        jsr gfxon
+        jmp xeq
+.text   jsr gfxoff
+        jmp xeq
+
+; GFXON: switch to 320x200x256
+!zone gfxon
+gfxon:  lda #$80
+        sta gmode
+        lda #40
+        sta scrcols
+        lda #1
+        sta gtfg
+        lda #0
+        sta gbg
+        lda #1
+        sta gfg
+        jsr palinit
+        jsr gclear
+        ; screen RAM: 16-bit character numbers
+        lda #<SCREEN
+        sta ptr3
+        lda #>SCREEN
+        sta ptr3+1
+        lda #<GCHR0
+        sta gtmp
+        lda #>GCHR0
+        sta gtmp+1
+        ldx #0                  ; 1000 entries
+        ldy #0
+.s1     lda gtmp
+        sta (ptr3),y
+        iny
+        lda gtmp+1
+        sta (ptr3),y
+        iny
+        bne +
+        inc ptr3+1
++       inw gtmp
+        lda gtmp
+        cmp #<(GCHR0+1000)
+        bne .s1
+        lda gtmp+1
+        cmp #>(GCHR0+1000)
+        bne .s1
+        jsr cramclr             ; colour RAM: 0
+        lda #$80                ; H640 off (320 pixels)
+        trb $d031
+        lda #$c8
+        jsr vicmode
+        lda #$07                ; CHR16 + full colour for all characters
+        tsb $d054
+        lda #80
+        sta $d058               ; 80 bytes per row (40 x 2)
+        lda #0
+        sta $d059
+        lda #40
+        sta $d05e
+        lda #0
+        sta ccol
+        sta crow
+        sta count
+        rts
+
+!zone gfxoff
+gfxoff: lda #0
+        sta gmode
+        lda #80
+        sta scrcols
+        lda #$07
+        trb $d054
+        lda #$80
+        tsb $d031
+        lda #$c9
+        jsr vicmode
+        lda #80
+        sta $d058
+        lda #0
+        sta $d059
+        lda #80
+        sta $d05e
+        jsr cramwhite
+        jmp cls
+
+; VICMODE: A = $D016 value; let the VIC-IV recompute borders and text
+; position for the current H640 setting (HOTREG), then restore our pointers
+vicmode:
+        pha
+        lda #$80
+        tsb $d05d               ; HOTREG on
+        lda $d031
+        sta $d031
+        pla
+        sta $d016
+        lda #$1b
+        sta $d011
+        lda #$80
+        trb $d05d               ; HOTREG off
+        lda #<SCREEN
+        sta $d060
+        lda #>SCREEN
+        sta $d061
+        lda #0
+        sta $d062
+        lda $d063
+        and #$f0
+        sta $d063
+        lda #<FONTADDR
+        sta $d068
+        lda #>FONTADDR
+        sta $d069
+        lda #^FONTADDR
+        sta $d06a
+        lda #0
+        sta $d064
+        sta $d065
+        rts
+
+; colour RAM fill helpers (2K at $FF80000)
+!zone cramclr
+cramclr:
+        lda #0
+        bra +
+cramwhite:
+        lda #1
++       sta gtmp
+        lda #$00
+        sta fptr
+        sta fptr+1
+        lda #$f8
+        sta fptr+2
+        lda #$0f
+        sta fptr+3
+        ldx #8
+--      ldz #0
+        lda gtmp
+-       sta [fptr],z
+        inz
+        bne -
+        inc fptr+1
+        dex
+        bne --
+        ldz #0
+        rts
+
+; palette: 0-15 as the VIC defaults, 16-255 = RGB 3-3-2 cube
+!zone palinit
+palinit:
+        ldx #16
+-       txa                     ; red: bits 7-5
+        and #$e0
+        jsr .exp3
+        sta $d100,x
+        txa                     ; green: bits 4-2
+        asl
+        asl
+        asl
+        and #$e0
+        jsr .exp3
+        sta $d200,x
+        txa                     ; blue: bits 1-0
+        and #3
+        tay
+        lda .b2,y
+        sta $d300,x
+        inx
+        bne -
+        rts
+.exp3   sta gtmp                ; 3-bit (in bits 7-5) -> 8-bit, nybble-swapped
+        lsr
+        lsr
+        lsr
+        ora gtmp
+        sta gtmp
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        ora gtmp
+        jmp swapnyb
+.b2     !byte $00,$55,$aa,$ff
+swapnyb:
+        asl
+        adc #$80
+        rol
+        asl
+        adc #$80
+        rol
+        rts
+
+; DMA fill/copy of the bitmap (F018B job list in bank 0)
+!zone gclear
+gclear: lda gbg
+        sta gjob_src            ; fill byte
+        lda #3                  ; fill
+        sta gjob_cmd
+        lda #<64000
+        sta gjob_cnt
+        lda #>64000
+        sta gjob_cnt+1
+        lda #<GBASE
+        sta gjob_dst
+        lda #>GBASE
+        sta gjob_dst+1
+        lda #^GBASE
+        sta gjob_dst+2
+        jmp gdma
+gdma:   lda #0                  ; the job list is in this overlay: physical
+        sta $d704               ; OVBASE + 1*$2000 + (gjob - $E000)
+        lda #^OVBASE
+        sta $d702
+        lda #>(gjob-$e000+$2000)
+        sta $d701
+        lda #<gjob
+        sta $d705               ; enhanced DMA job
+        rts
+!zone gjob
+gjob:   !byte $0b, $00          ; F018B, end of options
+gjob_cmd !byte 0
+gjob_cnt !word 0
+gjob_src !byte 0, 0, ^GBASE
+gjob_dst !byte 0, 0, ^GBASE
+        !byte 0                 ; sub command
+        !word 0                 ; modulo
+
+!zone gx_clg
+gx_clg: jsr gclear
+        jmp xeq
+!zone gx_gcol
+gx_gcol:
+        jsr expri
+        jsr nxt
+        cmp #','
+        bne +
+        inw tp
+        jsr expri               ; GCOL mode,colour: mode ignored
++       lda acc
+        sta gfg
+        jmp xeq
+!zone gx_colour
+gx_colour:
+        jsr expri
+        lda acc
+        bit gmode
+        bpl +
+        sta gtfg
+        jmp xeq
++       and #15                 ; text mode: colour RAM colour for new characters
+        sta tcolour
+        jmp xeq
+!zone gx_origin
+gx_origin:
+        jsr getxy
+        lda gx0
+        sta gorgx
+        lda gx0+1
+        sta gorgx+1
+        lda gy0
+        sta gorgy
+        lda gy0+1
+        sta gorgy+1
+        jmp xeq
+
+; GETARGS: A = number of comma-separated integer arguments -> GARG
+; (expressions may use the zero page scratch, so values are kept apart)
+GARG    = $1dc0
+gargn   = GARG+16
+gargi   = GARG+17
+!zone getargs
+getargs:
+        sta gargn
+        lda #0
+        sta gargi
+.ga     jsr expri
+        lda gargi
+        asl
+        tax
+        lda acc
+        sta GARG,x
+        lda acc+1
+        sta GARG+1,x
+        inc gargi
+        lda gargi
+        cmp gargn
+        beq .gx
+        jsr comma
+        bra .ga
+.gx     rts
+; ARGXY: GARG[x], GARG[x+1] (+ origin) -> gx0/gy0
+argxy:  lda GARG,x
+        clc
+        adc gorgx
+        sta gx0
+        lda GARG+1,x
+        adc gorgx+1
+        sta gx0+1
+        lda GARG+2,x
+        clc
+        adc gorgy
+        sta gy0
+        lda GARG+3,x
+        adc gorgy+1
+        sta gy0+1
+        rts
+; GETXY: x,y -> gx0/gy0 (+ origin)
+getxy:  lda #2
+        jsr getargs
+        ldx #0
+        jmp argxy
+
+!zone gx_move
+gx_move:
+        jsr getxy
+        jsr setlast
+        jmp xeq
+setlast:
+        lda gx0
+        sta glx
+        lda gx0+1
+        sta glx+1
+        lda gy0
+        sta gly
+        lda gy0+1
+        sta gly+1
+        rts
+!zone gx_draw
+gx_draw:
+        jsr getxy
+        jsr drawto
+        jmp xeq
+drawto: lda gx0                 ; line from last point to gx0/gy0
+        sta gx1
+        lda gx0+1
+        sta gx1+1
+        lda gy0
+        sta gy1
+        lda gy0+1
+        sta gy1+1
+        lda glx
+        sta gx0
+        lda glx+1
+        sta gx0+1
+        lda gly
+        sta gy0
+        lda gly+1
+        sta gy0+1
+        jsr line
+        lda gx1
+        sta glx
+        lda gx1+1
+        sta glx+1
+        lda gy1
+        sta gly
+        lda gy1+1
+        sta gly+1
+        rts
+; PLOT k,x,y : 4 move, 5 draw, 69 point (BBC codes); others: point
+!zone gx_plot
+gx_plot:
+        lda #3
+        jsr getargs
+        ldx #2
+        jsr argxy
+        lda GARG
+        cmp #4
+        beq .mv
+        cmp #5
+        beq .dr
+        jsr pset
+.mv     jsr setlast
+        jmp xeq
+.dr     jsr drawto
+        jmp xeq
+; LINE x1,y1,x2,y2
+!zone gx_line
+gx_line:
+        lda #4
+        jsr getargs
+        ldx #4
+        jsr argxy
+        lda gx0
+        sta gx1
+        lda gx0+1
+        sta gx1+1
+        lda gy0
+        sta gy1
+        lda gy0+1
+        sta gy1+1
+        ldx #0
+        jsr argxy
+        jsr line
+        jmp xeq
+
+; CIRCLE [FILL] x,y,r
+!zone gx_circle
+gx_circle:
+        jsr fillq
+        lda #3
+        jsr getargs
+        ldx #0
+        jsr argxy
+        lda GARG+4
+        sta gr
+        lda GARG+5
+        sta gr+1
+        jsr circle
+        jmp xeq
+fillq:  lda #0
+        sta gfill
+        jsr nxt
+        cmp #$03                ; FILL token
+        bne +
+        inw tp
+        lda #$ff
+        sta gfill
++       rts
+; RECTANGLE [FILL] x,y,w,h
+!zone gx_rect
+gx_rect:
+        jsr fillq
+        lda #4
+        jsr getargs
+        ldx #0
+        jsr argxy
+        lda GARG+4
+        sta gdx
+        lda GARG+5
+        sta gdx+1
+        lda GARG+6
+        sta gdy
+        lda GARG+7
+        sta gdy+1
+        jsr rect
+        jmp xeq
+
+; POINT(x,y) -> colour, -1 outside
+!zone gx_point
+gx_point:
+        jsr getxy
+        jsr braket
+        jsr paddr
+        bcs .out
+        lda [fptr],z
+        ldx #0
+        jmp setw
+.out    lda #$ff
+        jmp setint8
+
+; ---------------- primitives ----------------
+; PADDR: gx0/gy0 -> fptr (carry set if outside the screen)
+!zone paddr
+paddr:  lda gx0+1
+        lbmi .o
+        cmp #>320
+        bcc +
+        bne .o
+        lda gx0
+        cmp #<320
+        bcs .o
++       lda gy0+1
+        bne .o
+        lda gy0
+        cmp #200
+        bcs .o
+        ; off = ((y>>3)*40 + (x>>3))*64 + (y&7)*8 + (x&7)
+        lsr
+        lsr
+        lsr
+        sta gtmp                ; cy
+        lda #0
+        sta gtmp+1
+        asl gtmp                ; cy*8
+        rol gtmp+1
+        asl gtmp
+        rol gtmp+1
+        asl gtmp
+        rol gtmp+1
+        lda gtmp                ; *5 = cy*40
+        ldx gtmp+1
+        asl gtmp
+        rol gtmp+1
+        asl gtmp
+        rol gtmp+1
+        clc
+        adc gtmp
+        sta gtmp
+        txa
+        adc gtmp+1
+        sta gtmp+1
+        lda gx0+1               ; + cx = x>>3
+        lsr
+        lda gx0
+        ror
+        lsr
+        lsr
+        clc
+        adc gtmp
+        sta gtmp
+        bcc +
+        inc gtmp+1
++       ldx #6                  ; *64
+-       asl gtmp
+        rol gtmp+1
+        dex
+        bne -
+        lda gy0
+        and #7
+        asl
+        asl
+        asl
+        sta fptr
+        lda gx0
+        and #7
+        ora fptr
+        clc
+        adc gtmp
+        sta fptr
+        lda gtmp+1
+        adc #>GBASE
+        sta fptr+1
+        lda #^GBASE
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldz #0
+        clc
+        rts
+.o      sec
+        rts
+pset:   jsr paddr
+        bcs +
+        lda gfg
+        sta [fptr],z
++       rts
+
+; LINE gx0,gy0 -> gx1,gy1 (Bresenham, 16-bit signed)
+!zone line
+line:   lda gx1                 ; dx = |x1-x0|, sx = sign
+        sec
+        sbc gx0
+        sta gdx
+        lda gx1+1
+        sbc gx0+1
+        sta gdx+1
+        lda #1
+        sta gsx
+        lda #0
+        sta gsx+1
+        bit gdx+1
+        bpl +
+        jsr .negdx
+        lda #$ff
+        sta gsx
+        sta gsx+1
++       lda gy1                 ; dy = -|y1-y0|, sy
+        sec
+        sbc gy0
+        sta gdy
+        lda gy1+1
+        sbc gy0+1
+        sta gdy+1
+        lda #1
+        sta gsy
+        lda #0
+        sta gsy+1
+        bit gdy+1
+        bmi +
+        jsr .negdy              ; dy := -dy (dy >= 0 case)
+        bra ++
++       lda #$ff
+        sta gsy
+        sta gsy+1
+++      lda gdx                 ; err = dx + dy
+        clc
+        adc gdy
+        sta gerr
+        lda gdx+1
+        adc gdy+1
+        sta gerr+1
+.l      jsr pset
+        lda gx0
+        cmp gx1
+        bne +
+        lda gx0+1
+        cmp gx1+1
+        bne +
+        lda gy0
+        cmp gy1
+        bne +
+        lda gy0+1
+        cmp gy1+1
+        lbeq .x
++       lda gerr                ; e2 = 2*err
+        asl
+        sta gtmp
+        lda gerr+1
+        rol
+        sta gtmp+1
+        ; if e2 >= dy: err += dy, x += sx
+        lda gtmp
+        cmp gdy
+        lda gtmp+1
+        sbc gdy+1
+        bvc +
+        eor #$80
++       bmi +
+        lda gerr
+        clc
+        adc gdy
+        sta gerr
+        lda gerr+1
+        adc gdy+1
+        sta gerr+1
+        lda gx0
+        clc
+        adc gsx
+        sta gx0
+        lda gx0+1
+        adc gsx+1
+        sta gx0+1
++       ; if e2 <= dx: err += dx, y += sy
+        lda gdx
+        cmp gtmp
+        lda gdx+1
+        sbc gtmp+1
+        bvc +
+        eor #$80
++       bmi .l
+        lda gerr
+        clc
+        adc gdx
+        sta gerr
+        lda gerr+1
+        adc gdx+1
+        sta gerr+1
+        lda gy0
+        clc
+        adc gsy
+        sta gy0
+        lda gy0+1
+        adc gsy+1
+        sta gy0+1
+        jmp .l
+.x      rts
+.negdx  lda #0
+        sec
+        sbc gdx
+        sta gdx
+        lda #0
+        sbc gdx+1
+        sta gdx+1
+        rts
+.negdy  lda #0
+        sec
+        sbc gdy
+        sta gdy
+        lda #0
+        sbc gdy+1
+        sta gdy+1
+        rts
+
+; HSPAN: from x=gx0 to gx1 (gx0 <= gx1) at gy0
+!zone hspan
+hspan:  lda gx0
+        pha
+        lda gx0+1
+        pha
+-       jsr pset
+        lda gx0
+        cmp gx1
+        bne +
+        lda gx0+1
+        cmp gx1+1
+        beq ++
++       inw gx0
+        bra -
+++      pla
+        sta gx0+1
+        pla
+        sta gx0
+        rts
+
+; RECTANGLE x,y,w,h (outline or filled)
+!zone rect
+rect:   lda gx0                 ; x1 = x + w - 1, y1 = y + h - 1
+        clc
+        adc gdx
+        sta gx1
+        lda gx0+1
+        adc gdx+1
+        sta gx1+1
+        lda gx1
+        bne +
+        dec gx1+1
++       dec gx1
+        lda gy0
+        clc
+        adc gdy
+        sta gy1
+        lda gy0+1
+        adc gdy+1
+        sta gy1+1
+        lda gy1
+        bne +
+        dec gy1+1
++       dec gy1
+        lda gy0                 ; save top-left
+        sta gr
+        lda gy0+1
+        sta gr+1
+.row    lda gfill
+        bne .span
+        ; outline: full span on first/last row, end points otherwise
+        lda gy0
+        cmp gr
+        bne +
+        lda gy0+1
+        cmp gr+1
+        beq .span
++       lda gy0
+        cmp gy1
+        bne +
+        lda gy0+1
+        cmp gy1+1
+        beq .span
++       jsr pset
+        lda gx0
+        pha
+        lda gx0+1
+        pha
+        lda gx1
+        sta gx0
+        lda gx1+1
+        sta gx0+1
+        jsr pset
+        pla
+        sta gx0+1
+        pla
+        sta gx0
+        bra .nx
+.span   jsr hspan
+.nx     lda gy0
+        cmp gy1
+        bne +
+        lda gy0+1
+        cmp gy1+1
+        lbeq .x
++       inw gy0
+        bra .row
+.x      rts
+
+; CIRCLE centre gx0,gy0 radius gr (midpoint algorithm)
+!zone circle
+circle: lda gx0
+        sta gsx                 ; centre
+        lda gx0+1
+        sta gsx+1
+        lda gy0
+        sta gsy
+        lda gy0+1
+        sta gsy+1
+        lda gr                  ; x = r, y = 0, err = 1 - r
+        sta gdx
+        lda gr+1
+        sta gdx+1
+        lda #0
+        sta gdy
+        sta gdy+1
+        lda #1
+        sec
+        sbc gr
+        sta gerr
+        lda #0
+        sbc gr+1
+        sta gerr+1
+.l      ; while x >= y
+        lda gdx
+        cmp gdy
+        lda gdx+1
+        sbc gdy+1
+        bcs +
+        rts
++       jsr .oct
+        inw gdy                 ; y++
+        lda gerr+1
+        bmi .e1
+        lda gdx                 ; x--
+        bne +
+        dec gdx+1
++       dec gdx
+        ; err += 2*(y-x) + 1
+        lda gdy
+        sec
+        sbc gdx
+        sta gtmp
+        lda gdy+1
+        sbc gdx+1
+        sta gtmp+1
+        bra .e2
+.e1     lda gdy                 ; err += 2*y + 1
+        sta gtmp
+        lda gdy+1
+        sta gtmp+1
+.e2     asl gtmp
+        rol gtmp+1
+        lda gerr
+        sec                     ; +1
+        adc gtmp
+        sta gerr
+        lda gerr+1
+        adc gtmp+1
+        sta gerr+1
+        jmp .l
+; plot the 8 octant points (or 4 spans when filling) for (gdx, gdy)
+.oct    ldx #0
+.o1     jsr .pt
+        inx
+        cpx #4
+        bne .o1
+        rts
+; point set x: 0: (cx+-dx, cy+dy) 1: (cx+-dx, cy-dy) 2: (cx+-dy, cy+dx) 3: (cx+-dy, cy-dx)
+.pt     phx
+        txa
+        and #2
+        beq +
+        lda gdy                 ; swap roles for sets 2,3
+        sta gerr+0+20           ; (scratch: NBUF+36)
+        lda gdy+1
+        sta gerr+1+20
+        lda gdx
+        sta gtmp
+        lda gdx+1
+        sta gtmp+1
+        bra ++
++       lda gdx
+        sta gerr+20
+        lda gdx+1
+        sta gerr+21
+        lda gdy
+        sta gtmp
+        lda gdy+1
+        sta gtmp+1
+++      ; y = cy +- gtmp
+        plx
+        phx
+        txa
+        and #1
+        bne +
+        lda gsy
+        clc
+        adc gtmp
+        sta gy0
+        lda gsy+1
+        adc gtmp+1
+        sta gy0+1
+        bra ++
++       lda gsy
+        sec
+        sbc gtmp
+        sta gy0
+        lda gsy+1
+        sbc gtmp+1
+        sta gy0+1
+++      lda gsx                 ; x range cx-a .. cx+a
+        sec
+        sbc gerr+20
+        sta gx0
+        lda gsx+1
+        sbc gerr+21
+        sta gx0+1
+        lda gsx
+        clc
+        adc gerr+20
+        sta gx1
+        lda gsx+1
+        adc gerr+21
+        sta gx1+1
+        lda gfill
+        beq +
+        jsr hspan
+        plx
+        rts
++       jsr pset
+        lda gx1
+        sta gx0
+        lda gx1+1
+        sta gx0+1
+        jsr pset
+        plx
+        rts
+
+; ---------------- text output in graphics mode ----------------
+; GX_GLYPH: A = character, drawn at ccol/crow (40x25) in gtfg on gbg
+!zone gx_glyph
+gx_glyph:
+        lda gchar
+        sta gsx                 ; bit 7: reverse video
+        sta gtmp
+        and #$7f
+        sec
+        sbc #32
+        bcs +
+        lda #0
++       sta gtmp+1              ; glyph index
+        lda #0
+        sta ptr3+1
+        lda gtmp+1
+        asl
+        rol ptr3+1
+        asl
+        rol ptr3+1
+        asl
+        rol ptr3+1
+        clc
+        adc #<font8x8
+        sta ptr3
+        lda ptr3+1
+        adc #>font8x8
+        sta ptr3+1
+        ; character cell address = GBASE + (crow*40+ccol)*64
+        lda crow
+        asl
+        asl
+        asl
+        sta gx0                 ; y = crow*8
+        lda #0
+        sta gx0+1
+        lda gx0
+        sta gy0
+        lda #0
+        sta gy0+1
+        lda ccol
+        asl
+        asl
+        asl
+        sta gx0
+        lda #0
+        rol
+        sta gx0+1
+        jsr paddr               ; fptr = top-left pixel of the cell
+        lbcs .x
+        ldy #0
+.row    lda (ptr3),y
+        bit gsx                 ; reverse video (cursor)
+        bpl +
+        eor #$ff
++       sta gerr
+        ldx #8
+        ldz #0
+-       asl gerr
+        lda gbg
+        bcc +
+        lda gtfg
++       sta [fptr],z
+        inz
+        dex
+        bne -
+        lda fptr                ; next row: +8
+        clc
+        adc #8
+        sta fptr
+        iny
+        cpy #8
+        lbne .row
+        ldz #0
+.x      rts
+
+; GX_SCROLL: move the bitmap up one text row (DMA), clear the last row
+!zone gx_scroll
+gx_scroll:
+        lda #0
+        sta gjob_cmd            ; copy
+        lda #<(64000-2560)
+        sta gjob_cnt
+        lda #>(64000-2560)
+        sta gjob_cnt+1
+        lda #<(GBASE+2560)
+        sta gjob_src
+        lda #>(GBASE+2560)
+        sta gjob_src+1
+        lda #^GBASE
+        sta gjob_src+2
+        lda #<GBASE
+        sta gjob_dst
+        lda #>GBASE
+        sta gjob_dst+1
+        jsr gdma
+        lda #3                  ; fill the last row
+        sta gjob_cmd
+        lda gbg
+        sta gjob_src
+        lda #<2560
+        sta gjob_cnt
+        lda #>2560
+        sta gjob_cnt+1
+        lda #<(GBASE+64000-2560)
+        sta gjob_dst
+        lda #>(GBASE+64000-2560)
+        sta gjob_dst+1
+        jmp gdma
+!zone gx_cls
+gx_cls: jsr gclear
+        lda #0
+        sta ccol
+        sta crow
+        sta count
+        rts
+ovl_gfx_end:
+}

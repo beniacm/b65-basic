@@ -8,7 +8,7 @@ FNBUF   = $07c0             ; (shared with FP stack area start: only used transi
 FEXBUF  = $0760             ; 11 bytes: 8.3 name for directory compare
 DIRENT  = $0700             ; Hyppo dirent buffer (87 bytes, page aligned)
 NCHAN   = 4
-CHBUF   = $05c000           ; channel buffers (512 bytes each) in chip RAM, bank 5
+CHBUF   = $04e000           ; channel buffers (4 x 512 bytes) in chip RAM, bank 4
 
 ; ---- Hyppo trap: A = function; returns carry set on success, A = result/error
 hyppo:  clc

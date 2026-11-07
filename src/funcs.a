@@ -38,6 +38,7 @@ functab:
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
         !byte TREPORT : !word f_reports
+        !byte $b0     : !word f_point
         !byte $96     : !word f_adval
         !byte TTLEFT  : !word f_tleft
         !byte TUSR    : !word f_usr
