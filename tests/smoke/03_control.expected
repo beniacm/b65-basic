@@ -1,0 +1,55 @@
+B65 BASIC (45GS02) for MEGA65 - 0.1
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+
+>10 I%=0
+>20 WHILE I%<3
+>30   PRINT "while ";I%
+>40   I%+=1
+>50 ENDWHILE
+>60 IF I%=3 THEN
+>70   PRINT "multi-line IF true"
+>80 ELSE
+>90   PRINT "wrong"
+>100 ENDIF
+>110 IF I%=4 THEN
+>120   PRINT "wrong"
+>130 ELSE
+>140   PRINT "multi-line ELSE"
+>150 ENDIF
+>160 GOSUB 300
+>170 READ A%,B$,C
+>180 PRINT A%;" ";B$;" ";C
+>190 RESTORE : READ D% : PRINT "D=";D%
+>200 ON ERROR PRINT "trapped: ";REPORT$;" ";ERR : GOTO 220
+>210 PRINT 1 DIV 0
+>220 ON ERROR OFF
+>230 PROCstr("abc")
+>240 ON 2 GOTO 250,260
+>250 PRINT "wrong"
+>260 PRINT "ON GOTO ok"
+>270 INPUT "Name";N$, "Age",AGE%
+>280 PRINT "Hi ";N$;", next year ";AGE%+1
+>290 END
+>300 PRINT "in gosub" : RETURN
+>310 DATA 42,"hello world",-7
+>320 DEF PROCstr(s$)
+>330 LOCAL t$
+>340 t$=s$+s$ : PRINT t$
+>350 ENDPROC
+>RUN
+while 0
+while 1
+while 2
+multi-line IF true
+multi-line ELSE
+in gosub
+        42 hello world -7
+D=42
+trapped: Division by zero 18
+abcabc
+ON GOTO ok
+NameAda
+Age?36
+Hi Ada, next year 37
+>

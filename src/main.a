@@ -92,6 +92,11 @@ cold_test:
         txs
         ldy #1
         tys
+        ldx #2                  ; clear zero page (keep CPU port $00/$01)
+        lda #0
+-       sta $00,x
+        inx
+        bne -
         jsr hw_init
         jsr test_init
         ; 16-bit stack from HIMEM down
@@ -788,9 +793,9 @@ spaces: tax
 !zone dlpair
 dlpair: jsr linnum
         lda lnum
-        sta tmpw
+        sta lnum3
         lda lnum+1
-        sta tmpw+1
+        sta lnum3+1
         lda #$ff
         sta lnum2
         sta lnum2+1
@@ -808,16 +813,16 @@ dlpair: jsr linnum
         lda lnum+1
         sta lnum2+1
         bra .two
-.one    lda tmpw                ; single number: a..a
-        ora tmpw+1
+.one    lda lnum3                ; single number: a..a
+        ora lnum3+1
         beq .two
-        lda tmpw
+        lda lnum3
         sta lnum2
-        lda tmpw+1
+        lda lnum3+1
         sta lnum2+1
-.two    lda tmpw
+.two    lda lnum3
         sta lnum
-        lda tmpw+1
+        lda lnum3+1
         sta lnum+1
         jsr findl
         rts
@@ -830,9 +835,9 @@ pair:   jsr linnum
         lda #10
         sta lnum
 +       lda lnum
-        sta tmpw
+        sta lnum3
         lda lnum+1
-        sta tmpw+1
+        sta lnum3+1
         lda #10
         sta lnum2
         lda #0
@@ -850,9 +855,9 @@ pair:   jsr linnum
         sta lnum2
         lda lnum+1
         sta lnum2+1
-+       lda tmpw
++       lda lnum3
         sta lnum
-        lda tmpw+1
+        lda lnum3+1
         sta lnum+1
         rts
 
@@ -1494,7 +1499,15 @@ clear:  jsr gettop
 crlf:   lda #CR
         jsr outchr
         lda #LF
-outchr: jsr oswrch
+outchr: bit capflg              ; capture into ACCS (REPORT$)
+        bpl +
+        phx
+        ldx slen
+        sta ACCS,x
+        inc slen
+        plx
+        rts
++       jsr oswrch
         cmp #CR
         beq .carret
         bcc .np

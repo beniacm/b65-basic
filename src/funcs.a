@@ -36,6 +36,7 @@ functab:
         !byte TEND    : !word f_end
         !byte TFN     : !word fn_call
         !byte TLINO   : !word f_decode
+        !byte TREPORT : !word f_reports
         !byte $95     : !word nofp      ; ACS
         !byte $98     : !word nofp      ; ASN
         !byte $99     : !word nofp      ; ATN
@@ -685,6 +686,21 @@ bcd2bin:
         dex
         bra -
 +       rts
+f_reports:
+        lda (tp),z
+        cmp #'$'
+        beq +
+        jmp syntax
++       inw tp
+        lda #0
+        sta slen
+        lda #$80
+        sta capflg
+        jsr report
+        lda #0
+        sta capflg
+        jmp setstr
+
 f_page: lda page
         ldx page+1
         jmp setw

@@ -87,4 +87,6 @@ lnum2   = $70
 optr    = $72
 rtmp    = $74
 rndn    = $76    ; 4 bytes
+capflg  = $7a
+lnum3   = $7b    ; 2 bytes
 NBUF    = $80   ; up to 40 bytes variable name buffer ($80-$a7)

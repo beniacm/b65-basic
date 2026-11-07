@@ -2282,10 +2282,11 @@ read:   lda datptr
         sta tp+1
         jsr nxt
 .item   lda vtype
-        bmi .str
+        bmi .str0
         jsr signednum
         bra .end
-.str    cmp #'"'
+.str0   lda (tp),z
+        cmp #'"'
         bne .raw
         jsr strlit
         bra .end
