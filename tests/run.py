@@ -71,6 +71,19 @@ def main():
         logf = open(os.path.join(td, 'xemu.log'), 'wb')   # never a pipe: Xemu can log a lot
         p = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, env=env, cwd=td)
         t0 = time.time(); rc = None
+        pre = os.environ.get('UARTMON_PRE')
+        if pre:
+            for _ in range(200):
+                if os.path.exists(sock):
+                    break
+                time.sleep(0.01)
+            try:
+                sp = socket.socket(socket.AF_UNIX); sp.connect(sock)
+                for c in pre.split(';'):
+                    sp.send(c.encode() + b'\n'); time.sleep(0.05)
+                keep_sock = sp          # keep open (Xemu writes replies)
+            except Exception as e:
+                print('[uartmon pre failed]', e)
         while time.time() - t0 < a.timeout:
             if p.poll() is not None:
                 rc = p.returncode; break

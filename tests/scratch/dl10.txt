@@ -1,0 +1,8 @@
+10 DIM s% LOCAL -1:PRINT ~s%
+20 PROCt(5):DIM s% LOCAL -1:PRINT ~s%
+30 END
+40 DEF PROCt(n%)
+50 LOCAL a()
+60 DIM a(n%):a(n%)=1
+80 ENDPROC
+RUN

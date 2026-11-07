@@ -592,10 +592,25 @@ arrlet: jsr arrref
         stx aop
         jsr nxt
         jsr arrref              ; a() = b()  (copy)
-        bne .expr
+        lbne .expr
         lda aop
         cmp #$ff
         bne .expr2
+        jsr nxt                 ; a() = b() OP ... : whole-array arithmetic
+        cmp #'+'
+        beq .ar
+        cmp #'-'
+        beq .ar
+        cmp #'*'
+        beq .ar
+        cmp #'/'
+        beq .ar
+        cmp #'.'
+        bne .cpy
+.ar     jsr ovjmp
+        !byte 2
+        !word arrarith
+.cpy
         lda ablk
         ora ablk+1
         bne +

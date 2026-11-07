@@ -1,0 +1,7 @@
+10 PROCt(7):PRINT "ok1":PROCt(7):PRINT "ok2"
+30 END
+40 DEF PROCt(n%)
+50 LOCAL a()
+60 DIM a(n%)
+80 ENDPROC
+RUN

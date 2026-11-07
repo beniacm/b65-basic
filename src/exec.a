@@ -1079,6 +1079,48 @@ mlelse: lda #1
         jsr mlscan
         jmp xeq
 
+; STKFRM: allocate a DIM LOCAL frame of tmpw2 bytes (incl. the 3-byte header)
+; on the caller's stack; spz -> frame. Called from DIM (statement level).
+stkfrm: pla
+        sta rtmp
+        pla
+        sta rtmp+1
+        tsx                     ; room check: SP - len > FREE + 256
+        stx spz
+        tsy
+        sty spz+1
+        lda spz
+        sec
+        sbc tmpw2
+        sta spz
+        tax
+        lda spz+1
+        sbc tmpw2+1
+        sta spz+1
+        tay
+        lda free+1
+        clc
+        adc #1
+        cmp spz+1
+        bcc +
+        lda #11                 ; DIM space
+        jmp error
++       +setsp
+        ldy #1
+        lda #TDIM
+        sta (spz),y
+        iny
+        lda tmpw2
+        sta (spz),y
+        iny
+        lda tmpw2+1
+        sta (spz),y
+        lda rtmp+1
+        pha
+        lda rtmp
+        pha
+        rts
+
 f_decode:                       ; TLINO function: tp after token
         jsr decode0
         lda lnum
@@ -1300,20 +1342,77 @@ dim:    jsr getname
         bcc +
         jmp syntax
 +       bne .new
+        lda #0
+        sta dimloc
         jsr isarray
-        bne .bad0
-        ldy #0                  ; existing array with no block (LOCAL a()) is OK
-        lda (vptr),y
+        bne .blk                ; existing variable: DIM var size is fine
+        ldy #0                  ; existing array with no block (LOCAL a()) is OK:
+        lda (vptr),y            ; it is then allocated on the stack (DIM LOCAL)
         iny
         ora (vptr),y
-        beq .arr2
+        bne .bad0
+        lda #$ff
+        sta dimloc
+        jmp .arr2
 .bad0   lda #10                 ; Bad DIM (already exists)
         jmp error
-.new    jsr isarray
-        beq .arr
+.new    lda #0
+        sta dimloc
+        jsr isarray
+        lbeq .arr
         ; DIM var size : reserve bytes
         jsr create
+.blk    jsr nxt                 ; DIM var LOCAL size : on the stack
+        cmp #TLOCAL
+        bne .heap
+        inw tp
         lda vptr
+        pha
+        lda vptr+1
+        pha
+        lda vtype
+        pha
+        jsr expri
+        pla
+        sta vtype
+        pla
+        sta vptr+1
+        pla
+        sta vptr
+        lda acc+3
+        bpl +
+        tsx                     ; DIM var LOCAL -1: the stack pointer
+        stx acc
+        tsy
+        sty acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        jmp .lst
++       lda acc                 ; len = size + 1 (+3 frame header)
+        clc
+        adc #4
+        sta tmpw2
+        lda acc+1
+        adc #0
+        sta tmpw2+1
+        jsr stkfrm              ; frame [TDIM][len lo][len hi][data]
+        lda spz
+        clc
+        adc #4
+        sta acc
+        lda spz+1
+        adc #0
+        sta acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+.lst    lda #0
+        sta accx
+        sta etype
+        jsr storen
+        lbra .next
+.heap   lda vptr
         pha
         lda vptr+1
         pha
@@ -1350,7 +1449,9 @@ dim:    jsr getname
         jsr storen
         lbra .next
 .arr    jsr create              ; vptr -> 2-byte pointer field
-.arr2   lda vptr
+.arr2   lda vtype               ; element type (dimension expressions change vtype)
+        sta dimvt
+        lda vptr
         sta ptr2
         lda vptr+1
         sta ptr2+1
@@ -1426,15 +1527,14 @@ dim:    jsr getname
         dec cnt
         bne -
         sty tmp6                ; header size
-        ldy #0
-        lda (ptr2),y            ; (vtype from create)
-        lda vtype
+        lda dimvt
+        sta vtype
         bpl +
         lda #4
 +       jsr mulsmall            ; bytes = elements * elsize
         lda arg+2
         ora arg+3
-        bne .bad
+        lbne .bad
         ; FREE = block + header + bytes, zero fill
         ldy #0
         lda tmpw2
@@ -1449,7 +1549,67 @@ dim:    jsr getname
         lda tmpw2+1
         adc #0
         sta ptr1+1
-        lda ptr1
+        bit dimloc
+        bpl .hp
+        lda tmp6                ; LOCAL array: block (header + data) on the stack
+        clc
+        adc arg
+        sta tmpw2
+        lda arg+1
+        adc #0
+        sta tmpw2+1
+        lda tmpw2
+        clc
+        adc #3
+        sta tmpw2
+        bcc +
+        inc tmpw2+1
++       jsr stkfrm              ; (len includes the 3 header bytes)
+        ldy #0                  ; copy the header from the scratch block at FREE
+        lda free
+        sta ptr1
+        lda free+1
+        sta ptr1+1
+        lda spz
+        clc
+        adc #4
+        sta ptr3
+        lda spz+1
+        adc #0
+        sta ptr3+1
+-       cpy tmp6
+        beq +
+        lda (ptr1),y
+        sta (ptr3),y
+        iny
+        bra -
++       ldy #0                  ; array pointer -> stack block
+        lda ptr3
+        sta (ptr2),y
+        iny
+        lda ptr3+1
+        sta (ptr2),y
+        lda ptr3                ; zero the data
+        clc
+        adc tmp6
+        sta ptr1
+        lda ptr3+1
+        adc #0
+        sta ptr1+1
+-       lda arg
+        ora arg+1
+        beq +
+        lda #0
+        tay
+        sta (ptr1),y
+        inw ptr1
+        lda arg
+        bne ++
+        dec arg+1
+++      dec arg
+        bra -
++       lbra .next
+.hp     lda ptr1
         clc
         adc arg
         sta free
@@ -2115,7 +2275,20 @@ unwind: pla
         iny
 +       +setsp
         bra .l
-.nret   cmp #TLOCAL
+.nret   cmp #TDIM               ; DIM LOCAL block: just drop it
+        bne .nloc
+        ldy #2
+        lda (spz),y
+        clc
+        adc spz
+        tax
+        iny
+        lda (spz),y
+        adc spz+1
+        tay
+        +setsp
+        jmp .l
+.nloc   cmp #TLOCAL
         lbne .x
         iny
         lda (spz),y

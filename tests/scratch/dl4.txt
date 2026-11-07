@@ -1,0 +1,7 @@
+10 PROCt:PRINT "ok1":PROCt:PRINT "ok2"
+30 END
+40 DEF PROCt
+50 LOCAL s$()
+60 DIM s$(2):s$(1)="z"
+80 ENDPROC
+RUN

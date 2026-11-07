@@ -171,3 +171,5 @@ tcolour = MISC+123      ; text colour (text mode)
 gchar   = MISC+113      ; character for the graphics text renderer
 FONTADDR = $04f800      ; 2K charset in chip RAM (bank 4, above the overlays)
 HISTADDR = $04f700      ; line editor history (256 bytes)
+dimloc  = $1df3       ; DIM of a LOCAL array: allocate on the stack
+dimvt   = $1df4       ; DIM: element type of the array being created

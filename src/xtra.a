@@ -1,0 +1,459 @@
+; B65 BASIC - overlay 2: whole-array arithmetic and other v5 extras
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+
+; workspace (bank 0, absolute): $1DD4..$1DEF
+xb1     = $1dd4         ; 2 first source block
+xb2     = $1dd6         ; 2 second source block (0 = scalar)
+xop     = $1dd8         ; operator
+xcnt    = $1dd9         ; 2 element count
+xp0     = $1ddb         ; 2 destination element pointer
+xp1     = $1ddd         ; 2 source 1 element pointer
+xp2     = $1ddf         ; 2 source 2 element pointer
+xsc     = $1de1         ; 5 scalar value
+xi      = $1de6         ; 2
+xj      = $1de8         ; 2
+xn      = $1dea         ; 2 dot: rows, inner, cols
+xk      = $1dec         ; 2
+xm      = $1dee         ; 2
+
+ovl_xtra_img:
+!pseudopc $e000 {
+; ---- a() = b() OP c() | b() OP scalar | b() . c() ----
+; entry: ablk/avt = destination, ptr2 = first source block, tp at the operator
+!zone arrarith
+arrarith:
+        lda ptr2
+        sta xb1
+        lda ptr2+1
+        sta xb1+1
+        lda avt
+        bpl +
+        lda #6                  ; string arrays: only copy is supported
+        jmp error
++       jsr nxt
+        inw tp
+        cmp #'.'
+        bne +
+        jmp dotprod
++       ldx #OP_ADD
+        cmp #'+'
+        beq .op
+        ldx #OP_SUB
+        cmp #'-'
+        beq .op
+        ldx #OP_MUL
+        cmp #'*'
+        beq .op
+        ldx #OP_FDIV
+        cmp #'/'
+        beq .op
+        jmp mistake
+.op     stx xop
+        lda #0
+        sta xb2
+        sta xb2+1
+        jsr nxt
+        jsr arrref              ; second operand: array or scalar
+        bne .sc
+        lda ptr2
+        sta xb2
+        lda ptr2+1
+        sta xb2+1
+        bra .go
+.sc     jsr expr
+        jsr chknum
+        ldx #4
+-       lda acc,x
+        sta xsc,x
+        dex
+        bpl -
+.go     ; sizes: destination, source 1 (, source 2) must have the same count
+        lda ablk
+        sta ptr2
+        lda ablk+1
+        sta ptr2+1
+        jsr arrsize
+        lda ptr3
+        sta xp0
+        lda ptr3+1
+        sta xp0+1
+        lda tmpw
+        sta xcnt
+        lda tmpw+1
+        sta xcnt+1
+        lda xb1
+        sta ptr2
+        lda xb1+1
+        sta ptr2+1
+        jsr arrsize
+        jsr .same
+        lda ptr3
+        sta xp1
+        lda ptr3+1
+        sta xp1+1
+        lda xb2
+        ora xb2+1
+        beq .loop
+        lda xb2
+        sta ptr2
+        lda xb2+1
+        sta ptr2+1
+        jsr arrsize
+        jsr .same
+        lda ptr3
+        sta xp2
+        lda ptr3+1
+        sta xp2+1
+.loop   lda xcnt
+        ora xcnt+1
+        bne +
+        jmp xeq
++       lda xp1                 ; left = b[i]
+        sta vptr
+        lda xp1+1
+        sta vptr+1
+        lda avt
+        sta vtype
+        jsr loadn
+        jsr movleft
+        lda xb2                 ; right = c[i] or scalar
+        ora xb2+1
+        beq .rs
+        lda xp2
+        sta vptr
+        lda xp2+1
+        sta vptr+1
+        jsr loadn
+        bra .bin
+.rs     ldx #4
+-       lda xsc,x
+        sta acc,x
+        dex
+        bpl -
+        lda #0
+        sta etype
+.bin    lda #0
+        sta tmp5
+        ldx xop
+        jsr binop
+        lda xp0
+        sta vptr
+        lda xp0+1
+        sta vptr+1
+        lda avt
+        sta vtype
+        jsr storen
+        jsr .step
+        bra .loop
+.step   lda avt                 ; advance all pointers by the element size
+        jsr .add0
+        lda xcnt
+        bne +
+        dec xcnt+1
++       dec xcnt
+        rts
+.add0   pha
+        clc
+        adc xp0
+        sta xp0
+        bcc +
+        inc xp0+1
++       pla
+        pha
+        clc
+        adc xp1
+        sta xp1
+        bcc +
+        inc xp1+1
++       pla
+        clc
+        adc xp2
+        sta xp2
+        bcc +
+        inc xp2+1
++       rts
+.same   lda tmpw
+        cmp xcnt
+        bne .bad
+        lda tmpw+1
+        cmp xcnt+1
+        bne .bad
+        rts
+.bad    lda #15                 ; Bad subscript (sizes differ)
+        jmp error
+
+; ---- matrix product: a() = b() . c() ----
+; b is n x k (1-D: 1 x k), c is k x m (1-D: k x 1); a must have n*m elements
+!zone dotprod
+dotprod:
+        jsr nxt
+        jsr arrref
+        beq +
+        jmp syntax
++       lda ptr2
+        sta xb2
+        lda ptr2+1
+        sta xb2+1
+        ; b dimensions
+        lda xb1
+        sta ptr2
+        lda xb1+1
+        sta ptr2+1
+        jsr .dims               ; -> xi = rows, xj = cols
+        lda xi
+        sta xn
+        lda xi+1
+        sta xn+1
+        lda xj
+        sta xk
+        lda xj+1
+        sta xk+1
+        lda xb2
+        sta ptr2
+        lda xb2+1
+        sta ptr2+1
+        jsr .dims
+        ldy #0                  ; c 1-D: a column vector (k x 1)
+        lda (ptr2),y
+        cmp #1
+        bne +
+        lda xj
+        sta xi
+        lda xj+1
+        sta xi+1
+        lda #1
+        sta xj
+        lda #0
+        sta xj+1
++       lda xi                  ; inner sizes must agree
+        cmp xk
+        lbne .bad
+        lda xi+1
+        cmp xk+1
+        lbne .bad
+        lda xj
+        sta xm
+        lda xj+1
+        sta xm+1
+        ; element pointers of b and c
+        lda xb1
+        sta ptr2
+        lda xb1+1
+        sta ptr2+1
+        jsr arrsize
+        lda ptr3
+        sta xb1                 ; (reuse: first element of b)
+        lda ptr3+1
+        sta xb1+1
+        lda xb2
+        sta ptr2
+        lda xb2+1
+        sta ptr2+1
+        jsr arrsize
+        lda ptr3
+        sta xb2
+        lda ptr3+1
+        sta xb2+1
+        lda ablk
+        sta ptr2
+        lda ablk+1
+        sta ptr2+1
+        jsr arrsize             ; destination count must be n*m
+        lda ptr3
+        sta xp0
+        lda ptr3+1
+        sta xp0+1
+        ; for r = 0..n-1, for q = 0..m-1: a[r,q] = sum_j b[r,j]*c[j,q]
+        lda #0
+        sta xi
+        sta xi+1
+.r      lda xi
+        cmp xn
+        lda xi+1
+        sbc xn+1
+        bcc +
+        jmp xeq
++       lda #0
+        sta xj
+        sta xj+1
+.q      lda xj
+        cmp xm
+        lda xj+1
+        sbc xm+1
+        bcs .nr
+        jsr .cell
+        inc xj
+        bne .q
+        inc xj+1
+        bra .q
+.nr     inc xi
+        bne .r
+        inc xi+1
+        bra .r
+.bad    lda #15
+        jmp error
+; one result cell: sum over t of b[xi,t] * c[t,xj]
+.cell   lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+        lda #0
+        sta xp2                 ; t
+        sta xp2+1
+.t      lda xp2
+        cmp xk
+        lda xp2+1
+        sbc xk+1
+        bcs .st
+        jsr pushval             ; running sum
+        ; b[xi, t] at xb1 + (xi*k + t)*5
+        lda xi
+        ldx xi+1
+        ldy #0
+        jsr .mulk               ; tmpw = xi*k
+        lda tmpw
+        clc
+        adc xp2
+        sta tmpw
+        lda tmpw+1
+        adc xp2+1
+        sta tmpw+1
+        lda xb1
+        ldx xb1+1
+        jsr .elem
+        jsr loadn
+        jsr movleft
+        ; c[t, xj] at xb2 + (t*m + xj)*5
+        lda xp2
+        ldx xp2+1
+        ldy #1
+        jsr .mulk               ; tmpw = t*m
+        lda tmpw
+        clc
+        adc xj
+        sta tmpw
+        lda tmpw+1
+        adc xj+1
+        sta tmpw+1
+        lda xb2
+        ldx xb2+1
+        jsr .elem
+        jsr loadn
+        lda #0
+        sta tmp5
+        ldx #OP_MUL
+        jsr binop               ; product in acc
+        jsr movleft             ; -> arg
+        jsr popacc              ; running sum -> acc
+        lda #0
+        sta tmp5
+        ldx #OP_ADD
+        jsr binop
+        inc xp2
+        bne .t
+        inc xp2+1
+        lbra .t
+.st     lda xp0                 ; store, next destination element
+        sta vptr
+        lda xp0+1
+        sta vptr+1
+        lda avt
+        sta vtype
+        jsr storen
+        lda avt
+        clc
+        adc xp0
+        sta xp0
+        bcc +
+        inc xp0+1
++       rts
+; .mulk: A/X * (Y=0: k, Y=1: m) -> tmpw (hardware multiplier)
+.mulk   sta $d770
+        stx $d771
+        lda #0
+        sta $d772
+        sta $d773
+        sta $d776
+        sta $d777
+        cpy #0
+        bne +
+        lda xk
+        sta $d774
+        lda xk+1
+        sta $d775
+        bra ++
++       lda xm
+        sta $d774
+        lda xm+1
+        sta $d775
+++
+-       bit $d70f
+        bvs -
+        lda $d778
+        sta tmpw
+        lda $d779
+        sta tmpw+1
+        rts
+; .elem: A/X = first element; tmpw = index -> vptr (element size = avt)
+.elem   sta vptr
+        stx vptr+1
+        lda avt
+        sta vtype
+        sta $d774
+        lda #0
+        sta $d775
+        sta $d776
+        sta $d777
+        sta $d772
+        sta $d773
+        lda tmpw
+        sta $d770
+        lda tmpw+1
+        sta $d771
+-       bit $d70f
+        bvs -
+        lda $d778
+        clc
+        adc vptr
+        sta vptr
+        lda $d779
+        adc vptr+1
+        sta vptr+1
+        rts
+; .dims: ptr2 = block -> xi = rows, xj = cols (1-D: 1 x size)
+.dims   ldy #0
+        lda (ptr2),y
+        cmp #2
+        beq .two
+        cmp #1
+        beq +
+        jmp .bad
++       lda #1
+        sta xi
+        lda #0
+        sta xi+1
+        ldy #1
+        lda (ptr2),y
+        sta xj
+        iny
+        lda (ptr2),y
+        sta xj+1
+        rts
+.two    ldy #1
+        lda (ptr2),y
+        sta xi
+        iny
+        lda (ptr2),y
+        sta xi+1
+        iny
+        lda (ptr2),y
+        sta xj
+        iny
+        lda (ptr2),y
+        sta xj+1
+        rts
+ovl_xtra_end:
+}
