@@ -5,3 +5,4 @@ build/
 out/
 *.img
 *.d81
+tests/scratch/

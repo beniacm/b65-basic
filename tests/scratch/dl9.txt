@@ -1,8 +1,0 @@
-10 PROCt(7):PRINT "ok1"
-30 END
-40 DEF PROCt(n%)
-50 LOCAL a()
-60 DIM a(n%):a(n%)=1:PRINT ~a(0),~^a(0),~^a(n%)
-70 DIM p% LOCAL 10:PRINT ~p%
-80 ENDPROC
-RUN

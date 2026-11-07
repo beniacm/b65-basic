@@ -1,3 +1,0 @@
-PRINT "Hello, MEGA65! {}|~_\\^ abc"
-FOR I%=1 TO 3:PRINT TAB(I%*4);I%:NEXT
-WAIT 10

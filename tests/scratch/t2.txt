@@ -1,7 +1,0 @@
-PRINT 2*3
-PRINT 7,8
-I%=4
-PRINT I%*I%
-PRINT I%, I%*I%
-PRINT 1, 2
-PRINT 1 , 2

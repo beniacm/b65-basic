@@ -1,4 +1,0 @@
-PRINT &FF
-PRINT 5
-A=&C000
-PRINT "ok"

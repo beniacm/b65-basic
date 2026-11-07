@@ -1,8 +1,0 @@
-10 PROCt(5):PRINT "ok1":PROCt(7):PRINT "ok2"
-30 END
-40 DEF PROCt(n%)
-50 LOCAL a(),s$()
-60 DIM s$(2):s$(1)="z"
-70 DIM p% LOCAL 10
-80 ENDPROC
-RUN
