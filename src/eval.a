@@ -961,9 +961,11 @@ number: lda tp
         adc fd_
         sta acc
         bcc .l
-        inw acc+1
+        inc acc+1
         bne .l
-        inw acc+2
+        inc acc+2
+        bne .l
+        inc acc+3
         bra .l
 .x      cmp #'.'
         beq .slow
@@ -1064,26 +1066,59 @@ tnumget:
         sta acc+2
         sta acc+3
         bra .done
-.gen    lda #0
-        sta acc
-        sta acc+1
-        sta acc+2
-        sta acc+3
-        lda tmp0
-        clc
-        adc #3
-        taz                     ; most significant chunk first
-.l      ldx #6
--       aslq acc
-        dex
-        bne -
-        lda [tp],z
+.gen    ldx #0                  ; 3..6 chunks into fp64..fp64+5 (missing = 0)
+        stx fp64+3
+        stx fp64+4
+        stx fp64+5
+        ldz #3
+-       lda [tp],z
         and #$3f
-        ora acc
+        sta fp64,x
+        inz
+        inx
+        cpx tmp0
+        bcc -
+        beq -
+        lda fp64+1              ; acc   = c0 | c1 << 6
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl
+        ora fp64
         sta acc
-        dez
-        cpz #3
-        bcs .l
+        lda fp64+2              ; acc+1 = c1 >> 2 | c2 << 4
+        asl
+        asl
+        asl
+        asl
+        sta acc+1
+        lda fp64+1
+        lsr
+        lsr
+        ora acc+1
+        sta acc+1
+        lda fp64+3              ; acc+2 = c2 >> 4 | c3 << 2
+        asl
+        asl
+        sta acc+2
+        lda fp64+2
+        lsr
+        lsr
+        lsr
+        lsr
+        ora acc+2
+        sta acc+2
+        lda fp64+5              ; acc+3 = c4 | c5 << 6
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl
+        ora fp64+4
+        sta acc+3
 .done   lda #0
         sta accx
         sta etype
