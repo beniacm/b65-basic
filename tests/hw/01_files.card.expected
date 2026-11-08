@@ -23,7 +23,7 @@ hello from B65FILE1
 >60 PRINT "missing file gives ";OPENIN "B65NONE"
 >70 CHAIN "B65FILE1"
 >RUN
-read 54 bytes, PTR=54
+read 60 bytes, PTR=60
 missing file gives 0
 hello from B65FILE1
          1         2         3

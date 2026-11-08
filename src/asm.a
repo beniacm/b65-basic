@@ -720,7 +720,7 @@ putb:   ldy anb
 listing:
         lda asmopt
         and #1
-        beq .x
+        lbeq .x
         lda apc+1
         jsr hexb
         lda apc
@@ -761,7 +761,34 @@ listing:
         cmp tp+1
         beq .nl
 +       lda [pp],z
-        jsr out
+        cmp #TNUM
+        bne .o
+        lda tp                  ; pre-encoded constant: TNUMLIST at pp
+        pha
+        lda tp+1
+        pha
+        lda tp+2
+        pha
+        lda pp
+        sta tp
+        lda pp+1
+        sta tp+1
+        lda pp+2
+        sta tp+2
+        jsr tnumlist            ; A = length
+        clc
+        adc pp
+        sta pp
+        bcc +
+        inc pp+1
++       pla
+        sta tp+2
+        pla
+        sta tp+1
+        pla
+        sta tp
+        bra -
+.o      jsr out
         inw pp
         bra -
 .nl     lda #PBANK

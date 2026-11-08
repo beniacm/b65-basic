@@ -728,7 +728,7 @@ listit:
 .l8     jsr lp1y
         iny
         cmp #CR
-        beq .l9
+        lbeq .l9
         sta tmp5                ; last char
         cmp #'"'
         bne +
@@ -738,7 +738,25 @@ listit:
         lda #'"'
 +       ldx tmp6
         bne .lit
-        cmp #TLINO
+        cmp #TNUM
+        bne +
+        dey                     ; pre-encoded constant: tp -> TNUM
+        phy
+        tya
+        clc
+        adc ptr1
+        sta tp
+        lda ptr1+1
+        adc #0
+        jsr settph
+        jsr tnumlist            ; A = length
+        sta tmp4
+        pla
+        clc
+        adc tmp4
+        tay
+        bra .l8
++       cmp #TLINO
         bne .tok
         phy                     ; line number reference
         tya
@@ -780,11 +798,11 @@ listit:
         beq .add
         dex
         bne -
-        bra .l8
+        lbra .l8
 .sub    jsr indsub
-        bra .l8
+        lbra .l8
 .add    jsr indadd
-        bra .l8
+        lbra .l8
 .lit    jsr outchr
         lbra .l8
 .l9     lda tmp5
@@ -1210,10 +1228,15 @@ lexan2: lda ptr2
         bra lexan2
 .n6     pla
         ldx lexmode
+        bne +
+        jsr lexnum              ; integer constant: encode (carry set)
+        bcc +
+        jmp lexan2
++       ldx lexmode
         cpx #1
         beq .left
         cpx #0
-        bne lexan1
+        lbne lexan1
         cmp #$80
         bcs .l8
         jsr lexx
@@ -1277,6 +1300,162 @@ lexan2: lda ptr2
         tsb lexmode
         pla
         jmp lexan1
+
+; LEXNUM: A = (tp) with lexmode 0. A decimal constant of up to 9 digits
+; (not after a name character or '.', not followed by '.' or 'E') or a hex
+; constant '&' + 1..8 digits is stored as TNUM, D1, D2, 6-bit chunks:
+; D1 = $40 | hex<<5 | lowercase<<4 | chunks-1, D2 = $40 | digits typed,
+; chunks $40 | 6 bits, least significant first (all bytes $40-$7F, like
+; TLINO's, so text scanners pass over them). Carry set: encoded, tp and
+; ptr2 advanced; carry clear: A kept, nothing done.
+!zone lexnum
+lexnum: sta fh_
+        cmp #'&'
+        beq +
+        cmp #'0'
+        bcc .no
+        cmp #'9'+1
+        bcs .no
++       lda ptr2                ; room for 9 bytes before the length check
+        sec
+        sbc #<BUFFER
+        cmp #252-9
+        bcs .no
+        dew tp                  ; previous character: not part of a name/number
+        lda [tp],z
+        cmp #'+'                ; exponent digits (1E-5, 1E+5) stay text
+        beq +
+        cmp #'-'
+        bne ++
++       dew tp
+        lda [tp],z
+        inw tp
+        cmp #'E'
+        bne +
+        inw tp
+        bra .no
++       lda [tp],z
+++      inw tp
+        cmp #'.'
+        beq .no
+        cmp #'&'
+        beq .no
+        cmp #'%'
+        beq .no
+        cmp #'$'
+        beq .no
+        jsr range1
+        bcc .no
+        lda fh_
+        cmp #'&'
+        beq .hex
+        ldz #0                  ; count the digits
+-       lda [tp],z
+        cmp #'0'
+        bcc +
+        cmp #'9'+1
+        bcs +
+        inz
+        bra -
++       cpz #10
+        bcs .noz
+        cmp #'.'
+        beq .noz
+        cmp #'E'
+        beq .noz
+        stz fg_                 ; digits
+        ldz #0
+        jsr number              ; acc (fast path: <= 9 digits), tp advanced
+        lda #$40
+        bra .emit
+.noz    ldz #0
+.no     lda fh_
+        clc
+        rts
+.hex    lda #0
+        sta fa_                 ; lowercase flag
+        sta fg_                 ; uppercase seen
+        ldz #1
+-       lda [tp],z
+        cmp #'a'
+        bcc +
+        cmp #'f'+1
+        bcs .hx
+        lda #$10
+        sta fa_
+        bra .hd
++       cmp #'0'
+        bcc .hx
+        cmp #'9'+1
+        bcc .hd
+        cmp #'A'
+        bcc .hx
+        cmp #'F'+1
+        bcs .hx
+        sta fg_
+.hd     inz
+        bra -
+.hx     jsr range1              ; a name character right after: keep as text
+        bcc .noz
+        cpz #1
+        beq .noz                ; no digits
+        cpz #10
+        bcs .noz                ; more than 8
+        lda fa_                 ; mixed case: keep as text
+        beq +
+        lda fg_
+        bne .noz
++       dez
+        stz fg_
+        ldz #0
+        jsr hexnum
+        lda #$60
+        ora fa_
+.emit   sta fa_                 ; D1 without the chunk count
+        ldq acc                 ; chunks: 6 bits at a time from acc (fb_..fe_ copy)
+        stq fb_
+        ldz #0
+        ldy #3
+-       lda fb_
+        and #$3f
+        ora #$40
+        sta (ptr2),y
+        iny
+        ldx #6
+--      lsrq fb_
+        dex
+        bne --
+        lda fb_
+        ora fb_+1
+        ora fb_+2
+        ora fb_+3
+        bne -
+        tya                     ; chunks = y - 3
+        sec
+        sbc #4
+        ora fa_
+        ldy #1
+        sta (ptr2),y            ; D1
+        lda fg_
+        ora #$40
+        iny
+        sta (ptr2),y            ; D2
+        lda #TNUM
+        ldy #0
+        sta (ptr2),y
+        lda (ptr2),y            ; (keep flags quiet) length = chunks + 3
+        ldy #1
+        lda (ptr2),y
+        and #7
+        clc
+        adc #4
+        clc
+        adc ptr2
+        sta ptr2
+        bcc +
+        inc ptr2+1
++       sec
+        rts
 
 lexlst1: !byte TGOTO, TGOSUB, TRESTORE, TTRACE
 lexlst2: !byte TTHEN, TELSE, TREPEAT, TERROR, ':'
@@ -1348,6 +1527,18 @@ linnum: jsr nxt
         lda #0
         sta lnum
         sta lnum+1
+        lda [tp],z
+        cmp #TNUM
+        bne .l1
+        jsr tnumget             ; pre-encoded constant (LIST 10,20 etc.)
+        lda acc+2
+        ora acc+3
+        bne .big
+        lda acc
+        sta lnum
+        lda acc+1
+        sta lnum+1
+        rts
 .l1     lda [tp],z
         sec
         sbc #'0'

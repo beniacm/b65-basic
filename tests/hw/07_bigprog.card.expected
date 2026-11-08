@@ -22,7 +22,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >7030 DEF PROCfar:LOCAL I%:FOR I%=1 TO 3:PRINT I%;:NEXT:PRINT " far proc":ENDPROC
 >RUN
 start
-far sub 38606
+far sub 38612
          1         2         3 far proc
 >LIST 6990,7020
  6990 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -39,25 +39,25 @@ far sub 38606
 C
 >RUN
 start
-far sub 38606
+far sub 38612
          1         2         3 far proc
 >SAVE "B65BIGP2"
 >NEW
 >LOAD "B65BIGP2"
 >PRINT TOP-PAGE
-     38606
+     38612
 >RUN
 start
-far sub 38606
+far sub 38612
          1         2         3 far proc
 >DELETE 1001,1600
 >PRINT TOP-PAGE
-      5606
+      5612
 >LIST 1000,1601
  1000 PRINT "start":GOSUB 1702:PROCfar
  1601 REMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 >RUN
 start
-far sub 5606
+far sub 5612
          1         2         3 far proc
 >

@@ -26,6 +26,7 @@ TTLEFT  = $13
 TDI     = $14
 TEI     = $15
 TSPRITE = $16
+TNUM    = $1f           ; pre-encoded integer constant (see LEXNUM)
 TEVT    = $11           ; marker of an event GOSUB frame
 
 ; ---------------- hardware detection ----------------

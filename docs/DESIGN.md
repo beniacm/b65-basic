@@ -26,7 +26,9 @@ How B65 uses upstream:
   * the LIST indentation tables.
 
   As a result, tokenised programs use the same encoding as BBC BASIC (Z80)
-  v5, and the error numbers and messages are the same too.
+  v5, and the error numbers and messages are the same too, with one
+  addition: integer constants are stored pre-encoded (see "Speed" below), so
+  a B65 program saved in tokenised form needs this version or later.
 * All code is new 45GS02 assembly. It keeps the upstream structure:
   * routine names `LEXAN`, `LEX`, `GETVAR`, `LOCATE`, `CREATE`, `FINDL`,
     `GETTOP`, `CLEAN`, `XEQ`, `NEWLIN`, `LISTIT`, `ENCODE`/`DECODE` and so on,
@@ -83,6 +85,25 @@ currently about 15 KB without floating point or the assembler.
 * **Interpreter, not compiler.** Programs are tokenised into memory and
   interpreted, as in upstream. Immediate mode, line editing, LIST, RUN, AUTO,
   DELETE, RENUMBER and OLD all exist.
+* **Speed.** Measured with `tests/bench/bench.sh` (10000 iterations in Xemu;
+  centiseconds = microseconds per iteration) and profiled with a sampling
+  build (`ACMEFLAGS=-DPROF=1 python3 tools/fixbranches.py`, then
+  `tests/run.py ... --memout m.bin` and `tools/prof.py m.bin 30 -pc -lst
+  report`, where the report comes from `acme -DPROF=1 -r report src/b65.a`).
+  * Integer constants are tokenised: LEXAN stores a decimal constant of up
+    to 9 digits (not after a name character, '.', or an exponent sign, not
+    followed by '.' or 'E') or a hex constant `&` + 1-8 digits (one letter
+    case) as `TNUM` (`$1F`), D1 = `$40` | hex<<5 | lower case<<4 |
+    chunks-1, D2 = `$40` | digits typed, then 6-bit chunks `$40` | bits,
+    least significant first. Every byte after `TNUM` is in `$40-$7F` (like
+    TLINO's), so the text scanners pass over it. `item` decodes it in a few
+    instructions; LIST and the assembler listing print it as typed (leading
+    zeros, hex case); `linnum` accepts it (LIST/DELETE/RENUMBER/AUTO
+    arguments). Floats, longer numbers, binary `%` and DATA stay text.
+  * Decimal/hex text constants (DATA, VAL, EVAL of floats) are read with Q
+    operations; DIV/MOD use the hardware divider; integer FOR/NEXT, static
+    integer variables (`@%`, `A%`-`Z%`) and operator recognition (a 256-byte
+    table) have fast paths.
 * **No KERNAL.** The program maps out every ROM (`MAP` cleared, `$D030=0`,
   `$01=$35`) and drives the hardware itself:
   * VIC-IV in 80x25 text mode at `$0800`, using the lowercase char ROM
