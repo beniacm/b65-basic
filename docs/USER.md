@@ -176,6 +176,60 @@ the results of the last completed pass: `COLLIDE(n)` is the first
 the handler work once per pair (the lower object number). Without the
 K325T core `ON COLLISION` is accepted but never fires.
 
+**Objects (list mode v3, 32-byte table entries).** B65 owns the object table:
+`objbase` = `&E0000` (chip RAM) on the K325T, elsewhere `&8200000` (attic
+RAM: the statements and the motion run, nothing is shown). Entry n is at
+`objbase+32*n` (n = 0..1023); the event bits (one per object) follow at
+`objbase+&8000`. OBJECT also writes the table address and the object count
+into the list-mode registers (`&FFD71F8-FB`; from feature level 3 the count
+also into `&FFD728A-B`). The program still switches list mode on (XCTL
+`&FFD71F0` bits 4, 6, 7; bit 3 if present).
+
+    OBJECT n,x,y,tokens[,colour,stride,height,mask,group,with]
+    OBJVEL n,vx,vy[,ax,ay]       : REM pixels/frame, pixels/frame^2
+    OBJMOVE n,speed,heading[,turn[,dspeed]] : REM degrees, 0 = right, 90 = down
+    OBJORBIT n,parent,r,omega    : REM around object parent, degrees/frame
+    OBJSPRING n,anchor,k         : REM a = -k*(position - anchor's)
+    OBJLIFE n,frames             : REM killed (and an event) at 0
+    OBJLIMITS set,x0,y0,x1,y1,action : OBJBOUNDS n,set : REM sets 0..3
+    OBJKILL n                    : REM draw mask 0, motion off
+    OBJUPDATE                    : REM one step now; the frame interrupt stops
+    OBJUPDATE ON                 : REM the frame interrupt moves the objects again
+    OBJX(n) OBJY(n) OBJVX(n) OBJVY(n) OBJEVENT(n) OBJEVENT(-1)
+    ON OBJEVENT PROCname / ON OBJEVENT OFF
+
+`tokens` is the 20-bit screen address of the object's token list, `colour`
+its colour RAM offset, `height` in character rows (1..64), `mask`, `group`
+and `with` the draw mask and the collision masks. Omitted arguments of
+OBJVEL keep their value (a double jump is `OBJVEL n,,-9`); OBJVEL keeps an
+OBJSPRING's pull. `action` (and table byte +17): bits 1..0 for X, bits
+3..2 for Y: 0 none, 1 wrap, 2 bounce, 3 kill; bit 5 halves the speed on a
+bounce. OBJEVENT(n) is TRUE once after object n was killed by its limits or
+its lifetime (and clears it); OBJEVENT(-1) is the lowest object with an
+event, -1 if none. RUN and the prompt remove all objects.
+
+Table entry (bytes 0..15 are read by the VIC-IV, 16..31 only by B65):
+
+| byte | field |
+|---|---|
+| +0 | X 9..0 (bit 10 REL, as v2) |
+| +2 | Y 9..0, signed (bit 10 REL) |
+| +4 .. +15 | draw mask, height, address 19..16 / flags, group, token list, colour offset, stride, box width, collides-with (as v2) |
+| +16 | mode: bits 3..0 = 0 static, 1 cartesian, 2 polar, 3 orbit; bit 4 harmonic (with 1); bits 6..5 limit set; bit 7 pixel-collision hint |
+| +17 | limit action (bits 3..0 as above), bit 4 kill at lifetime 0, bit 5 half restitution |
+| +18 | cartesian VX / polar speed / orbit radius (16-bit signed, 8.8 pixels) |
+| +20 | cartesian VY / polar heading / orbit angle (16-bit; angles in 1/65536 turn) |
+| +22 | cartesian AX (8.8 per frame) / polar speed change / harmonic k (8.8) |
+| +24 | cartesian AY / polar and orbit turn per frame (1/65536 turn) |
+| +26 | lifetime in frames (16-bit, 0 = unlimited) |
+| +28 | orbit parent / harmonic anchor (object number) |
+| +30 | X fraction (1/256 pixel) |
+| +31 | Y fraction |
+
+The statements write an entry with interrupts off (SEI .. CLI), so the
+frame interrupt never sees half a field; a program or `CALL` routine that
+writes bytes 16..31 itself should do the same.
+
 ## Examples
 
 | file | what |

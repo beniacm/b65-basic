@@ -85,6 +85,7 @@ run:    jsr termq
         jmp chain               ; RUN "file"
 run0:   jsr resetsp_jsr
         jsr clear
+        jsr objreset
         lda #0
         sta errtrp
         sta errtrp+1
@@ -177,6 +178,9 @@ xeq1:   lda [tp],z              ; (NXT inline)
 +       cmp #TSPRITE
         bne +
         jmp gs_sprite
++       cmp #TOBJ
+        bne +
+        jmp objst
 +       cmp #TELSE
         bne +
         jmp rem

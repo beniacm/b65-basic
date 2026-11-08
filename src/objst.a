@@ -1,0 +1,576 @@
+; B65 BASIC - list mode v3 object statements and functions (overlay 1)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+;
+; tp -> the letter after TOBJ ($19): A OBJBOUNDS, B OBJECT, C OBJEVENT(,
+; D OBJEVENT (ON), E OBJKILL, F OBJLIFE, G OBJLIMITS, H OBJMOVE, I OBJORBIT,
+; J OBJSPRING, K OBJUPDATE, L OBJVEL, M OBJVX(, N OBJVY(, O OBJX(, P OBJY(.
+; Writes to an entry are done with interrupts off (SEI .. CLI), so the
+; frame integrator never sees half a field.
+
+!zone objst
+o_objst:
+        lda [tp],z
+        inw tp
+        sec
+        sbc #'A'
+        cmp #12
+        bcs .syn
+        asl
+        tax
+        jmp (.tab,x)
+.syn    jmp syntax
+.tab    !word .bounds, .object, .syn, .syn, .kill, .life, .limits, .move
+        !word .orbit, .spring, .update, .vel
+
+; ---- helpers ----
+; .N: object number (expression) -> objn, fptr = its entry, Z = 0
+.n      jsr expri
+.nacc   lda acc+2
+        ora acc+3
+        bne .bad
+        lda acc+1
+        cmp #>OBJMAX
+        bcs .bad
+        sta objn+1
+        lda acc
+        sta objn
+; .ENT: fptr = objbase + objn * 32
+.ent    lda objn
+        sta fptr
+        lda objn+1
+        ldx #5
+-       asl fptr
+        rol
+        dex
+        bne -
+        sta fptr+1
+        lda #0
+        rol
+        sta fptr+2
+        clc
+        lda fptr
+        adc objbase
+        sta fptr
+        lda fptr+1
+        adc objbase+1
+        sta fptr+1
+        lda fptr+2
+        adc objbase+2
+        sta fptr+2
+        lda objbase+3
+        sta fptr+3
+        ldz #0
+        rts
+.bad    lda #15                 ; Bad subscript (object number 0..1023)
+        jmp error
+; .ARG: ',' then an argument; carry set if it is left out (",," or the end)
+.arg    jsr nxt
+        cmp #','
+        bne .om
+        inw tp
+.arg1   jsr nxt
+        cmp #','
+        beq .om
+        cmp #':'
+        beq .om
+        cmp #CR
+        beq .om
+        cmp #TELSE
+        beq .om
+        clc
+        rts
+.om     sec
+        rts
+; .I16: integer expression -> acc; .FX: number * 256 -> acc (8.8);
+; .DEG: degrees -> 1/65536 turn (acc, 16-bit)
+.fx     jsr exprn
+        lda #<256
+        ldx #>256
+        bra .mul
+.deg    jsr exprn
+        jsr movleft
+        lda #0
+        sta acc
+        sta acc+1
+        lda #1
+        sta acc+2               ; 65536
+        lda #0
+        sta acc+3
+        sta accx
+        sta etype
+        ldx #OP_MUL
+        jsr binop
+        lda #<360
+        ldx #>360
+        jsr movleft2
+        ldx #OP_FDIV
+        jsr binop
+        jmp toint
+.mul    jsr movleft2
+        ldx #OP_MUL
+        jsr binop
+        jmp toint
+; MOVLEFT2: arg = acc (number), acc = A/X (16-bit integer)
+movleft2:
+        pha
+        phx
+        jsr movleft
+        plx
+        pla
+        jmp setw
+; .W16: acc (low 16 bits) -> entry +Y (Y = offset), interrupts off
+.w16    sei
+        tya
+        taz
+        lda acc
+        sta [fptr],z
+        inz
+        lda acc+1
+        sta [fptr],z
+        ldz #0
+        cli
+        rts
+; .MODE: entry +16 := (+16 AND A) OR X
+.mode   sta objt
+        ldz #16
+        sei
+        lda [fptr],z
+        and objt
+        stx objt
+        ora objt
+        sta [fptr],z
+        cli
+        ldz #0
+        rts
+; .KEEPN: keep the entry (fptr) across expressions (they may use fptr)
+.save   ldx #3
+-       lda fptr,x
+        sta objp,x
+        dex
+        bpl -
+        rts
+.rest   ldx #3
+-       lda objp,x
+        sta fptr,x
+        dex
+        bpl -
+        ldz #0
+        rts
+
+; ---- OBJECT n,x,y,tokens[,colour,stride,height,mask,group,with] ----
+.object jsr .n
+        jsr .save
+        ldx #31                 ; defaults
+        lda #0
+-       sta objv,x
+        dex
+        bpl -
+        lda #255
+        sta objv+4              ; draw mask
+        lda #1
+        sta objv+7              ; group
+        jsr comma
+        jsr expri               ; x
+        lda acc
+        sta objv
+        lda acc+1
+        and #3
+        sta objv+1
+        jsr comma
+        jsr expri               ; y (signed 10 bits)
+        lda acc
+        sta objv+2
+        lda acc+1
+        and #3
+        sta objv+3
+        jsr comma
+        jsr expri               ; tokens: screen address of the token list
+        lda acc
+        sta objv+8
+        lda acc+1
+        sta objv+9
+        lda acc+2
+        and #$0f
+        sta objv+6
+        jsr .arg
+        bcs +
+        jsr expri               ; colour RAM offset
+        lda acc
+        sta objv+10
+        lda acc+1
+        sta objv+11
++       jsr .arg
+        bcs +
+        jsr expri               ; stride
+        lda acc
+        sta objv+12
+        lda acc+1
+        sta objv+13
++       jsr .arg
+        bcs +
+        jsr expri               ; height in rows (1..64)
+        lda acc
+        dec
+        and #$3f
+        sta objv+5
++       jsr .arg
+        bcs +
+        jsr expri               ; draw mask
+        lda acc
+        sta objv+4
++       jsr .arg
+        bcs +
+        jsr expri               ; collision group mask
+        lda acc
+        sta objv+7
++       jsr .arg
+        bcs +
+        jsr expri               ; collides-with mask
+        lda acc
+        sta objv+15
++       jsr .rest
+        sei
+        ldz #31
+        ldx #31
+-       lda objv,x
+        sta [fptr],z
+        dez
+        dex
+        bpl -
+        ldz #0
+        cli
+        lda objn                ; count = max(count, n + 1)
+        clc
+        adc #1
+        tax
+        lda objn+1
+        adc #0
+        cmp objcnt+1
+        bcc .regs
+        bne +
+        cpx objcnt
+        bcc .regs
++       stx objcnt
+        sta objcnt+1
+.regs   jsr objregs
+        jmp xeq
+
+; ---- OBJVEL n,vx,vy[,ax,ay]: cartesian (8.8 pixels per frame) ----
+.vel    jsr .n
+        jsr .save
+        lda #$f0                ; mode 1, keep harmonic / bounds / hint
+        ldx #1
+        jsr .mode
+        ldy #18
+-       phy
+        jsr .arg
+        bcs +
+        jsr .fx
+        jsr .rest
+        ply
+        phy
+        jsr .w16
++       ply
+        iny
+        iny
+        cpy #26
+        bne -
+        jmp xeq
+
+; ---- OBJMOVE n,speed,heading[,turn[,dspeed]]: polar ----
+.move   jsr .n
+        jsr .save
+        lda #$e0
+        ldx #2
+        jsr .mode
+        jsr comma
+        jsr .fx                 ; speed (8.8)
+        jsr .rest
+        ldy #18
+        jsr .w16
+        jsr comma
+        jsr .deg                ; heading
+        jsr .rest
+        ldy #20
+        jsr .w16
+        jsr .arg
+        bcs +
+        jsr .deg                ; turn per frame
+        jsr .rest
+        ldy #24
+        jsr .w16
++       jsr .arg
+        bcs +
+        jsr .fx                 ; speed change per frame (8.8)
+        jsr .rest
+        ldy #22
+        jsr .w16
++       jmp xeq
+
+; ---- OBJORBIT n,parent,r,omega ----
+.orbit  jsr .n
+        jsr .save
+        lda #$e0
+        ldx #3
+        jsr .mode
+        jsr comma
+        jsr expri
+        jsr .rest
+        ldy #28
+        jsr .w16
+        jsr comma
+        jsr .fx                 ; radius (8.8)
+        jsr .rest
+        ldy #18
+        jsr .w16
+        jsr comma
+        jsr .deg                ; angle step per frame
+        jsr .rest
+        ldy #24
+        jsr .w16
+        jmp xeq
+
+; ---- OBJSPRING n,anchor,k: harmonic towards an anchor object ----
+.spring jsr .n
+        jsr .save
+        lda #$e0
+        ldx #$11
+        jsr .mode
+        jsr comma
+        jsr expri
+        jsr .rest
+        ldy #28
+        jsr .w16
+        jsr comma
+        jsr .fx                 ; k (8.8)
+        jsr .rest
+        ldy #22
+        jsr .w16
+        jmp xeq
+
+; ---- OBJLIFE n,frames ----
+.life   jsr .n
+        jsr .save
+        jsr comma
+        jsr expri
+        jsr .rest
+        ldy #26
+        jsr .w16
+        ldz #17
+        sei
+        lda [fptr],z
+        ora #$10                ; kill (and event) at 0
+        sta [fptr],z
+        cli
+        ldz #0
+        jmp xeq
+
+; ---- OBJBOUNDS n,set ----
+.bounds jsr .n
+        jsr .save
+        jsr comma
+        jsr expri
+        jsr .rest
+        lda acc
+        and #3
+        sta objt
+        asl                     ; set * 9
+        asl
+        asl
+        adc objt
+        tax
+        lda objlim+8,x          ; its action
+        and #$ef
+        sta objv
+        lda objt
+        asl
+        asl
+        asl
+        asl
+        asl
+        tax
+        lda #$9f                ; mode bits 5..6 = set
+        jsr .mode
+        ldz #17
+        sei
+        lda [fptr],z
+        and #$10
+        ora objv
+        sta [fptr],z
+        cli
+        ldz #0
+        jmp xeq
+
+; ---- OBJLIMITS set,x0,y0,x1,y1,action ----
+.limits jsr expri
+        lda acc
+        and #3
+        sta objt
+        asl
+        asl
+        asl
+        adc objt
+        sta objt                ; offset set * 9
+        ldy #0
+-       phy
+        jsr comma
+        jsr expri
+        ply
+        ldx objt
+        lda acc
+        sta objlim,x
+        inx
+        cpy #4
+        beq +                   ; (the action is one byte)
+        lda acc+1
+        sta objlim,x
+        inx
++       stx objt
+        iny
+        cpy #5
+        bne -
+        jmp xeq
+
+; ---- OBJKILL n ----
+.kill   jsr .n
+        sei
+        ldz #4
+        lda #0
+        sta [fptr],z            ; draw mask 0
+        ldz #16
+        sta [fptr],z            ; static
+        ldz #0
+        cli
+        jmp xeq
+
+; ---- OBJUPDATE [ON]: one integrator step now and the IRQ's off / IRQ on ----
+.update jsr nxt
+        cmp #TON
+        bne +
+        inw tp
+        lda #$80
+        sta objauto
+        jmp xeq
++       lda #0
+        sta objauto
+        jsr objstep
+        jmp xeq
+
+; ---- functions: OBJX( OBJY( OBJVX( OBJVY( OBJEVENT( ----
+o_objfn:
+        lda [tp],z
+        inw tp
+        pha
+        jsr expri
+        jsr braket
+        pla
+        cmp #'C'
+        beq .evt
+        pha
+        jsr .nacc
+        pla
+        cmp #'O'
+        beq .fx0
+        cmp #'P'
+        beq .fy0
+        ldy #18                 ; OBJVX: +18, OBJVY: +20 (8.8) / 256
+        cmp #'M'
+        beq +
+        ldy #20
++       tya
+        taz
+        lda [fptr],z
+        sta acc
+        inz
+        lda [fptr],z
+        ldz #0
+        sta acc+1
+        jsr .sx16
+        jsr movleft
+        lda #<256
+        ldx #>256
+        jsr setw
+        ldx #OP_FDIV
+        jmp binop
+.fx0    lda [fptr],z            ; X: 0..1023
+        sta acc
+        ldz #1
+        lda [fptr],z
+        ldz #0
+        and #3
+        tax
+        lda acc
+        jmp setw
+.fy0    ldz #2                  ; Y: signed 10 bits
+        lda [fptr],z
+        sta acc
+        inz
+        lda [fptr],z
+        ldz #0
+        and #3
+        cmp #2
+        bcc +
+        ora #$fc
++       sta acc+1
+.sx16   lda #0                  ; acc+2/3 = sign of acc+1
+        bit acc+1
+        bpl +
+        lda #$ff
++       sta acc+2
+        sta acc+3
+        jmp setnum
+.evt    lda acc+3               ; OBJEVENT(-1): first object with an event
+        bpl .ev1
+        jsr objevfirst
+        bcc +
+        jmp f_true              ; -1: none
++       jmp setw
+.ev1    jsr .nacc
+        jsr objevbit            ; fptr -> the byte, A = mask
+        sta objt
+        sei
+        lda [fptr],z
+        and objt
+        beq +
+        lda objt
+        eor #$ff
+        and [fptr],z
+        sta [fptr],z
+        cli
+        jmp f_true
++       cli
+        jmp f_false
+
+; ---- ON OBJEVENT PROCname / OFF (from ON, tp after the letter) ----
+o_onobj:
+        jsr nxt
+        cmp #TOFF
+        bne +
+        inw tp
+        lda #0
+        sta objevon
+        lda #$20
+        trb evpend
+        jmp xeq
++       cmp #TPROC
+        lbne syntax
+        ldx #0
+-       lda [tp],z              ; TPROC and the name
+        sta OEVTXT,x
+        inx
+        cpx #44
+        lbcs syntax
+        inw tp
+        lda [tp],z
+        jsr range1
+        bcc -
+        lda #':'
+        sta OEVTXT,x
+        lda #TRETURN
+        sta OEVTXT+1,x
+        lda #CR
+        sta OEVTXT+2,x
+        lda #$ff
+        sta objevon
+        jmp xeq
+

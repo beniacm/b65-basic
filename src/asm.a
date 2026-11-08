@@ -1154,7 +1154,7 @@ listit:
         sta tmp6
         lda #'"'
 +       ldx tmp6
-        bne .lit
+        lbne .lit
         cmp #TNUM
         bne +
         dey                     ; pre-encoded constant: tp -> TNUM
@@ -1197,11 +1197,33 @@ listit:
         iny
         iny
         bra .l8
-.tok    sty tmp4
+.tok    cmp #TOBJ               ; OBJ... keyword: TOBJ + letter
+        bne .tk
+        jsr lp1y
+        iny
+        sty tmp4
+        ora #$80                ; its EXTWDS entry byte
+        ldx #0
+-       cmp EXTWDS,x
+        beq +
+        inx
+        bne -
++       inx
+-       lda EXTWDS,x            ; the name, up to the next entry
+        cmp #$20
+        bcc +
+        cmp #$80
+        bcs +
+        jsr outchr
+        inx
+        bra -
++       ldy tmp4
+        lbra .l8
+.tk     sty tmp4
         jsr out
         ldy tmp4
         cpy #4                  ; first token was handled at line start
-        beq .l8
+        lbeq .l8
         ; tokens that change indent mid-line
         lda tmp5
         ldx #3

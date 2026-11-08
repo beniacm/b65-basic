@@ -206,6 +206,7 @@ clopp:
         sta inevt
         sta evpend
         jsr coloff
+        jsr objreset
         lda #0
         sta ev_mode
         sta ev_mode+1

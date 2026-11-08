@@ -28,6 +28,7 @@ TEI     = $15
 TSPRITE = $16
 TCOLLIDE = $17          ; COLLIDE( function
 TCOLLISION = $18        ; ON COLLISION PROCname / OFF
+TOBJ    = $19           ; OBJ... keywords: TOBJ + a letter (see EXTWDS)
 col_on  = $1fe5         ; $FF: ON COLLISION active (cleared at start)
 defkey  = $1fe6         ; 2: PROC/FN call site being cached (xc.a)
 COLTXT  = BUFFER+$c0    ; handler text: TPROC name ':' TRETURN CR (bank 0)
@@ -654,12 +655,27 @@ evcheck:
         lda #$10                ; ON COLLISION
         bit evpend
         bne .col
+        lda #$20                ; ON OBJEVENT
+        bit evpend
+        bne .oev
 .x      rts
+.oev    sei
+        trb evpend
+        cli
+        bit objevon
+        bpl .x
+        ldx #<OEVTXT
+        ldy #>OEVTXT
+        bra .hnd
 .col    sei
         trb evpend
         cli
         bit col_on
         bpl .x
+        ldx #<COLTXT
+        ldy #>COLTXT
+.hnd    stx evtxt
+        sty evtxt+1
         pla                     ; as below, but into the handler text
         pla
         lda #$ff
@@ -675,9 +691,9 @@ evcheck:
         iny
         lda tp+1
         sta (spz),y
-        lda #<COLTXT
+        lda evtxt
         sta tp
-        lda #>COLTXT
+        lda evtxt+1
         jsr settph
         jmp xeq
 .go     sei
@@ -768,10 +784,27 @@ EXTWDS: !byte TAFTER : !text "AFTER"
         !byte TDI    : !text "DI "
         !byte TEI    : !text "EI "
         !byte TEVERY : !text "EVERY"
+        !byte $c1 : !text "OBJBOUNDS"     ; ($c1..$d0: TOBJ, then 'A'..'P')
+        !byte $c2 : !text "OBJECT"
+        !byte $c3 : !text "OBJEVENT("
+        !byte $c4 : !text "OBJEVENT"
+        !byte $c5 : !text "OBJKILL"
+        !byte $c6 : !text "OBJLIFE"
+        !byte $c7 : !text "OBJLIMITS"
+        !byte $c8 : !text "OBJMOVE"
+        !byte $c9 : !text "OBJORBIT"
+        !byte $ca : !text "OBJSPRING"
+        !byte $cb : !text "OBJUPDATE"
+        !byte $cc : !text "OBJVEL"
+        !byte $cd : !text "OBJVX("
+        !byte $ce : !text "OBJVY("
+        !byte $cf : !text "OBJX("
+        !byte $d0 : !text "OBJY("
         !byte TSPRITE : !text "SPRITE"
         !byte TTLEFT : !text "TIMELEFT("
         !byte $ff,$ff
 EXTWDL = * - EXTWDS
+!if EXTWDL > 255 { !error "EXTWDS too long for LIST's index" }
 ; LEXX: keyword lookup in KEYWDS, then EXTWDS
 lexx:   jsr lex
         beq +
@@ -780,4 +813,15 @@ lexx:   jsr lex
         lda #>EXTWDS
         sta ptr1+1
         jsr lex0
+        bne +
+        cmp #$80                ; OBJ... keyword: TOBJ, then A = its letter
+        bcc +
+        pha
+        lda #TOBJ
+        ldy #0
+        sta (ptr2),y
+        inw ptr2
+        pla
+        and #$7f
+        ldy #0                  ; (Z set: found)
 +       rts

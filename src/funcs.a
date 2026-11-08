@@ -42,6 +42,7 @@ functab:
         !byte $96     : !word f_adval
         !byte TTLEFT  : !word f_tleft
         !byte TCOLLIDE : !word f_collide
+        !byte TOBJ    : !word f_obj
         !byte TUSR    : !word f_usr
         !byte $8e     : !word f_openin
         !byte $ae     : !word f_openout

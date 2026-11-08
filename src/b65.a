@@ -21,6 +21,7 @@
 !src "src/ovl.a"
 !src "src/m65.a"
 !src "src/sound.a"
+!src "src/obj.a"
 code_end:
 ; the heap starts on the page after the resident code; the overlay images
 ; follow the code directly (they are copied to bank 4 at start-up and the

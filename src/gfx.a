@@ -1832,6 +1832,15 @@ gx_cls: jsr gclear
 o_on:   jsr nxt
         cmp #TCOLLISION
         lbeq oncoll
+        cmp #TOBJ               ; ON OBJEVENT
+        bne +
+        inw tp
+        lda [tp],z
+        cmp #'D'
+        lbne syntax
+        inw tp
+        jmp o_onobj
++
         cmp #TERROR
         bne .ongo
         inw tp
@@ -2131,5 +2140,6 @@ o_envel:
         and #$0f
         rts
 
+!src "src/objst.a"
 ovl_gfx_end:
 }

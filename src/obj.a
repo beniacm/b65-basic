@@ -1,0 +1,204 @@
+; B65 BASIC - list mode v3 objects: resident part (state, event raise,
+; statement/function stubs; the statements are in overlay 1, objst.a)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+;
+; The object table: 32-byte entries at objbase (K325T: chip RAM $E0000,
+; elsewhere attic $8200000, logic only), bytes 0..15 as the hardware reads
+; them (v2 fields incl. +15 collides-with), bytes 16..31 the motion block
+; (docs/USER.md "Objects"). The event bits (one per object) follow at
+; objbase + $8000.
+
+OBJMAX  = 1024
+OBJTAB_K = $0e0000              ; K325T: chip RAM (the VIC-IV reads it)
+OBJTAB_X = $08200000            ; elsewhere: attic RAM (no list mode)
+OBJEVT  = $8000                 ; event bits: objbase + OBJEVT
+
+objbase !byte 0, 0, 0, 0        ; table base (32-bit)
+objcnt  !word 0                 ; objects in use (highest number + 1)
+objauto !byte 0                 ; $80: the frame IRQ runs the integrator
+objevon !byte 0                 ; $FF: ON OBJEVENT active
+objfeat !byte 0                 ; K325T feature level ($FFD71FD)
+objlim  !fill 36, 0             ; 4 limit sets: x0, y0, x1, y1 (16-bit), action
+OEVTXT  !fill 48, 0             ; ON OBJEVENT handler: TPROC name ':' TRETURN CR
+objn    !word 0                 ; object number being worked on
+evtxt   !word 0                 ; (EVCHECK: the handler text)
+objt    !byte 0
+objp    !fill 4, 0
+objv    !fill 32, 0
+
+; OBJRESET: no objects, integrator on, ON OBJEVENT off (start, RUN, prompt)
+!zone objreset
+objreset:
+        lda #0
+        sta objcnt
+        sta objcnt+1
+        sta objevon
+        lda #$20
+        trb evpend
+        lda #$80
+        sta objauto
+        ldx #3
+-       bit hw_k325t
+        bpl +
+        lda .k,x
+        bra ++
++       lda .x,x
+++      sta objbase,x
+        dex
+        bpl -
+        lda #0                  ; no events
+        sta objn
+        sta objn+1
+        jsr objevbit
+        ldz #127
+        lda #0
+-       sta [fptr],z
+        dez
+        bpl -
+        ldz #0
+        rts
+.k      !byte <OBJTAB_K, >OBJTAB_K, ^OBJTAB_K, 0
+.x      !byte <OBJTAB_X, >OBJTAB_X, ^OBJTAB_X, OBJTAB_X >> 24
+
+; statement and function entries (overlay 1)
+objst:  jsr ovjmp               ; OBJ... statements (end with XEQ)
+        !byte 1
+        !word o_objst
+f_obj:  jsr ovjsr               ; OBJX( OBJY( OBJVX( OBJVY( OBJEVENT(
+        !byte 1
+        !word o_objfn
+        rts
+
+; OBJREGS: K325T: table base and count into the list-mode registers (the
+; count also at $FFD728A-B from feature level 3 on)
+!zone objregs
+objregs:
+        bit hw_k325t
+        bpl .x
+        ldx #3
+-       lda fptr,x
+        pha
+        dex
+        bpl -
+        jsr colptr
+        ldz #$3d                ; feature level ($FFD71FD)
+        lda [fptr],z
+        sta objfeat
+        lda #$f8
+        sta fptr
+        ldz #0
+        lda objbase
+        sta [fptr],z
+        inz
+        lda objbase+1
+        sta [fptr],z
+        inz
+        lda objbase+2
+        sta [fptr],z
+        inz
+        lda objcnt              ; count low byte (255 for more on a v2 core)
+        ldx objcnt+1
+        beq +
+        ldx objfeat
+        cpx #3
+        bcs +
+        lda #$ff
++       sta [fptr],z
+        ldz #0
+        lda objfeat
+        cmp #3
+        bcc +
+        lda #$72                ; $FFD728A-B: the 10-bit count
+        sta fptr+1
+        lda #$8a
+        sta fptr
+        lda objcnt
+        sta [fptr],z
+        inz
+        lda objcnt+1
+        sta [fptr],z
+        ldz #0
++       ldx #0
+-       pla
+        sta fptr,x
+        inx
+        cpx #4
+        bne -
+.x      rts
+
+; OBJEVBIT: objn -> fptr = its event byte (objbase + OBJEVT + n/8), A = mask
+!zone objevbit
+objevbit:
+        lda objn+1
+        sta tmpw+1
+        lda objn
+        ldx #3
+-       lsr tmpw+1
+        ror
+        dex
+        bne -
+        clc
+        adc objbase
+        sta fptr
+        lda tmpw+1
+        adc objbase+1
+        sta fptr+1
+        lda objbase+2
+        adc #0
+        sta fptr+2
+        lda objbase+3
+        sta fptr+3
+        lda fptr+1
+        clc
+        adc #>OBJEVT
+        sta fptr+1
+        bcc +
+        inc fptr+2
++       lda objn
+        and #7
+        tax
+        lda bitmask8,x
+        ldz #0
+        rts
+bitmask8 !byte 1, 2, 4, 8, 16, 32, 64, 128
+
+; OBJEVFIRST: A/X = the lowest object with an event (carry clear), carry
+; set if none
+!zone objevfirst
+objevfirst:
+        lda #0
+        sta objn
+        sta objn+1
+        jsr objevbit            ; fptr -> byte 0
+.l      ldz #0
+        lda [fptr],z
+        bne .f
+        inw fptr
+        lda objn
+        clc
+        adc #8
+        sta objn
+        bcc +
+        inc objn+1
++       lda objn+1
+        cmp #>OBJMAX
+        bcc .l
+        sec
+        rts
+.f      ldx #0
+-       lsr
+        bcs +
+        inx
+        bra -
++       txa
+        clc
+        adc objn
+        ldx objn+1
+        bcc +
+        inx
++       clc
+        rts
+
+; OBJSTEP: one integrator step (S3)
+objstep:
+        rts
