@@ -100,7 +100,8 @@ shaded, flapping list-mode v2 birds on a K325T; 50 frames per second).
 `examples/basic65/parallax65.bas` is the BASIC 65 twin (same picture and
 motion; on the D81 as the BASIC 65 program `PARALLAX65`).
 `walkers.bas` / `basic65/walkers65.bas` are work in progress (a crowd demo
-on a destructible tile map; parked while B65's speed is worked on). To try it in Xemu:
+on a destructible tile map; parked while B65's speed is worked on; not on the D81
+or in dist/sd until it is finished). To try it in Xemu:
 
     tools/tok65.py examples/basic65/parallax65.bas /tmp/p.prg
     tests/run.py - --prg /tmp/p.prg --realtime --timeout 60 --screenshot /tmp/p.png

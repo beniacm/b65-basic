@@ -115,11 +115,19 @@ class D81:
         return bytes(self.img)
 
 
+# work in progress: kept out of the disk image and dist/sd until finished
+WIP = {'walkers.bas', 'walkers65.bas'}
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'dist')
     prg = open(os.path.join(ROOT, 'build/b65.prg'), 'rb').read()
-    ex = sorted(f for f in os.listdir(os.path.join(ROOT, 'examples')) if f.endswith('.bas'))
-    os.makedirs(os.path.join(out, 'sd'), exist_ok=True)
+    ex = sorted(f for f in os.listdir(os.path.join(ROOT, 'examples'))
+                if f.endswith('.bas') and f not in WIP)
+    sd = os.path.join(out, 'sd')
+    if os.path.isdir(sd):               # no stale files from earlier builds
+        shutil.rmtree(sd)
+    os.makedirs(sd)
     disk = D81('B65 BASIC ' + version())
     disk.add('B65', prg, 2)
     shutil.copy(os.path.join(ROOT, 'build/b65.prg'), os.path.join(out, 'sd', 'B65.PRG'))
@@ -133,7 +141,7 @@ def main():
     sys.path.insert(0, os.path.join(ROOT, 'tools'))
     import tok65
     for f in sorted(os.listdir(os.path.join(ROOT, 'examples', 'basic65'))):
-        if f.endswith('.bas'):
+        if f.endswith('.bas') and f not in WIP:
             name = os.path.splitext(f)[0].upper()[:16]
             prg = tok65.tokenise(open(os.path.join(ROOT, 'examples', 'basic65', f)).read())
             disk.add(name, prg, 2)
