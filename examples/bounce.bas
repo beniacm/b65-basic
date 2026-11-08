@@ -1,4 +1,4 @@
-5 REM Per frame (64 balls), Xemu, no vsync wait: about 14 ms (move loop about 13.3, 210 us a ball; star planes 0.6: 8 writes, one 8-job DMA) + about 1.3 ms a colliding pair: 50 fps. RRB row: GOTOX+80 black, 6x4x(GOTOX+star): 129 tokens
+5 REM Per frame (64 balls), Xemu, no vsync wait: about 14 ms (move loop about 13.3, 210 us a ball; star planes 0.6: 8 writes, one 8-job DMA) + about 1.3 ms a colliding pair: 50 fps. RRB row: 6x4x(GOTOX+star) = 48 tokens (no XCTL bit 3: +GOTOX+80 black)
 10 REM Bounce: N% balls that bounce off the walls and off each other (B65),
 12 REM in front of four parallax star planes (1/4, 1/2, 1, 2 pixels a frame)
 20 REM K325T core: the balls are RRB list mode v2 objects (shaded full-colour
@@ -18,7 +18,7 @@
 110 REM BN%>0: stop after BN% frames (tests); RS%=1: back to text, timing;
 115 REM G%=1: gravity. BASIC 65 twin: examples/basic65/bounce65.bas (32 balls).
 120 BN%=0:RS%=1:N%=64:G%=0:SW%=0:BW%=6
-130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:ZL%=&90000:ZH%=&A8000:ZS%=&BC000:SG%=6:L%=162+16*SG%:K%=(?&6E1=&FF)
+130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:ZL%=&90000:ZH%=&A8000:ZS%=&BC000:SG%=6:K%=(?&6E1=&FF)
 135 IF K%=0 THEN S%=&50000:GA%=&58000:ZL%=&8400000:ZH%=&8420000:ZS%=&54000:REM (no chip RAM at &60000-&FFFFF: attic)
 140 DIM P%(N%),V%(N%),LB% 255,DT% 543,ZD%(3),ZA%(3),ZK%(7):PROCtables
 150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
@@ -93,13 +93,17 @@
 1430 REM colour offset, stride, box width BW%
 1440 IF K% THEN FOR C%=0 TO 5:PROCw(OA%+16*C%,&1800+C%):PROCw(OA%+16*C%+2,&FFFF):PROCw(CR%-&4000+OC%+16*C%,0):NEXT
 1450 IF K% THEN FOR I%=0 TO N%-1:A%=TB%+16*I%:C%=I% MOD 6:!A%=P%(I%):?(A%+4)=255:?(A%+5)=1:?(A%+6)=8:?(A%+7)=1:!(A%+8)=&9000+16*C%+(OC%+16*C%)*65536:!(A%+12)=BW%*65536:NEXT
+1455 REM XCTL bit 3 (newer K325T bitstreams): unpainted pixels show the background,
+1456 REM so sparse rows need no opaque base (ZB%=0); unimplemented bits read 0
+1458 ZB%=TRUE:IF K% THEN ?&FFD71F0=?&FFD71F0 OR 8:ZB%=(?&FFD71F0 AND 8)=0
 1460 PROCplanes
 1500 REM VIC-IV (HOTREG off): V400, 50 rows, one line per glyph row, CHR16 +
-1510 REM full colour above 255, rows of 81+8*SG% tokens, pointers; list mode v2
+1510 REM full colour above 255, rows of L%/2 tokens, pointers; list mode v2 with
+1515 REM the fast token path (XCTL bit 7)
 1520 ?&D05D=?&D05D AND 127:?&D031=?&D031 OR 8:?&D07B=49:?&D05B=0:?&D054=?&D054 OR 5
-1530 PROCw(&D058,L%):?&D05E=81+8*SG%:?&D063=?&D063 AND 192:?&D020=0:?&D021=0
+1530 PROCw(&D058,L%):?&D05E=L% DIV 2:?&D063=?&D063 AND 192:?&D020=0:?&D021=0
 1540 ?&D060=0:?&D061=(S% DIV 256) AND 255:?&D062=S% DIV 65536:PROCw(&D064,&4000)
-1550 IF K% THEN ?&FFD71F8=0:?&FFD71F9=&C0:?&FFD71FA=8:?&FFD71FB=N%:?&FFD71F0=?&FFD71F0 OR &50
+1550 IF K% THEN ?&FFD71F8=0:?&FFD71F9=&C0:?&FFD71FA=8:?&FFD71FB=N%:?&FFD71F0=?&FFD71F0 OR &D0
 1560 ENDPROC
 1600 DEF PROCsprites:LOCAL I%,Y%,X%
 1610 REM no list mode: balls 0-7 as sprites (8x8 circle, scaled to 320x200)
@@ -110,39 +114,41 @@
 1660 DEF PROCspr:LOCAL I%,X%:?&D010=0
 1670 FOR I%=0 TO 7:X%=24+(P%(I%) AND &FFFF) DIV 2:?(&D000+2*I%)=X% AND 255:IF X%>255 THEN ?&D010=?&D010 OR 1<<I%
 1680 ?(&D001+2*I%)=50+(P%(I%)>>>16) DIV 2:NEXT:ENDPROC
-1700 DEF PROCtext:?&D015=0:IF K% THEN ON COLLISION OFF:?&FFD71F0=?&FFD71F0 AND &AF
+1700 DEF PROCtext:?&D015=0:IF K% THEN ON COLLISION OFF:?&FFD71F0=?&FFD71F0 AND &27
 1710 ?&D031=V1%:?&D05B=V5%:?&D07B=V7%:PROCpalrest:MODE 0:ENDPROC
 1720 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V% DIV 256) AND 255:ENDPROC
 1800 REM ---- background: four parallax star planes (sparse RRB) ----
-1802 REM Each row (L% bytes): GOTOX 0 (opaque) + 80 black FCM glyphs, so the
-1803 REM row is painted all over (the VIC-IV keeps old pixels in its raster
-1804 REM buffer where a row paints nothing); then SG% groups of 4 x (GOTOX,
-1805 REM star glyph GA%/64+6+plane), plane 0 (far, dim dot) .. 3 (near, bright).
-1806 REM The star part of all rows is kept in a staging area ZS% (16*SG% bytes
-1807 REM a row): there the GOTOX words of one plane are every 16 bytes, so per
-1808 REM frame one DMA job per plane and byte (X lo, X hi) rewrites all of them,
-1809 REM then 50 row jobs copy the star parts into the rows (one chained list).
-1810 REM The plane jobs copy with source step ZD(p) from the ramp tables ZL%/ZH%
-1812 REM (lo/hi byte of n MOD 632, n < 80896; K325T: chip RAM banks 9-11, else
-1814 REM attic RAM): star k of plane p is at X = (ZA(p) - offset + k*ZD(p))
-1816 REM MOD 632 (X <= 631: the glyph ends inside the row; a star leaving at
-1817 REM the left comes back at the right). Offsets F%/4, F%/2, F%, 2*F%.
-1818 REM Star GOTOX colour flags &90: transparent, stars never cover each other.
+1802 REM Each row (L% bytes): SG% groups of 4 x (GOTOX, star glyph
+1803 REM GA%/64+6+plane), plane 0 (far, dim dot) .. 3 (near, bright). Without
+1804 REM XCTL bit 3 (ZB%) the VIC-IV keeps old pixels in its raster buffer where
+1805 REM a row paints nothing: then each row starts with GOTOX 0 (opaque) + 80
+1806 REM black glyphs. The star part of a row is 16*SG% bytes; there (in the
+1807 REM rows, or with the base in a staging area ZS%) the GOTOX words of one
+1808 REM plane are every 16 bytes, so per frame one DMA job per plane and byte
+1809 REM (X lo, X hi) rewrites all of them (with the base, 50 row jobs then copy
+1810 REM the star parts into the rows). The plane jobs copy with source step ZD(p)
+1812 REM from ramp tables ZL%/ZH% (lo/hi byte of n MOD 632, n < 80896; K325T:
+1814 REM chip RAM banks 9-11, else attic RAM): star k of plane p is at X =
+1816 REM (ZA(p) - offset + k*ZD(p)) MOD 632 (X <= 631: the glyph ends inside the
+1817 REM row; a star leaving at the left comes back at the right). Offsets F%/4,
+1818 REM F%/2, F%, 2*F%. Star GOTOX colour flags &90: transparent.
 1820 DEF PROCplanes:LOCAL I%,Q%,J%,D%,A%
+1821 SO%=-162*ZB%:L%=SO%+16*SG%:ZW%=S%:IF ZB% THEN ZW%=ZS%
 1822 ZN%=50*SG%:DL%=&5C000:ZT%=&5CA00
 1824 FOR I%=0 TO 631:?(ZL%+I%)=I% AND 255:?(ZH%+I%)=I% DIV 256:NEXT
 1826 I%=632:REPEAT PROCdma(0,I%,ZL%,ZL%+I%,1,1):PROCdma(0,I%,ZH%,ZH%+I%,1,1):I%=I%*2:UNTIL I%>72000
-1828 I%=GA% DIV 64+10:PROCdma(3,50*L%,0,S%,1,1):PROCdma(3,80,I% AND 255,S%+2,1,2):PROCdma(3,80,I% DIV 256,S%+3,1,2)
-1829 FOR I%=1 TO 49:PROCdma(0,162,S%,S%+I%*L%,1,1):NEXT
-1830 PROCdma(3,50*L%,0,CR%,1,1):FOR I%=0 TO 49:?(CR%+I%*L%)=&10:PROCdma(3,4*SG%,&90,CR%+I%*L%+162,1,4):NEXT
-1832 FOR Q%=0 TO 3:I%=GA% DIV 64+6+Q%:PROCdma(3,ZN%,I% AND 255,ZS%+4*Q%+2,1,16):PROCdma(3,ZN%,I% DIV 256,ZS%+4*Q%+3,1,16):NEXT
+1827 PROCdma(3,50*L%,0,S%,1,1):PROCdma(3,50*L%,0,CR%,1,1)
+1828 I%=GA% DIV 64+10:IF ZB% THEN PROCdma(3,80,I% AND 255,S%+2,1,2):PROCdma(3,80,I% DIV 256,S%+3,1,2)
+1829 IF ZB% THEN FOR I%=1 TO 49:PROCdma(0,162,S%,S%+I%*L%,1,1):NEXT
+1830 FOR I%=0 TO 49:IF ZB% THEN ?(CR%+I%*L%)=&10
+1831 PROCdma(3,4*SG%,&90,CR%+I%*L%+SO%,1,4):NEXT
+1832 FOR Q%=0 TO 3:I%=GA% DIV 64+6+Q%:PROCdma(3,ZN%,I% AND 255,ZW%+4*Q%+2,1,16):PROCdma(3,ZN%,I% DIV 256,ZW%+4*Q%+3,1,16):NEXT
 1834 RESTORE 1850:FOR I%=0 TO 319:?(GA%+64*6+I%)=0:NEXT:FOR Q%=0 TO 3:READ ZD%(Q%),ZA%(Q%),J%
 1836 FOR I%=1 TO J%:READ A%,D%:?(GA%+64*(6+Q%)+A%)=D%:NEXT:NEXT
 1838 FOR J%=0 TO 7:Q%=J% DIV 2:A%=DL%+22*J%:?A%=&80:?(A%+1)=ZL% DIV &100000:?(A%+2)=&81:?(A%+3)=0:?(A%+4)=&83:?(A%+5)=ZD%(Q%):?(A%+6)=&85:?(A%+7)=16
-1840 D%=ZS%+4*Q%+(J% AND 1):I%=ZL%:IF J% AND 1 THEN I%=ZH%
-1841 PROCjob(A%+8,4,ZN%,I%,D%):ZK%(J%)=(I% AND &FFFFF)+(D% AND 255)*&1000000:NEXT
-1843 FOR J%=0 TO 49:A%=DL%+176+22*J%:?A%=&80:?(A%+1)=0:?(A%+2)=&81:?(A%+3)=0:?(A%+4)=&83:?(A%+5)=1:?(A%+6)=&85:?(A%+7)=1
-1844 PROCjob(A%+8,4*(J%<49)*-1,16*SG%,ZS%+16*SG%*J%,S%+L%*J%+162):NEXT
+1840 D%=ZW%+4*Q%+(J% AND 1):I%=ZL%:IF J% AND 1 THEN I%=ZH%
+1841 PROCjob(A%+8,4*((J%<7) OR ZB%)*-1,ZN%,I%,D%):ZK%(J%)=(I% AND &FFFFF)+(D% AND 255)*&1000000:NEXT
+1843 IF ZB% THEN FOR J%=0 TO 49:A%=DL%+176+22*J%:?A%=&80:?(A%+1)=0:?(A%+2)=&81:?(A%+3)=0:?(A%+4)=&83:?(A%+5)=1:?(A%+6)=&85:?(A%+7)=1:PROCjob(A%+8,4*(J%<49)*-1,16*SG%,ZS%+16*SG%*J%,S%+L%*J%+162):NEXT
 1845 J0%=DL%+13:J1%=J0%+22:J2%=J1%+22:J3%=J2%+22:J4%=J3%+22:J5%=J4%+22:J6%=J5%+22:J7%=J6%+22
 1846 K0%=ZK%(0):K1%=ZK%(1):K2%=ZK%(2):K3%=ZK%(3):K4%=ZK%(4):K5%=ZK%(5):K6%=ZK%(6):K7%=ZK%(7)
 1847 ZA0%=ZA%(0)+632*&200000:ZA1%=ZA%(1)+632*&200000:ZA2%=ZA%(2)+632*&200000:ZA3%=ZA%(3)+632*&200000:ENDPROC

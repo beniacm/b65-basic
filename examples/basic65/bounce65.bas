@@ -1,4 +1,4 @@
-5 rem per frame (32 balls): 42 ms in xemu with the vsync wait, so 24 fps (move, walls, table about 1.2 ms a ball; the four star planes: 8 wpokes and one 8-job dma, about 1.5 ms). rrb per row: gotox + 80 black glyphs, 6 x 4 x (gotox + star): 129 tokens
+5 rem per frame (32 balls): 42 ms in xemu with the vsync wait, so 24 fps (move, walls, table about 1.2 ms a ball; the four star planes: 8 wpokes and one 8-job dma, about 1.5 ms). rrb per row: 6 x 4 x (gotox + star) = 48 tokens (no xctl bit 3: + gotox + 80 black)
 10 rem bounce: n balls that bounce off the walls and off each other (basic 65),
 12 rem in front of four parallax star planes (1/4, 1/2, 1, 2 pixels a frame)
 20 rem twin of examples/bounce.bas (b65 basic), 32 balls instead of 64.
@@ -19,7 +19,7 @@
 110 rem bn>0: stop after bn frames (tests); rs=1: back to text, timing;
 115 rem g=1: gravity.
 120 bn=0:rs=1:n=32:g=0:sw=0:bw=6
-130 tb=$8c000:ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:zl=$90000:zh=$a8000:zs=$bc000:sg=6:l=162+16*sg:k=(peek($d629)=98)
+130 tb=$8c000:ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:zl=$90000:zh=$a8000:zs=$bc000:sg=6:k=(peek($d629)=98)
 135 if k=0 then s=$50000:ga=$58000:zl=$8400000:zh=$8420000:zs=$54000:rem (no chip ram at $60000-$fffff: attic)
 136 rem k325t: xctl bit 0 (1 mb chip ram) before any access above $5ffff; basic 65
 137 rem does not set it (without it writes there are dropped)
@@ -83,13 +83,17 @@
 1440 for c=0 to 5:wpoke oa+16*c,$1800+c,$ffff:wpoke cr-$4000+oc+16*c,0:next c
 1450 for i=0 to n-1:a=tb+16*i:c=mod(i,6):wpoke a,x(i),y(i):poke a+4,255,1,8,1
 1460 wpoke a+8,$9000+16*c,oc+16*c:poke a+12,0,0,bw,0:next i
+1465 rem xctl bit 3 (newer k325t bitstreams): unpainted pixels show the
+1466 rem background, so sparse rows need no opaque base (bf=0)
+1468 bf=-1:if k then poke $ffd71f0,peek($ffd71f0) or 8:bf=(peek($ffd71f0) and 8)=0
 1470 gosub 1800
 1500 rem vic-iv (hotreg off): v400, 50 rows, one line per glyph row, chr16 +
-1510 rem full colour above 255, rows of 81+8*sg tokens, pointers; list mode v2
+1510 rem full colour above 255, rows of l/2 tokens, pointers; list mode v2 with
+1515 rem the fast token path (xctl bit 7)
 1520 poke $d05d,peek($d05d) and 127:poke $d031,peek($d031) or 8:poke $d07b,49:poke $d05b,0:poke $d054,peek($d054) or 5
-1530 wpoke $d058,l:poke $d05e,81+8*sg:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
+1530 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 1540 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000
-1550 if k then poke $ffd71f8,0,$c0,8,n:poke $ffd71f0,peek($ffd71f0) or $51
+1550 if k then poke $ffd71f8,0,$c0,8,n:poke $ffd71f0,peek($ffd71f0) or $d1
 1560 return
 1600 rem no list mode: balls 0-7 as sprites (8x8 circle, scaled to 320x200)
 1620 for y=0 to 20:poke $5fc00+3*y,0,0,0:next y
@@ -97,30 +101,32 @@
 1640 poke $d06c,0,$fa,$85:for i=0 to 7:wpoke $5fa00+2*i,$17f0:poke $d027+i,2+i:next i:poke $d015,255:return
 1650 data 60,126,255,255,255,255,126,60
 1800 rem ---- background: four parallax star planes (sparse rrb), as in
-1802 rem examples/bounce.bas: each row (l bytes) = gotox 0 (opaque) + 80 black
-1803 rem full-colour glyphs (the vic-iv keeps old pixels in its raster buffer
-1804 rem where a row paints nothing), then sg groups of 4 x (gotox, star glyph
-1805 rem ga/64+6+plane). the star parts of all rows are kept in a staging area
-1806 rem zs (16*sg bytes a row), where plane p's gotox words are every 16 bytes:
-1807 rem per frame one dma job per plane and byte (x lo, x hi) rewrites them,
-1808 rem copying with source step zd(p) from ramp tables zl/zh (lo/hi byte of
-1810 rem n mod 632; k325t: chip ram, else attic), then 50 row jobs copy the star
-1812 rem parts into the rows. star k of plane p is at x = (za(p) - offset +
-1813 rem k*zd(p)) mod 632. offsets f/4, f/2, f, 2*f.
-1814 rem star gotox colour flags $90: transparent, stars never cover each other.
+1802 rem examples/bounce.bas: each row (l bytes) = sg groups of 4 x (gotox,
+1803 rem star glyph ga/64+6+plane). without xctl bit 3 (bf) the vic-iv keeps
+1804 rem old pixels in its raster buffer where a row paints nothing: then each
+1805 rem row starts with gotox 0 (opaque) + 80 black full-colour glyphs. in the
+1806 rem star parts (16*sg bytes a row: in the rows, or with the base in a
+1807 rem staging area zs) plane p's gotox words are every 16 bytes: per frame one
+1808 rem dma job per plane and byte (x lo, x hi) rewrites them, copying with
+1810 rem source step zd(p) from ramp tables zl/zh (lo/hi byte of n mod 632;
+1811 rem k325t: chip ram, else attic); with the base 50 row jobs then copy the
+1812 rem star parts into the rows. star k of plane p is at x = (za(p) - offset +
+1813 rem k*zd(p)) mod 632. offsets f/4, f/2, f, 2*f. star gotox colour $90.
 1820 zn=50*sg:dl=$5c000:zt=$5ca00:sk=1:dk=1:c=0:zb=zl-int(zl/65536)*65536:hb=zh-int(zh/65536)*65536
+1821 so=-162*bf:l=so+16*sg:zw=s:if bf then zw=zs
 1824 for i=0 to 631:poke zl+i,mod(i,256):poke zh+i,int(i/256):next i
 1826 i=632
 1827 nn=i:sr=zl:de=zl+i:gosub 1880:sr=zh:de=zh+i:gosub 1880:i=i*2:if i<72000 then 1827
-1828 c=3:sr=0:nn=50*l:de=s:gosub 1880:de=cr:gosub 1880:i=ga/64+10:nn=80:dk=2:sr=mod(i,256):de=s+2:gosub 1880:sr=int(i/256):de=s+3:gosub 1880
-1829 c=0:dk=1:nn=162:sr=s:for i=1 to 49:de=s+i*l:gosub 1880:next i
-1830 c=3:dk=4:nn=4*sg:sr=$90:for i=0 to 49:poke cr+i*l,$10:de=cr+i*l+162:gosub 1880:next i:dk=16:nn=zn
-1832 for q=0 to 3:i=ga/64+6+q:sr=mod(i,256):de=zs+4*q+2:gosub 1880:sr=int(i/256):de=zs+4*q+3:gosub 1880:next q
+1828 c=3:sr=0:nn=50*l:de=s:gosub 1880:de=cr:gosub 1880:if bf=0 then 1830
+1829 i=ga/64+10:nn=80:dk=2:sr=mod(i,256):de=s+2:gosub 1880:sr=int(i/256):de=s+3:gosub 1880:c=0:dk=1:nn=162:sr=s:for i=1 to 49:de=s+i*l:gosub 1880:next i
+1830 c=3:dk=4:nn=4*sg:sr=$90:for i=0 to 49:if bf then poke cr+i*l,$10
+1831 de=cr+i*l+so:gosub 1880:next i:dk=16:nn=zn
+1832 for q=0 to 3:i=ga/64+6+q:sr=mod(i,256):de=zw+4*q+2:gosub 1880:sr=int(i/256):de=zw+4*q+3:gosub 1880:next q
 1834 restore 1850:for i=0 to 319:poke ga+384+i,0:next i
 1836 for q=0 to 3:read zd(q),za(q),j:for i=1 to j:read a,d:poke ga+64*(6+q)+a,d:next i,q
 1838 for j=0 to 7:q=int(j/2):a=dl+22*j:poke a,$80,int(zl/2^20),$81,0,$83,zd(q),$85,16
-1840 c=4:nn=zn:sr=zl:if j and 1 then sr=zh
-1841 de=zs+4*q+(j and 1):ja=a+8:gosub 1890:next j
+1840 c=-4*((j<7) or bf):nn=zn:sr=zl:if j and 1 then sr=zh
+1841 de=zw+4*q+(j and 1):ja=a+8:gosub 1890:next j:if bf=0 then 1845
 1843 for j=0 to 49:a=dl+176+22*j:poke a,$80,0,$81,0,$83,1,$85,1:c=-4*(j<49):nn=16*sg
 1844 sr=zs+16*sg*j:de=s+l*j+162:ja=a+8:gosub 1890:next j
 1845 j0=dl+13:j1=j0+22:j2=j1+22:j3=j2+22:j4=j3+22:j5=j4+22:j6=j5+22:j7=j6+22
@@ -139,7 +145,7 @@
 1660 poke $d010,0:for i=0 to 7:xx=24+int(x(i)/2):poke $d000+2*i,xx and 255,50+int(y(i)/2)
 1670 if xx>255 then poke $d010,peek($d010) or 2^i
 1680 next i:return
-1700 poke $d015,0:if k then poke $ffd71c0,1:poke $ffd71f0,peek($ffd71f0) and $ae
+1700 poke $d015,0:if k then poke $ffd71c0,1:poke $ffd71f0,peek($ffd71f0) and $26
 1710 poke $d031,v1:poke $d05b,v5:poke $d07b,v7:poke $d054,v0:poke $d058,v8,v9:poke $d05e,va
 1720 poke $d060,vb,vc,vd,ve,vf,vg:poke $d021,vh:gosub 2860:scnclr:return
 2700 rem own palette: ramps from 16 on (0-15 stay the standard colours)
