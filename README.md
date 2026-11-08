@@ -76,7 +76,14 @@ number get the highest number so far + 10). Text files need attic RAM.
 
 Examples (`examples/`): `rrblist_b65.bas` and `rrblist_b65v2.bas` (RRB
 list mode v1/v2; K325T core only), `parallax.bas` (three-layer RRB
-parallax; `examples/basic65/parallax65.bas` is the BASIC 65 twin).
+parallax: 80 columns, fine scroll through GOTOX, coarse scroll through one
+self-modifying DMA list per frame, two sprites between/in front of the
+layers, six list-mode v2 birds on a K325T; 50 frames per second).
+`examples/basic65/parallax65.bas` is the BASIC 65 twin (same picture and
+motion; not part of the D81). To try it in Xemu:
+
+    tools/tok65.py examples/basic65/parallax65.bas /tmp/p.prg
+    tests/run.py - --prg /tmp/p.prg --realtime --timeout 60 --screenshot /tmp/p.png
 
 ## Test (headless Xemu)
 

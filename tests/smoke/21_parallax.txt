@@ -1,0 +1,4 @@
+#include examples/parallax.bas
+120 BN%=40:RS%=0:DB%=1:SK%=1
+900 PROCtext:A%=SC%+20*LS%:S%=0:FOR I%=0 TO LS%-1:S%=S%+?(A%+I%):NEXT:PRINT "fine ";?A%;" ";?(A%+164);" ";?(A%+328);" row 20 sum ";S%:END
+RUN

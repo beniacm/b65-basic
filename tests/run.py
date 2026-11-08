@@ -34,10 +34,19 @@ def main():
     ap.add_argument('--rom', action='store_true',
                     help='boot the real MEGA65 ROM from an onboarded card image (CARD env, default ~/src/xemu-work/card.img) and RUN the PRG from BASIC 65')
     ap.add_argument('--realtime', action='store_true', help='run at real MEGA65 speed (no -sleepless)')
+    ap.add_argument('--prg', help='run this PRG under the MEGA65 ROM instead of B65 (BASIC 65 programs; script "-")')
     ap.add_argument('--card', help='use this SD card image (written to!) instead of the virtual SD directory')
     ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
-    script = open(a.script, 'rb').read()
+    script = b'' if a.script == '-' else open(a.script, 'rb').read()
+    # "#include path" lines (path relative to the repository) insert a file
+    out = []
+    for ln in script.split(b'\n'):
+        if ln.startswith(b'#include '):
+            out.append(open(os.path.join(ROOT, ln[9:].strip().decode()), 'rb').read().rstrip(b'\n'))
+        else:
+            out.append(ln)
+    script = b'\n'.join(out)
     with tempfile.TemporaryDirectory() as td:
         img = os.path.join(td, 'boot.img')
         open(img, 'wb').write(build_image(script))
@@ -57,6 +66,10 @@ def main():
             cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
                    '-sdimg', card, '-prg', os.path.join(ROOT, 'build/b65.prg'),
                    '-prgtest', sb + '@$10000', '-dumpmem', mem, '-dumpscreen', scr]
+        if a.prg:
+            card = os.environ.get('CARD', os.path.expanduser('~/src/xemu-work/card.img'))
+            cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
+                   '-sdimg', card, '-prg', os.path.abspath(a.prg), '-dumpmem', mem, '-dumpscreen', scr]
         if a.realtime:
             cmd.remove('-sleepless')
         cmd += os.environ.get('XEMU_EXTRA', '').split()
