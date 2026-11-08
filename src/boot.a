@@ -1,0 +1,344 @@
+; B65 BASIC - start-up (the only part of the PRG that is not packed)
+; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
+;
+; The PRG is: this boot code, then one LZH blob (tools/packovl.py): the
+; shared literal code lengths, the resident interpreter (res_start ..
+; code_end) and the five overlay images. BOOT copies the blob to bank 5
+; with one DMA job, unpacks the interpreter into bank 0 (over the blob's
+; old place) and the overlays into bank 4, then starts the interpreter.
+
+OVBASE  = $040000
+BLOB    = $050000               ; the packed blob during start-up
+
+* = $2001
+        !word .bend, 10
+        !byte $fe, $02, '0', ':', $9e   ; BANK0:SYS
+        !text "8212"
+        !byte 0
+.bend   !word 0
+        !fill $2014 - *, 0
+        jmp boot_prg            ; $2014 - normal start (from BASIC 65)
+        jmp boot_test           ; $2017 - start from test boot stub
+
+!zone boot
+boot_prg:
+        lda #0
+        bra +
+boot_test:
+        lda #1
++       sta .mode
+        sei
+        cld
+        see
+        ldx #$ff
+        txs
+        ldy #1
+        tys
+        lda #$47                ; VIC-IV knock (DMA, 40 MHz)
+        sta $d02f
+        lda #$53
+        sta $d02f
+        lda #0
+        sta $d030
+        tax
+        tay
+        taz
+        map
+        eom
+        lda #$35
+        sta $01
+        lda #$40
+        tsb $d031
+        tsb $d054
+        lda $d7fa               ; frame counter: start-up time (?bootfr)
+        sta bootfr
+        lda #0                  ; the blob -> bank 5 (one DMA job)
+        sta $d702
+        sta $d704
+        lda #>.dl
+        sta $d701
+        lda #<.dl
+        sta $d705
+        lda #<BLOB              ; literal code lengths at the blob start
+        sta fr
+        lda #>BLOB
+        sta fr+1
+        lda #^BLOB
+        sta fr+2
+        lda #0
+        sta fr+3
+        jsr lzhinit
+        lda #<res_start         ; the interpreter -> bank 0
+        sta fptr
+        lda #>res_start
+        sta fptr+1
+        lda #0
+        sta fptr+2
+        sta fptr+3
+        lda restab
+        ldx restab+1
+        jsr .src
+        jsr lzhdec
+        ldx #0                  ; the overlays -> bank 4 ($40000 + n*$2000)
+.l      cpx #NOVL*4
+        beq .x
+        txa
+        asl
+        asl
+        asl                     ; (x = n*4) -> n*32 = high byte of n*$2000
+        clc
+        adc #>OVBASE
+        sta fptr+1
+        lda #<OVBASE
+        sta fptr
+        lda #^OVBASE
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        phx
+        lda ovltab,x
+        pha
+        lda ovltab+1,x
+        tax
+        pla
+        jsr .src
+        jsr lzhdec
+        plx
+        txa                     ; vectors at offset $1FFA (NMI, RESET, IRQ)
+        asl
+        asl
+        asl
+        clc
+        adc #$1f
+        sta fptr+1
+        lda #^OVBASE
+        sta fptr+2
+        lda #$fa
+        sta fptr
+        ldy #0
+        ldz #0
+-       lda ovvec,y
+        sta [fptr],z
+        iny
+        inz
+        cpy #6
+        bne -
+        ldz #0
+        inx
+        inx
+        inx
+        inx
+        bra .l
+.x      lda $d7fa
+        sec
+        sbc bootfr
+        sta bootfr
+        lda .mode
+        lbne cold_test
+        jmp cold_prg
+.src    sta fr                  ; fr = BLOB + A/X
+        stx fr+1
+        lda #^BLOB
+        sta fr+2
+        lda #0
+        sta fr+3
+        rts
+.mode   !byte 0
+bootfr  !byte 0                 ; frames the start-up took
+.dl     !byte $0b, 0            ; F018B, no options
+        !byte 0                 ; copy
+blen    !word 0                 ; set by tools/packovl.py
+        !word boot_end          ; source: the blob in bank 0
+        !byte 0
+        !word BLOB & $ffff      ; destination: bank 5
+        !byte ^BLOB
+        !byte 0
+        !word 0
+ovvec:  !word irq_rti, cold_prg, irqhandler
+; set by tools/packovl.py: offsets in the blob
+restab: !word 0
+NOVL = 5
+ovltab: !word 0, ovl_asm_end-$e000
+        !word 0, ovl_gfx_end-$e000
+        !word 0, ovl_xtra_end-$e000
+        !word 0, ovl_fat_end-$e000
+        !word 0, ovl_xc_end-$e000
+
+; ---- LZH unpacker (tools/lzh.py): LZ77 with canonical-Huffman literals ----
+; LZHINIT: fr (32-bit) -> the shared code-length table (256 nibbles): builds
+; LZCNT (codes per length) and LZSYM (symbols by length, then value).
+LZSYM   = STRBUF            ; (start-up only)
+LZCNT   = NUMBUF
+lzhinit:
+        ldx #15
+        lda #0
+-       sta LZCNT,x
+        dex
+        bpl -
+        ldx #0
+        lda #1
+        sta tmp3                ; length
+.ln     lda #0
+        sta tmp4                ; symbol
+.s      lda tmp4
+        lsr
+        taz
+        lda [fr],z
+        ldz #0
+        bcs +
+        lsr
+        lsr
+        lsr
+        lsr
++       and #$0f
+        cmp tmp3
+        bne .nx
+        lda tmp4
+        sta LZSYM,x
+        inx
+        ldy tmp3
+        lda LZCNT,y
+        inc
+        sta LZCNT,y
+.nx     inc tmp4
+        bne .s
+        inc tmp3
+        lda tmp3
+        cmp #16
+        bne .ln
+        rts
+; LZHDEC: unpack the stream at fr (32-bit) to fptr (32-bit)
+lzhdec: lda #0
+        sta tmp1                ; bits left in tmp0
+        ldy #0
+        ldz #0
+.t      jsr lzbit
+        bcs .m
+        jsr lzhuff
+        sta [fptr],z
+        inw fptr
+        bra .t
+.m      jsr lzgam               ; length - 1
+        lda tmpw
+        sta tmp2
+        jsr lzbit
+        bcs .lg
+        ldx #8
+        jsr lzbits
+        inw tmpw                ; distance 1..256
+        bra .cp
+.lg     ldx #16
+        jsr lzbits
+        lda tmpw
+        ora tmpw+1
+        bne .cp
+        rts                     ; distance 0: end
+.cp     sec
+        lda fptr
+        sbc tmpw
+        sta ap
+        lda fptr+1
+        sbc tmpw+1
+        sta ap+1
+        lda fptr+2
+        sta ap+2
+        lda #0
+        sta ap+3
+-       lda [ap],z
+        sta [fptr],z
+        inw ap
+        inw fptr
+        lda tmp2
+        beq .t
+        dec tmp2
+        bra -
+lzbit:  dec tmp1                ; carry = next bit
+        bpl +
+        lda [fr],z
+        sta tmp0
+        inw fr
+        lda #7
+        sta tmp1
++       asl tmp0
+        rts
+lzbits: lda #0                  ; tmpw = X bits
+        sta tmpw
+        sta tmpw+1
+-       jsr lzbit
+        rol tmpw
+        rol tmpw+1
+        dex
+        bne -
+        rts
+lzgam:  ldx #0                  ; tmpw = gamma value
+-       jsr lzbit
+        bcs +
+        inx
+        bra -
++       lda #1
+        sta tmpw
+        lda #0
+        sta tmpw+1
+        cpx #0
+        beq +
+-       jsr lzbit
+        rol tmpw
+        rol tmpw+1
+        dex
+        bne -
++       rts
+; LZHUFF: A = next literal (as puff.c: code, first, index per length)
+lzhuff: lda #0
+        sta tmpw2               ; code
+        sta tmpw2+1
+        sta ptr2                ; first
+        sta ptr2+1
+        sta ptr3                ; index
+        sta ptr3+1
+        ldx #1
+.hl     jsr lzbit
+        lda tmpw2
+        adc #0                  ; code |= bit (bit 0 is clear)
+        sta tmpw2
+        lda ptr2                ; tmpw = first + count
+        clc
+        adc LZCNT,x
+        sta tmpw
+        lda ptr2+1
+        adc #0
+        sta tmpw+1
+        lda tmpw2               ; code < first + count: found
+        cmp tmpw
+        lda tmpw2+1
+        sbc tmpw+1
+        lbcs .hn
+        lda ptr3                ; symbol index = index + code - first
+        clc
+        adc tmpw2
+        sec
+        sbc ptr2
+        tay
+        lda LZSYM,y
+        ldy #0
+        rts
+.hn     lda ptr3                ; index += count
+        clc
+        adc LZCNT,x
+        sta ptr3
+        lda ptr3+1
+        adc #0
+        sta ptr3+1
+        lda tmpw                ; first = (first + count) << 1
+        asl
+        sta ptr2
+        lda tmpw+1
+        rol
+        sta ptr2+1
+        asl tmpw2               ; code <<= 1
+        rol tmpw2+1
+        inx
+        bra .hl
+
+
+boot_end:
+res_start:

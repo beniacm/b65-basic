@@ -63,17 +63,7 @@ TSWAP   = $08
 TCMD    = $c0
 NCMD    = $51       ; number of entries in CMDTAB ($C0..$10)
 
-; ---------------- entry points ----------------
-* = $2001
-        !word .bend, 10
-        !byte $fe, $02, '0', ':', $9e   ; BANK0:SYS
-        !text "8212"
-        !byte 0
-.bend   !word 0
-        !fill $2014 - *, 0
-        jmp cold_prg            ; $2014 - normal start (from BASIC 65)
-        jmp cold_test           ; $2017 - start from test boot stub
-
+; ---------------- entry points: src/boot.a ($2014 / $2017) ----------------
 cold_prg:
 cold_test:
         sei
@@ -93,7 +83,8 @@ cold_test:
         dex
         bpl -
         jsr hw_init
-        jsr ovinit
+        lda #$ff                ; (BOOT has unpacked the overlays to bank 4)
+        jsr ovmap
         jsr xcflush
         lda #3                  ; (TEST_INIT is in overlay 3)
         jsr ovmap

@@ -123,10 +123,20 @@ currently about 15 KB without floating point or the assembler.
     (RUN, program edits, LOAD, NEW, CHAIN, ...) flushes the cache; a program
     that pokes its own text must not rely on old code. The previous overlay
     is mapped back after the call, so overlay code may call EXPR.
-  * The overlay images are packed with LZH (`tools/lzh.py`,
-    `tools/packovl.py`: LZ77 with canonical-Huffman literals, unpacked by
-    OVINIT): the PRG has to end below `$D000` (the I/O area; OVINIT has
-    unpacked them before the stack at HIMEM `$CF00` is used).
+  * Start-up layout: the PRG (load address `$2001`, `SYS 8212` / test
+    entry `$2017`) is only `src/boot.a` (BASIC stub, entries, the LZH
+    unpacker, `ovltab`) followed by one LZH blob (`tools/lzh.py`,
+    `tools/packovl.py`: LZ77 with canonical-Huffman literals): the shared
+    literal code lengths, the resident interpreter (`res_start` ..
+    `code_end`) and the five overlay images. BOOT copies the blob to bank 5
+    with one DMA job, unpacks the interpreter into bank 0 at `res_start` and
+    the overlays into bank 4, then jumps to `cold_prg` / `cold_test` (QUIT
+    restarts there without unpacking again). Start-up takes about 36 frames
+    (0.7 s) in Xemu. Limits: the packed PRG must end below `$D000` (about
+    `$1F00` bytes free now), the unpacked interpreter must end below `$A000`
+    (`prog_start`, the heap/LOMEM, starts on the next page; `$8E88` now), each
+    overlay below `$FFFA`. A stronger packer (exomizer-like: overlays 16.7
+    -> 15.0 KB, interpreter about 18.6 KB) is a later option.
   * Decimal/hex text constants (DATA, VAL, EVAL of floats) are read with Q
     operations; DIV/MOD use the hardware divider; integer FOR/NEXT, static
     integer variables (`@%`, `A%`-`Z%`), `?`/`!` stores, the single-line IF
@@ -565,7 +575,7 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | `$1F00`-`$1FAB` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries, mouse |
 | `$1FB0`-`$1FB7` | testmode, lexmode, AUTO number/step, TRACE limit (moved out of zero page) |
 | `$1FB8`-`$1FDF` | libase/libcur, array cursors aelp/aelq, arrtop, avt2, RETURN far capture, overlay-2 element addresses |
-| `$2001`-`$97FF` | PRG stub + resident interpreter (the overlay images follow the code directly in the PRG, up to `$D000`, and are copied to bank 4 at start-up) |
+| `$2001`-`$97FF` | boot code (`$2001`-`res_start`), then the resident interpreter as unpacked at start-up (the PRG itself holds the boot code and the packed blob, up to `$D000`; the blob is copied to bank 5 and unpacked from there) |
 | `$9800`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
 | `$E000`-`$FFFF` | overlay window (MAP) |
 | bank 1 `$10800`-`$1F7FF` | program text (PAGE..TOP), libraries at the top |

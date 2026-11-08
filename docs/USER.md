@@ -65,7 +65,9 @@ lines and CTRL-U. RUN/STOP is ESCAPE.
 * **Memory:** programs live in their own 64 KB bank (`PAGE` = `&10800`,
   about 60 KB); variables and strings share about 16 KB with the stack;
   global arrays live in attic RAM (2 MB, up to 65535 elements each).
-  `INSTALL "lib"` loads a library of PROCs/FNs.
+  `INSTALL "lib"` loads a library of PROCs/FNs. B65.PRG is packed: at
+  start-up (about 0.7 s) it unpacks itself into bank 0 and its overlays
+  into bank 4, using bank 5 as a work area.
 * **Not available:** `SYS`, `TINT`, `PUT`, star commands other than
   `*CAT` and `*DELETE`, and BBC OS calls (`CALL &FFEE` etc.); `CALL` and
   `USR` run 45GS02 code, and the inline assembler (`[ ... ]`) assembles
