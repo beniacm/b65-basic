@@ -409,7 +409,21 @@ let:    lda [tp],z
         lbeq .ind1
         cmp #'!'
         lbeq .ind4
-        jsr arrlet              ; whole-array assignment?
+        ldz #0                  ; whole-array assignment (name followed by "()")?
+-       lda [tp],z
+        cmp #'('
+        beq .arp
+        inz
+        jsr range0              ; name characters, $ % &
+        bcc -
+        bra .nar
+.arp    inz
+        lda [tp],z
+        cmp #')'
+        bne .nar
+        ldz #0
+        jsr arrlet
+.nar    ldz #0
         jsr getvar
         bcc +
         jmp mistake
@@ -1162,29 +1176,60 @@ if:     jsr expri
         jsr f_decode
         jmp goto1
 +       jmp xeq
-.false  ; single line: look for ELSE on this line
--       jsr scan
-        bcs .eol
+.false  ; single line: look for ELSE on this line (Z = offset from tp)
+-       lda [tp],z
         cmp #CR
-        beq .eol2
+        beq .fcr
         cmp #TELSE
+        beq .fel
+        inz
+        cmp #'"'
+        beq .fq
+        cmp #TLINO
+        beq .fln
+        cmp #TREM
+        beq .frem
+        cmp #TDATA
         bne -
-        jsr nxt
+.frem   lda [tp],z              ; REM/DATA: no ELSE after it
+        cmp #CR
+        beq .fcr
+        inz
+        bra .frem
+.fq     lda [tp],z              ; string
+        cmp #CR
+        beq .fcr
+        inz
+        cmp #'"'
+        bne .fq
+        bra -
+.fln    inz                     ; line number: 3 more bytes
+        inz
+        inz
+        bra -
+.fcr    tza                     ; tp -> CR: XEQ goes on with the next line
+        ldz #0
+        clc
+        adc tp
+        sta tp
+        bcc +
+        inc tp+1
++       jmp xeq
+.fel    inz                     ; tp -> after ELSE
+        tza
+        ldz #0
+        clc
+        adc tp
+        sta tp
+        bcc +
+        inc tp+1
++       jsr nxt
         cmp #TLINO
         bne +
         inw tp
         jsr f_decode
         jmp goto1
 +       jmp xeq
-.eol2   ; scan already moved into the next line's body: back up to header
-        lda tp
-        sec
-        sbc #3
-        sta tp
-        bcs +
-        dec tp+1
-+       jmp xeq0
-.eol    jmp warm
 .multi  jsr acczero
         bne .mtrue
         lda #0                  ; false: to ELSE (maybe ELSE IF) or ENDIF
