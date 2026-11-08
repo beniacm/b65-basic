@@ -1,0 +1,4 @@
+#include examples/walkers.bas
+120 BN%=1500:RS%=0:M%=2
+740 PROCtext:FOR I%=0 TO 7:PRINT I%;" ";S%(I%);" ";X%(I%);" ";Y%(I%):NEXT:PRINT "jobs ";J%;" out ";O%:END
+RUN

@@ -3,6 +3,7 @@
 
   dist/b65.d81   B65 (PRG, load it from BASIC 65: DLOAD "B65" then RUN)
                  + every examples/*.bas as a SEQ file NAME.BAS (plain text)
+                 + every examples/basic65/*.bas tokenised as a BASIC 65 PRG
   dist/sd/       the same files for copying to the SD card root
                  (B65.PRG, NAME.BAS)
 
@@ -128,6 +129,16 @@ def main():
         disk.add(name, text, 1)
         open(os.path.join(out, 'sd', name), 'wb').write(text)
         print('  %-16s %6d bytes  (examples/%s)' % (name, len(text), f))
+    # the BASIC 65 twins (examples/basic65/*.bas), tokenised: DLOAD "NAME65" in BASIC 65
+    sys.path.insert(0, os.path.join(ROOT, 'tools'))
+    import tok65
+    for f in sorted(os.listdir(os.path.join(ROOT, 'examples', 'basic65'))):
+        if f.endswith('.bas'):
+            name = os.path.splitext(f)[0].upper()[:16]
+            prg = tok65.tokenise(open(os.path.join(ROOT, 'examples', 'basic65', f)).read())
+            disk.add(name, prg, 2)
+            open(os.path.join(out, 'sd', name + '.PRG'), 'wb').write(prg)
+            print('  %-16s %6d bytes  (examples/basic65/%s, BASIC 65 PRG)' % (name, len(prg), f))
     open(os.path.join(out, 'b65.d81'), 'wb').write(disk.finish())
     print('dist/b65.d81: B65 %s + %d examples' % (version(), len(ex)))
 
