@@ -554,7 +554,51 @@ udivmod:
         jmp error
 +       jsr absacc
         jsr absarg
+        lda fpsoft
+        bne .soft
+        ; math unit: quotient estimate from the divider, remainder from the
+        ; multiplier, then corrected until 0 <= remainder < divisor
+        ldq arg
+        stq saveacc             ; dividend
+        stq $d770
+        ldq acc
+        stq $d774
+-       bit $d70f               ; divider busy
+        bmi -
+        ldq $d76c               ; integer part of the quotient
+        stq arg
+        stq $d770
+-       bit $d70f               ; multiplier busy
+        bvs -
+        ldq $d778               ; quotient * divisor (low 32 bits)
+        stq tmpw
+        ldq saveacc
+        sec
+        sbcq tmpw
+        stq saveacc             ; remainder (wraps negative if too big)
+        ldz #0
+.dn     lda saveacc+3           ; remainder < 0: quotient - 1
+        bpl .up
+        ldq saveacc
+        clc
+        adcq acc
+        stq saveacc
+        ldz #0
+        deq arg
+        bra .dn
+.up     ldq saveacc             ; remainder >= divisor: quotient + 1
+        sec
+        sbcq acc
+        bcc +
+        stq saveacc
+        ldz #0
+        inq arg
+        bra .up
++       ldz #0
         lda #0
+        sta accx
+        rts
+.soft   lda #0
         sta saveacc
         sta saveacc+1
         sta saveacc+2
