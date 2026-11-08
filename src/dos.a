@@ -54,6 +54,7 @@ setfname:
         cpy #30
         bcc .l
 .e      lda tmp3
+        sta fndef               ; 0: ".BBC" added below
         bne +
         lda #'.'
         sta FNBUF,y
@@ -192,38 +193,13 @@ load:   jsr fname
         jmp clopp
 fname:  jsr exprs
         jmp setfname
-; LOADPRG: load file at PAGE, check it
+; LOADPRG: load a program at PAGE (overlay 3: FAT or mounted D81,
+; tokenised or text)
 loadprg:
-        jsr fexists
-        bcs +
-        jmp notfound
-+       lda libase              ; must fit below the libraries (PLIM)
-        sec
-        sbc page
-        sta tmpw
-        lda libase+1
-        sbc page+1
-        sta tmpw+1
-        lda DIRENT+84
-        ora DIRENT+85
-        bne .room
-        lda DIRENT+82
-        cmp tmpw
-        lda DIRENT+83
-        sbc tmpw+1
-        bcc +
-.room   lda #0                  ; No room
-        jmp error
-+       jsr setname2
-        ldx page                ; loadfile: load address $ZZYYXX (bank PBANK)
-        ldy page+1
-        ldz #PBANK
-        lda #$36
-        jsr hyppo
-        bcs +
-        jsr newit
-        jmp notfound
-+       jmp clean               ; checks the program (Bad program) and CLEAR
+        jsr ovjsr
+        !byte 3
+        !word o_loadprg
+        rts
 
 ; ---- SAVE "name" (command) ----
 !zone save

@@ -13,6 +13,9 @@ tables:
 	python3 tools/gen_tables.py $(UPSTREAM)/src/MAIN.Z80 > src/tables.a
 test: all
 	tests/smoke.sh
+# dist/b65.d81 (B65 + examples as text) and dist/sd/ (the same for the SD card)
+dist: build/b65.prg
+	python3 tools/mkdist.py
 clean:
-	rm -rf build
-.PHONY: all test clean tables
+	rm -rf build dist
+.PHONY: all test clean tables dist

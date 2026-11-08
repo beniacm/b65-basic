@@ -226,3 +226,4 @@ libase  = $1fb8       ; 2 lowest installed library in the program bank (PLIM: no
 libcur  = $1fba       ; 2 library being scanned (high byte 0: the program)
 rfar    = $1fc7       ; RETURN parameter capture: far flag
 rfad    = $1fdc       ; 4 its far address
+fndef   = $1fe4       ; setfname: 0 if the default extension .BBC was added

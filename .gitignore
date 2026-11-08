@@ -6,3 +6,4 @@ out/
 *.img
 *.d81
 tests/scratch/
+dist/

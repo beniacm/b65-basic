@@ -1874,5 +1874,462 @@ o_install:
 .bad0   ldz #0
         bra .bad
 msg_blib: !text "Bad library",0
+
+; ================= LOAD / CHAIN: FAT or D81, tokenised or text =================
+; The file is looked up on the SD card (FAT, through Hyppo), then in the
+; D81 image mounted as drive 0 (read-only, F011 sector reads). Without an
+; extension ".BBC" is tried first, then ".BAS". The file is loaded at PAGE.
+; If it is not a tokenised program it is taken as text: it is copied to
+; attic RAM (TXTBUF) and entered line by line as if typed (lines without a
+; number get the highest number so far + 10).
+TXTBUF  = $08520000             ; text load buffer (attic)
+D81SEC  = DIRBUF                ; 256-byte logical sector from the D81
+lsize   = $1480                 ; 3 size of the loaded file
+d81t    = $1483                 ; D81 track / sector
+d81s    = $1484
+dent    = $1485                 ; directory entry offset
+lnlast  = $1486                 ; 2 previous line number (text)
+!zone loadprg
+o_loadprg:
+        jsr fexists             ; FAT
+        bcs .fat
+        jsr .bas
+        bcc +
+        jsr fexists
+        bcs .fat
+        jsr .bbc
++       jsr d81find             ; mounted D81
+        lbcs .d81
+        jsr .bas
+        bcc +
+        jsr d81find
+        lbcs .d81
++       jmp notfound
+.bas    lda fndef               ; name without extension: try .BAS
+        bne +
+        jsr .ext
+        lda #'A'
+        sta FNBUF+1,x
+        lda #'S'
+        sta FNBUF+2,x
+        jsr setname2
+        sec
+        rts
++       clc
+        rts
+.bbc    jsr .ext
+        lda #'B'
+        sta FNBUF+1,x
+        lda #'C'
+        sta FNBUF+2,x
+        jmp setname2
+.ext    ldx #0                  ; X -> the 'B' after the '.' of the added extension
+-       lda FNBUF,x
+        inx
+        cmp #'.'
+        bne -
+        rts
+.fat    lda DIRENT+82           ; size
+        sta lsize
+        lda DIRENT+83
+        sta lsize+1
+        lda DIRENT+84
+        sta lsize+2
+        ora DIRENT+85
+        bne .room
+        jsr .fits
+        jsr setname2
+        ldx page                ; loadfile: load address $ZZYYXX (bank PBANK)
+        ldy page+1
+        ldz #PBANK
+        lda #$36
+        jsr hyppo
+        ldz #0
+        bcs .loaded
+        jsr newit
+        jmp notfound
+.room   lda #0                  ; No room
+        jmp error
+.fits   lda page                ; size < libase - page ?
+        clc
+        adc lsize
+        tax
+        lda page+1
+        adc lsize+1
+        bcs .room
+        cpx libase
+        sbc libase+1
+        bcs .room
+        rts
+.d81    jsr d81load             ; -> lsize
+.loaded jsr chkprog
+        bcs +
+        jmp clean               ; tokenised program (checks it, CLEAR)
++       jmp txtload
+
+; CHKPROG: carry clear if PAGE.. (lsize bytes) is a tokenised program
+chkprog:
+        lda page
+        sta pp
+        lda page+1
+        sta pp+1
+        lda page                ; tmpw = end
+        clc
+        adc lsize
+        sta tmpw
+        lda page+1
+        adc lsize+1
+        sta tmpw+1
+.l      lda pp                  ; inside the file?
+        cmp tmpw
+        lda pp+1
+        sbc tmpw+1
+        bcs .bad
+        lda [pp],z
+        beq .ok
+        cmp #4
+        bcc .bad
+        taz
+        dez
+        lda [pp],z              ; last byte of the line: CR
+        ldz #0
+        cmp #CR
+        bne .bad
+        lda [pp],z
+        clc
+        adc pp
+        sta pp
+        bcc .l
+        inc pp+1
+        bne .l
+.bad    sec
+        rts
+.ok     clc
+        rts
+
+; TXTLOAD: the text at PAGE (lsize bytes) -> program, line by line
+!zone txtload
+txtload:
+        lda hw_attic
+        bne +
+        lda #<msg_na
+        ldx #>msg_na
+        ldy #192
+        jmp ovmsg
++       lda page                ; copy PAGE.. to TXTBUF (attic)
+        sta pp
+        lda page+1
+        sta pp+1
+        ldx #3
+-       lda .tb,x
+        sta fptr,x
+        dex
+        bpl -
+        lda lsize
+        sta tmpw
+        lda lsize+1
+        sta tmpw+1
+-       lda tmpw
+        ora tmpw+1
+        beq +
+        lda [pp],z
+        sta [fptr],z
+        inw pp
+        inw fptr
+        lda tmpw
+        bne ++
+        dec tmpw+1
+++      dec tmpw
+        bra -
++       jsr newit               ; NEW (CLEAR)
+        lda #0
+        sta lnlast
+        sta lnlast+1
+        ldx #3                  ; read pointer -> rdp ($1488), end = lsize
+-       lda .tb,x
+        sta rdp,x
+        dex
+        bpl -
+        lda lsize
+        sta tleft
+        lda lsize+1
+        sta tleft+1
+.line   lda tleft               ; end of the text?
+        ora tleft+1
+        lbeq .done
+        ldx #0                  ; one line -> ACCS
+.c      lda tleft
+        ora tleft+1
+        beq .eol
+        jsr .rd
+        cmp #LF
+        beq .eol
+        cmp #CR
+        beq .cr
+        cmp #9                  ; TAB -> space
+        bne +
+        lda #' '
++       cmp #' '
+        bcc .c                  ; other control characters: ignored
+        cpx #238
+        bcs .long
+        sta ACCS,x
+        inx
+        bra .c
+.cr     lda tleft               ; CR LF: one end of line
+        ora tleft+1
+        beq .eol
+        jsr .peek
+        cmp #LF
+        bne .eol
+        jsr .rd
+.eol    lda #CR
+        sta ACCS,x
+        cpx #0
+        beq .line               ; empty line
+        lda #<ACCS
+        sta tp
+        lda #>ACCS
+        jsr settph
+        jsr nxt
+        cmp #CR
+        beq .line               ; blank line
+        lda #0
+        sta lnum
+        sta lnum+1
+        jsr linnum
+        lda lnum
+        ora lnum+1
+        bne +
+        lda lnlast              ; no number: previous + 10
+        clc
+        adc #10
+        sta lnum
+        lda lnlast+1
+        adc #0
+        sta lnum+1
++       lda lnum                ; lnlast = highest number so far
+        cmp lnlast
+        lda lnum+1
+        sbc lnlast+1
+        bcc +
+        lda lnum
+        sta lnlast
+        lda lnum+1
+        sta lnlast+1
++       jsr tokline
+        jsr storeln
+        jmp .line
+.done   jmp clean
+.long   lda #<msg_ll
+        ldx #>msg_ll
+        ldy #19
+        jmp ovmsg
+.rd     phx                     ; A = next text byte (keeps X)
+        ldx #3
+-       lda rdp,x
+        sta fptr,x
+        dex
+        bpl -
+        plx
+        lda [fptr],z
+        inc rdp
+        bne +
+        inc rdp+1
++       pha
+        lda tleft
+        bne +
+        dec tleft+1
++       dec tleft
+        pla
+        rts
+.peek   phx
+        ldx #3
+-       lda rdp,x
+        sta fptr,x
+        dex
+        bpl -
+        plx
+        lda [fptr],z
+        rts
+.tb     !byte <TXTBUF, >TXTBUF, ^TXTBUF, TXTBUF>>24
+msg_ll: !text "Line too long",0
+rdp     = $1488                 ; 4 text read pointer
+tleft   = $148c                 ; 2 bytes left
+
+; ---------------- D81 (mounted as drive 0), read-only ----------------
+; D81SECT: d81t (1-80) / d81s (0-39) -> D81SEC; carry set on error
+!zone d81sect
+d81sect:
+        lda d81t
+        lbeq .err
+        cmp #81
+        lbcs .err
+        sec
+        sbc #1
+        sta $d084               ; physical track
+        lda d81s
+        cmp #40
+        bcs .err
+        lsr                     ; 512-byte sector 0..19
+        ldx #0
+        cmp #10
+        bcc +
+        sbc #10
+        ldx #1
++       inc
+        sta $d085               ; physical sector 1..10
+        stx $d086               ; side
+        txa
+        asl
+        asl
+        asl
+        sta $d080               ; drive 0, side signal
+        lda #$41                ; read sector, reset the buffer pointers
+        sta $d081
+        ldx #0                  ; wait (timeout)
+        ldy #0
+        lda #$40
+        sta tmp0
+-       lda $d082
+        bpl +
+        inx
+        bne -
+        iny
+        bne -
+        dec tmp0
+        bne -
+        bra .err
++       and #$10                ; RNF: no disk mounted / no such sector
+        bne .err
+        lda #$80                ; $FFD6000 shows the F011 buffer ($D689 bit 7 = 0)
+        trb $d689
+        lda #$00
+        sta fptr
+        lda #$60                ; (odd logical sector: second half)
+        sta fptr+1
+        lda d81s
+        and #1
+        tsb fptr+1
+        lda #$fd
+        sta fptr+2
+        lda #$0f
+        sta fptr+3
+        ldy #0
+-       tya
+        taz
+        lda [fptr],z
+        sta D81SEC,y
+        iny
+        bne -
+        ldz #0
+        lda #$80
+        tsb $d689
+        clc
+        rts
+.err    sec
+        rts
+
+; D81FIND: FNBUF in the directory (track 40) -> d81t/d81s = first data
+; sector; carry set if found
+!zone d81find
+d81find:
+        lda #40
+        sta d81t
+        lda #3
+        sta d81s
+.s      jsr d81sect
+        bcs .no
+        ldx #0                  ; 8 entries of 32 bytes
+.e      stx dent
+        lda D81SEC+2,x          ; file type (closed, SEQ/PRG/USR)
+        and #$87
+        cmp #$81
+        bcc .nx
+        cmp #$84
+        bcs .nx
+        ldy #0                  ; compare 16 name bytes (padded with $A0)
+-       lda FNBUF,y
+        beq .end
+        cmp D81SEC+5,x
+        bne .nx
+        inx
+        iny
+        cpy #16
+        bne -
+        bra .hit
+.end    lda D81SEC+5,x          ; FNBUF ended: the rest must be padding
+        cmp #$a0
+        bne .nx
+.hit    ldx dent
+        lda D81SEC+3,x
+        sta d81t
+        lda D81SEC+4,x
+        sta d81s
+        sec
+        rts
+.nx     ldx dent
+        txa
+        clc
+        adc #32
+        tax
+        bne .e
+        lda D81SEC              ; next directory sector
+        beq .no
+        sta d81t
+        lda D81SEC+1
+        sta d81s
+        bra .s
+.no     clc
+        rts
+
+; D81LOAD: the file at d81t/d81s -> PAGE (bank PBANK), lsize = length
+!zone d81load
+d81load:
+        lda page
+        sta pp
+        lda page+1
+        sta pp+1
+        lda #0
+        sta lsize
+        sta lsize+1
+        sta lsize+2
+.s      jsr d81sect
+        bcc +
+        jmp diskerr
++       ldy #255                ; last sector: bytes 2..D81SEC+1
+        lda D81SEC
+        bne +
+        ldy D81SEC+1
++       ldx #2
+-       lda pp                  ; room below libase?
+        cmp libase
+        lda pp+1
+        sbc libase+1
+        bcc +
+        lda #0                  ; No room
+        jmp error
++       lda D81SEC,x
+        sta [pp],z
+        inw pp
+        inc lsize
+        bne +
+        inc lsize+1
++       cpx #255
+        beq +
+        txa
+        cmp D81SEC+1
+        bcc ++
+        lda D81SEC              ; (last sector: up to the end mark)
+        beq +
+++      inx
+        bra -
++       lda D81SEC
+        beq .x
+        sta d81t
+        lda D81SEC+1
+        sta d81s
+        bra .s
+.x      rts
 ovl_fat_end:
 }

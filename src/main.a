@@ -280,7 +280,31 @@ clopp:
         lda autono+1
         sbc #0
         sta lnum+1
-.ln2    jsr nxt
+.ln2    jsr tokline
+        lda lnum
+        ora lnum+1
+        bne .store
+        lda #<BUFFER            ; direct mode
+        sta tp
+        lda #>BUFFER
+        jsr settph
+        jmp xeq
+.store  jsr storeln
+        bne +
+        lda autono              ; empty line: delete only (and stop AUTO)
+        ora autono+1
+        beq clopp2
+        lda #0
+        sta autono
+        sta autono+1
+        bra clopp2
++       jsr clean
+clopp2: jmp clopp
+
+; TOKLINE: tokenise the text at tp (after the line number) -> BUFFER,
+; tmp4 = length (without CR); lnum kept
+tokline:
+        jsr nxt
         lda #<BUFFER
         sta ptr2
         lda #>BUFFER
@@ -306,29 +330,18 @@ clopp:
         sec
         sbc #<BUFFER
         sta tmp4
-        lda lnum
-        ora lnum+1
-        bne .store
-        lda #<BUFFER            ; direct mode
-        sta tp
-        lda #>BUFFER
-        jsr settph
-        jmp xeq
-.store  jsr findl
+        rts
+; STORELN: replace/insert program line lnum with BUFFER (tmp4 bytes);
+; Z set if the line was empty (only deleted)
+storeln:
+        jsr findl
         bne +
         jsr del                 ; delete existing line
 +       lda tmp4
-        bne +
-        lda autono              ; empty line: delete only (and stop AUTO)
-        ora autono+1
-        beq clopp2
-        lda #0
-        sta autono
-        sta autono+1
-        bra clopp2
-+       jsr insline
-        jsr clean
-clopp2: jmp clopp
+        beq +
+        jsr insline
+        lda #1
++       rts
 
 ; insert line: ptr1 = insertion point (from findl), lnum, BUFFER (tmp4 bytes + CR)
 !zone insline

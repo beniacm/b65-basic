@@ -30,6 +30,7 @@ Version: **v0.1-dev** (shown in the start-up banner; the string lives only in
 | SWAP, `^` address-of, `?` `!` `$` `\|` indirection, `<< >> >>>` | done |
 | INSTALL "library" (FN/PROC searched after the program) | done |
 | Files: LOAD, CHAIN, RUN "f", SAVE, *CAT, *DELETE | done (reading through Hyppo DOS, writing with B65's own FAT32 writer) |
+| LOAD/CHAIN of plain-text programs (`.BAS`), and read-only from the D81 mounted as drive 0 | done |
 | File channels: OPENIN, OPENOUT, OPENUP, BGET#, BPUT#, PRINT#, INPUT#, READ#, GET$#, EOF#, PTR#(=), EXT#, CLOSE# | done (files up to 960 KB, buffered in attic RAM) |
 | 45GS02 inline assembler, CALL, USR | done |
 | Own ASCII 8x8 font, line editor (cursor keys, HOME, DEL, INST, recall, ctrl-U) | done |
@@ -58,6 +59,24 @@ https://github.com/beniacm/mega65-k325t-cm4.
 You need ACME 0.97 or later (`brew install acme`) and python3. Then run
 `make`. This produces `build/b65.prg`, which loads at $2001; in BASIC 65 type
 `RUN` (the program starts with a `BANK0:SYS8212` line).
+
+## Distribution and examples
+
+`make dist` writes `dist/b65.d81` and `dist/sd/` (both ignored by git):
+
+* `dist/b65.d81` holds `B65` (the PRG) and every `examples/*.bas` as a
+  plain-text SEQ file `NAME.BAS`. On a MEGA65: mount the D81, `DLOAD "B65"`,
+  `RUN`; then in B65 `LOAD "NAME"` (or `LOAD "NAME.BAS"`) and `RUN`.
+* `dist/sd/` has the same files for copying to the SD card root.
+
+B65 looks for a file on the SD card first, then in the D81 mounted as
+drive 0 (read-only). A file that is not a tokenised program is read as
+text and entered line by line, exactly as if typed (lines without a
+number get the highest number so far + 10). Text files need attic RAM.
+
+Examples (`examples/`): `rrblist_b65.bas` and `rrblist_b65v2.bas` (RRB
+list mode v1/v2; K325T core only), `parallax.bas` (three-layer RRB
+parallax; `examples/basic65/parallax65.bas` is the BASIC 65 twin).
 
 ## Test (headless Xemu)
 

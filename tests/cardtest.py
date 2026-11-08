@@ -2,7 +2,7 @@
 """B65 BASIC file-writing test on a real FAT32 card image (Xemu, MEGA65 ROM).
 
 Copies the card image (CARD env, default ~/src/xemu-work/card.img; never
-written) to a private sparse copy, runs tests/hw/0[1-4]*.txt and 07_bigprog.txt in sequence
+written) to a private sparse copy, runs tests/hw/0[1-4]*.txt, 07_bigprog.txt and 09_textload.txt (with dist/b65.d81 as drive 0) in sequence
 on it (with --rom), compares each transcript (up to a *CAT line) with
 tests/hw/NN.card.expected, and checks the file system with fsck.fat -n:
 the fsck findings must be the same as on the original image (numbers
@@ -13,7 +13,9 @@ import os, re, shutil, subprocess, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CARD = os.environ.get('CARD', os.path.expanduser('~/src/xemu-work/card.img'))
 TESTS = ['tests/hw/01_files.txt', 'tests/hw/02_save.txt', 'tests/hw/03_chan.txt',
-         'tests/hw/04_install.txt', 'tests/hw/07_bigprog.txt']
+         'tests/hw/04_install.txt', 'tests/hw/07_bigprog.txt', 'tests/hw/09_textload.txt']
+# extra Xemu options per test: 09 loads examples from dist/b65.d81 (drive 0)
+EXTRA = {'tests/hw/09_textload.txt': '-8 ' + os.path.join(ROOT, 'dist/b65.d81')}
 
 def fsck(img, td):
     part = os.path.join(td, 'part.img')
@@ -30,15 +32,16 @@ def fsck(img, td):
 def main():
     update = '--update' in sys.argv
     fail = 0
-    subprocess.run(['make', '-s'], cwd=ROOT, check=True)
+    subprocess.run(['make', '-s', 'all', 'dist'], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     with tempfile.TemporaryDirectory() as td:
         img = os.path.join(td, 'card.img')
         subprocess.run(['cp', '--sparse=always', CARD, img], check=True)
         before = fsck(img, td)
         env = dict(os.environ, CARD=img)
         for t in TESTS:
+            e = dict(env, XEMU_EXTRA=EXTRA.get(t, ''))
             r = subprocess.run([sys.executable, 'tests/run.py', t, '--rom', '--timeout', '300'],
-                               cwd=ROOT, env=env, capture_output=True, text=True)
+                               cwd=ROOT, env=e, capture_output=True, text=True)
             out = []
             for l in r.stdout.splitlines():
                 out.append(l)

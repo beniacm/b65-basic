@@ -277,6 +277,23 @@ SAVE uses this writer for new and existing files (an existing file is
 replaced, also when it gets shorter). `.BBC` is added when the name has no
 extension (SAVE, LOAD, CHAIN, OPENxx alike).
 
+LOAD/CHAIN (overlay 3, `o_loadprg`): the name is looked up on the SD card
+(Hyppo directory scan), then in the D81 mounted as drive 0; without an
+extension `.BBC` is tried first, then `.BAS`. D81 access is read-only:
+F011 read-sector command on drive 0 (physical track = T-1, 512-byte
+sector = S/2 -> side 0 sectors 1-10 / side 1), the buffer is read at
+`$FFD6000` with `$D689` bit 7 = 0 (F011 buffer; this view also works in
+Xemu), logical sector = half of it; directory on track 40 from sector 3,
+16-character names, SEQ/PRG/USR files. The file is loaded at PAGE; if
+`chkprog` does not see a valid line structure it is text: copied to attic
+RAM (`$8520000`) and entered line by line through the editor's own
+`tokline`/`storeln` (CR, LF or CR LF; TAB as space; lines up to 238
+characters; unnumbered lines get the highest number so far + 10). Tested
+by `tests/hw/09_textload.txt` (a D81 example loaded as text gives the same
+LIST as typing it; a text file written with BPUT# and loaded from FAT).
+`make dist` (`tools/mkdist.py`) builds the D81: header/BAM/directory on
+track 40, files allocated from track 1, examples as SEQ text.
+
 Channels (OPENIN, OPENUP, OPENOUT; BGET#, BPUT#, PRINT#, INPUT#, READ#,
 GET$#, PTR# and PTR#=, EXT#, EOF#, CLOSE#) are buffered whole in attic RAM:
 channel n uses `$8100000 + (n-1)*$100000`, files up to 960 KB, 4 channels.
