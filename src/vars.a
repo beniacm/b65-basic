@@ -259,7 +259,46 @@ getvar: lda #0
         beq .inds
         cmp #'|'
         beq .ind5
-        jsr getname
+        ; fast path: static integer @%, A%..Z% (letter, '%', not '(')
+        cmp #'@'
+        bcc .gn
+        cmp #'Z'+1
+        bcs .gn
+        sta nfirst
+        ldz #1
+        lda [tp],z
+        cmp #'%'
+        bne .gnz
+        inz
+        lda [tp],z
+        cmp #'('
+        beq .gnz
+        ldz #0
+        lda #'%'
+        sta NBUF
+        lda #1
+        sta nlen
+        lda nfirst
+        sec
+        sbc #'@'
+        asl
+        asl
+        adc #<STAVAR            ; (carry clear: A <= 26*4)
+        sta vptr
+        lda #>STAVAR
+        adc #0
+        sta vptr+1
+        lda #4
+        sta vtype
+        lda tp
+        clc
+        adc #2
+        sta tp
+        bcc +
+        inc tp+1
++       jmp getvpost
+.gnz    ldz #0
+.gn     jsr getname
         bcc +
         rts
 +       jsr locate
