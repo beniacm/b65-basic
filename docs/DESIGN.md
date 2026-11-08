@@ -509,7 +509,8 @@ to the Xemu results; card checked with a read-only `fsck.fat` before and
 after every write test, no new findings, only B65* files changed):
 
 * VIC-IV set-up (no stray pixels), key queue flushed at start, keyboard
-  input; smoke 18/18 at commit 04abfba.
+  input; smoke 18/18 at commit 04abfba, 22/22 at 4df985b (incl.
+  19_array_ops, 20_lang_gaps, 21_parallax, 22_userguide).
 * SD reading (LOAD, CHAIN, *CAT, OPENIN/BGET of existing files) and writing
   with our FAT32 writer (SAVE new/overwrite, OPENOUT/OPENUP/PRINT#/BPUT#,
   a 602 KB file), INSTALL, the 38 KB program in bank 1.
@@ -521,6 +522,12 @@ after every write test, no new findings, only B65* files changed):
   differ).
 
 Still open or only partly checked:
+
+* The parallax demo's picture: its transcript test (21_parallax) passes on
+  the board, but RRB timing (DBLRR on/off), sprite priority and the
+  list-mode birds are unchecked: the HDMI capture dongle failed.
+* `tests/hw/09_textload.txt` (LOAD of text programs from the mounted D81,
+  F011 reads): waits for `dist/b65.d81` on the served card.
 
 * Keyboard feel (repeat, RUN/STOP as Escape) by a person; TIME on NTSC.
 * An original MEGA65 (R3/R6): HyperRAM timing, its SD controller, model

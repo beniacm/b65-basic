@@ -46,10 +46,14 @@ Version: **v0.1-dev** (shown in the start-up banner; the string lives only in
 
 ## Hardware status
 
-Everything above has been verified on a QMTECH K325T board running the
-MEGA65 K325T core (smoke tests, SD card writing checked with `fsck.fat`,
-graphics, sprites, sound, mouse, big programs, attic arrays); see
-"Hardware status" in docs/DESIGN.md. A standard MEGA65 (R3 to R6) has not
+Verified on a QMTECH K325T board running the MEGA65 K325T core: the smoke
+suite passes 22/22 at commit 4df985b, SD card writing is checked with
+`fsck.fat`, and graphics, sprites, sound, mouse, big programs and attic
+arrays were checked there; see "Hardware status" in docs/DESIGN.md. The
+parallax demo's transcript test passes on the board, but its picture (RRB
+timing, sprite priority, list-mode birds) is still unchecked because the
+HDMI capture dongle failed. `tests/hw/09_textload.txt` (LOAD from the
+D81) waits for `dist/b65.d81` on the served card. A standard MEGA65 (R3 to R6) has not
 been tested yet: its HyperRAM timing, SD controller and model detection
 paths are untested. The K325T core, the list-mode documentation and the
 loader used by `tests/board.py` live in the harness repository
