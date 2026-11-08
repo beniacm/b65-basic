@@ -49,6 +49,8 @@ xccop   = $1bc5
 xcae    = $1bc6         ; 2
 xcnst   = $1bc8         ; $FF: CARR may fold a constant index (reads)
 xdyop   = $1bc9         ; '?' / '!' after a variable item (dyadic), else 0
+ascnt   = $1bd0         ; ARRSCAN results: count (XCFLUSH clears it),
+astab   = $1bd1         ; 8 x (pointer field lo, hi, carry)
 XCEND   = $fff0
 ; bank-4 addresses for the resident XCFLUSH
 XKHI_F  = XKHI - $e000 + $48000
@@ -253,33 +255,42 @@ xfindd: ldx defkey
 +       sta xkind
         lda xkey
         eor xkey+1
+        sta xh
+        lda #0
+        sta xw
+.lp     ldx xw                  ; four ways: h, h EOR $80, $40, $C0
+        lda xh
+        eor .wt,x
         tax
         jsr .cmp
         bcc .r
-        txa
-        eor #$80
-        tax
-        jsr .cmp
-        bcc .r
-        txa                     ; miss: an empty slot? the first one first
-        eor #$80
-        tax
-        lda XKHI,x
-        beq .u
-        txa
-        eor #$80
+        inc xw
+        lda xw
+        cmp #4
+        bne .lp
+        lda #0                  ; miss: the first empty one
+        sta xw
+.le     ldx xw
+        lda xh
+        eor .wt,x
         tax
         lda XKHI,x
         beq .u
-        lda xrot                ; both used: replace alternately
-        eor #$80
+        inc xw
+        lda xw
+        cmp #4
+        bne .le
+        lda xrot                ; all used: replace in turn
+        inc
+        and #3
         sta xrot
-        beq .u
-        txa
-        eor #$80
+        tax
+        lda xh
+        eor .wt,x
         tax
 .u      sec
 .r      rts
+.wt     !byte 0, $80, $40, $c0
 .cmp    lda XKHI,x
         cmp xkey+1
         lbne .no
@@ -327,7 +338,19 @@ xcrun:  lda #0
         lda XMOD,x
         cmp xmode
         beq .hit
-.two    lda xmode
+.two    txa                     ; the second way inline too
+        eor #$80
+        tax
+        lda XKLO,x
+        cmp tp
+        bne .thr
+        lda XKHI,x
+        cmp tp+1
+        bne .thr
+        lda XMOD,x
+        cmp xmode
+        beq .hit
+.thr    lda xmode
         jsr xfindt
         bcs .mis2
 .hit    stx xslot
@@ -1394,6 +1417,8 @@ xslot   !byte 0
 xkey    !word 0
 xkind   !byte 0
 xrot    !byte 0
+xh      !byte 0
+xw      !byte 0
 xsx     !byte 0
 xsy     !byte 0
 xcop     !byte 0

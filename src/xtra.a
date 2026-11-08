@@ -963,6 +963,48 @@ ctarget:
 ; ARRSCAN: carry set if "name()" (NBUF, nlen bytes ending in '(', then ')')
 ; occurs in the program or an installed library: then a PROC array
 ; parameter or LOCAL array may rebind the name and the run-time check stays
+!zone asc {
+arrscanc:                       ; (cached per pointer field until XCFLUSH)
+        ldx #0
+        ldy ascnt
+        beq .new
+-       lda astab,x
+        cmp vptr
+        bne +
+        lda astab+1,x
+        cmp vptr+1
+        bne +
+        lda astab+2,x           ; the carry as found
+        lsr
+        rts
++       inx
+        inx
+        inx
+        dey
+        bne -
+.new    jsr arrscan
+        php
+        lda ascnt               ; remember it (8 entries)
+        cmp #8
+        lbcs .f
+        inc ascnt
+        sta xcae                ; x3
+        asl
+        adc xcae
+        tax
+        lda vptr
+        sta astab,x
+        lda vptr+1
+        sta astab+1,x
+        lda #0
+        plp
+        rol
+        sta astab+2,x
+        lsr                     ; (carry back)
+        rts
+.f      plp
+        rts
+}
 arrscan:
         lda page
         sta fptr
@@ -1069,7 +1111,7 @@ carr:   jsr locate
         lda ap+3
         adc #0
         sta xarr+9
-        jsr arrscan             ; never "name()" anywhere: no name check at
+        jsr arrscanc            ; never "name()" anywhere: no name check at
         bcs +                   ; run time (field address 0)
         lda #0
         sta xarr
