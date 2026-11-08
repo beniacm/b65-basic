@@ -1,0 +1,10 @@
+10 REM DMA from attic RAM (a B65 array) to chip RAM: a plain copy and a strided scatter
+20 DIM A%(254):FOR I%=0 TO 254:A%(I%)=I%+256*(I% EOR 85)+65536*(255-I%)+16777216*((I%*3) AND 127):NEXT:S%=^A%(0):D%=&50000:L%=&5F800
+30 PROCjob(1020,1,1,D%):PROCjob(255,4,16,D%+4096):E%=0:F%=0
+40 FOR I%=0 TO 254:E%=E%-(!(D%+4*I%)<>A%(I%)):F%=F%-(?(D%+4096+16*I%)<>(A%(I%) AND 255)):NEXT
+50 PRINT "attic ";~S%;" copy errors ";E%;", scatter errors ";F%:IF E%+F%=0 THEN PRINT "ATTIC DMA OK"
+60 END
+70 DEF PROCjob(N%,SS%,DS%,T%):?L%=&80:?(L%+1)=S% DIV &100000:?(L%+2)=&81:?(L%+3)=0:?(L%+4)=&83:?(L%+5)=SS%:?(L%+6)=&85:?(L%+7)=DS%
+80 ?(L%+8)=&0B:?(L%+9)=0:?(L%+10)=0:?(L%+11)=N% AND 255:?(L%+12)=N% DIV 256:!(L%+13)=S% AND &FFFFF:!(L%+16)=T% AND &FFFFF:?(L%+20)=0:?(L%+21)=0
+90 ?&D702=L% DIV 65536:?&D704=0:?&D701=(L% DIV 256) AND 255:?&D705=L% AND 255:ENDPROC
+RUN
