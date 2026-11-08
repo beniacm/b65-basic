@@ -957,7 +957,7 @@ arrrefq:
         ldz #0
         jmp arrref
 PFB     = PARBUF+$100       ; formal list (slot 0's RETURN half: retmask is 0 here)
-pfok    = $06cb             ; $FF: formals of this DEF are being recorded
+pfok    = $1fe8             ; $FF: formals of this DEF are being recorded
 ; XCCOMP: overlay 4 asks for a compile: map the compiler (overlay 2), run
 ; it, map overlay 4 back (A and carry from the compiler)
 xccomp: lda #2
