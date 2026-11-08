@@ -70,8 +70,11 @@ braket: jsr nxt
 expr:   lda #1
 exprp:  pha                     ; minimum precedence
         jsr item
-.loop   jsr nxt
-        jsr getop               ; A = prec (Z: none), X = op, Y = length
+.loop   lda [tp],z              ; (NXT inline)
+        cmp #' '
+        bne +
+        jsr nxt
++       jsr getopa              ; A = prec (Z: none), X = op, Y = length
         beq .done
         sta tmp0
         pla
@@ -88,12 +91,38 @@ exprp:  pha                     ; minimum precedence
 +       phx                     ; op
         lda tmp0
         pha                     ; prec
-        jsr pushval
-        lda tmp0                ; next minprec = prec+1 (left-assoc)
+        lda etype               ; push the left operand (numbers inline)
+        bmi .pstr
+        ldq acc
+        pha
+        phx
+        phy
+        phz
+        ldz #0
+        lda accx
+        pha
+        lda etype
+        pha
+        bra .rec
+.pstr   jsr pushval
+.rec    lda tmp0                ; next minprec = prec+1 (left-assoc)
         inc
         jsr exprp
-        jsr popval              ; left operand -> arg/argx or STRBUF/tmp6, tmp5 = type
-        pla                     ; prec
+        pla                     ; left operand -> arg/argx (or STRBUF/tmp6), tmp5 = type
+        sta tmp5
+        bmi .ps
+        pla
+        sta argx
+        plz
+        ply
+        plx
+        pla
+        stq arg
+        ldz #0
+        bra .bin
+.ps     pha
+        jsr popval
+.bin    pla                     ; prec
         plx                     ; op
         jsr binop
         bra .loop
@@ -175,8 +204,8 @@ popval: pla
 
 ; ---- GETOP: recognise binary operator at tp ----
 !zone getop
-getop:  ldy #0
-        lda [tp],z
+getop:  lda [tp],z
+getopa: ldy #0                  ; (A = the byte at tp)
         tax
         lda optab,x             ; prec << 5 | op, $ff: relational, 0: none
         lbeq .ret
@@ -815,8 +844,11 @@ scomp:  ldy #0
 
 ; ---- ITEM ----
 !zone item
-item:   jsr nxt
-        cmp #TNUM
+item:   lda [tp],z              ; (NXT inline)
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #TNUM
         bne +
         jmp tnumget
 +       cmp #'0'
