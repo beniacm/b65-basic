@@ -4,7 +4,8 @@ B65 BASIC is an interactive BASIC interpreter for the MEGA65's 45GS02 CPU.
 It is an altered 45GS02 re-implementation of R.T. Russell's BBC BASIC (Z80)
 v5 (zlib licence, see LICENSE). It is not a compiler: you get immediate
 mode, line editing, LIST and RUN on the machine. The main target is a
-standard MEGA65 (R3 to R6, standard core). See docs/DESIGN.md for the design.
+standard MEGA65 (R3 to R6, standard core). See docs/USER.md for a user guide
+and docs/DESIGN.md for the design.
 
 ## Features
 

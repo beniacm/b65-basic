@@ -1,0 +1,51 @@
+B65 BASIC v0.1-dev (45GS02) for MEGA65
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 EVERY 50,1 GOSUB 100 : REM every second on timer 1
+>20 AFTER 250 GOSUB 200 : REM once, after 5 s (timer 0)
+>30 REPEAT : UNTIL TIME>=T%+600
+>40 DI:END
+>100 PRINT "tick" : RETURN
+>200 PRINT "five seconds" : RETURN
+>T%=TIME:RUN
+tick
+tick
+tick
+tick
+tick
+five seconds
+tick
+>NEW
+>ENVELOPE 1,2,1,-1,0,4,4,0,126,-4,0,-126,126,100
+>SOUND 1,1,100,40 : REM 2 s of warbling tone on channel 1
+>MODE 1 : GCOL 5 : CIRCLE FILL 160,100,50
+>GCOL 7 : ELLIPSE 160,100,120,40 : GCOL 3 : FILL 10,10
+>LINE 0,0,319,199 : P%=POINT(160,100):Q%=POINT(5,5)
+>SPRITE 0,100,80,2 : REM sprite 0 at x 100, y 80 in red
+>SPRITE 0 OFF
+>MOUSE ON : MOUSE X,Y,B : MOUSE TO 160,100 : MOUSE OFF
+>MODE 0:PRINT P%;" ";Q%;" ";X;" ";Y;" ";B
+         3 3 160 100 0
+>!&8000000=12345 : PRINT !&8000000
+     12345
+>?&FF80000=7 : PRINT ?&FF80000
+         7
+>DIM A(60000), B$(1000) : A(60000)=PI : B$(1000)="far" : PRINT A(60000);" ";B$(1000)
+3.14159265 far
+>DIM B(2),C(2),M(1,1),V(1),W(1),S$(1):B()=1,2,3:C()=4,5,6
+>A()=0:PRINT SUM(A())
+         0
+>DIM D(2):D()=B()+C():PRINT D(0);D(2):D()=B()*2:PRINT D(2):D()=2-B():PRINT D(2):D()=-B():PRINT D(1)
+         59
+         6
+        -1
+        -2
+>M()=1,2,3,4:V()=5,6:W()=M().V():PRINT W(0);" ";W(1)
+        17 39
+>S$()="a","b":S$()=S$()+"!":PRINT S$(0);S$(1);" ";SUMLEN(S$());" ";DIM(M(),1)
+a!b! 4 1
+>PRINT ~?&6E0;" ";?&6E1;" ";?&6E2+256*?&6E3;" ";?&6E4
+         3 0 384 8
+>
