@@ -256,14 +256,17 @@ xfindd: ldx defkey
         lda xkey
         eor xkey+1
         sta xh
-        lda #0
+        tax                     ; way 0 first (the usual hit)
+        jsr .cmp
+        bcc .r
+        lda #1
         sta xw
 .lp     ldx xw                  ; four ways: h, h EOR $80, $40, $C0
         lda xh
         eor .wt,x
         tax
         jsr .cmp
-        bcc .r
+        bcc .mtf
         inc xw
         lda xw
         cmp #4
@@ -291,6 +294,42 @@ xfindd: ldx defkey
 .u      sec
 .r      rts
 .wt     !byte 0, $80, $40, $c0
+.mtf    phy                     ; a hit in another way: swap it into way 0
+        ldy xh                  ; (hot keys end up where XCRUN looks first)
+        lda XKLO,x
+        pha
+        lda XKLO,y
+        sta XKLO,x
+        pla
+        sta XKLO,y
+        lda XKHI,x
+        pha
+        lda XKHI,y
+        sta XKHI,x
+        pla
+        sta XKHI,y
+        lda XCLO,x
+        pha
+        lda XCLO,y
+        sta XCLO,x
+        pla
+        sta XCLO,y
+        lda XCHI,x
+        pha
+        lda XCHI,y
+        sta XCHI,x
+        pla
+        sta XCHI,y
+        lda XMOD,x
+        pha
+        lda XMOD,y
+        sta XMOD,x
+        pla
+        sta XMOD,y
+        ldx xh
+        ply
+        clc
+        rts
 .cmp    lda XKHI,x
         cmp xkey+1
         lbne .no
@@ -338,19 +377,7 @@ xcrun:  lda #0
         lda XMOD,x
         cmp xmode
         beq .hit
-.two    txa                     ; the second way inline too
-        eor #$80
-        tax
-        lda XKLO,x
-        cmp tp
-        bne .thr
-        lda XKHI,x
-        cmp tp+1
-        bne .thr
-        lda XMOD,x
-        cmp xmode
-        beq .hit
-.thr    lda xmode
+.two    lda xmode
         jsr xfindt
         bcs .mis2
 .hit    stx xslot
