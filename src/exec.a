@@ -2131,7 +2131,16 @@ procname:
         inw tp
         cpx #38
         bcc -
-+       stx nlen
++       cmp #'$'                ; a type suffix belongs to the name (FNs$)
+        beq +
+        cmp #'%'
+        beq +
+        cmp #'&'
+        bne ++
++       sta NBUF,x
+        inx
+        inw tp
+++      stx nlen
         rts
 
 ; FINDDEF: A = TPROC/TFN. Find DEF, return ptr1 -> text after name
@@ -2244,9 +2253,12 @@ finddef:
         iny
         inx
         bra -
-.end    jsr lp1y            ; name must end here
-        jsr range1
-        bcc .nx
+.end    jsr lp1y            ; name must end here (no suffix left either)
+        jsr range0
+        bcs +
+        cmp #'('
+        bne .nx
++
         tya                     ; found: ptr1 += y
         clc
         adc ptr1

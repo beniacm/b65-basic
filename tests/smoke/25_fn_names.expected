@@ -1,0 +1,23 @@
+B65 BASIC v0.1-dev (45GS02) for MEGA65
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 PRINT FNa$;" ";FNb$("x");" ";FNc$("y");" ";FNd("q");" ";FNe;" ";FNe%;" ";FNc$(FNc$("p"))
+>20 A$=FNc$("z"):PRINT A$:PROCp$("v"):PROCp:ON ERROR PRINT REPORT$:END
+>30 PRINT FNc("y")
+>100 DEF FNa$="aa"
+>110 DEF FNb$(T$)=T$
+>120 DEF FNc$(T$)=T$+T$
+>130 DEF FNd(T$)=LEN(T$)
+>140 DEF FNe=1
+>150 DEF FNe%=2
+>160 DEF PROCp$(S$):PRINT "p$ ";S$:ENDPROC
+>170 DEF PROCp:PRINT "p":ENDPROC
+>RUN
+aa x yy 1 1 2 pppp
+zz
+p$ v
+p
+No such FN/PROC
+>
