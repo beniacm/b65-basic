@@ -44,6 +44,78 @@ ovl_xc_img:
         jmp xcline              ; $E009: GOTO/GOSUB line -> line address
         jmp xcdef               ; $E00C: PROC/FN call site -> DEF (cached)
         jmp xcdefput            ; $E00F: remember it
+        jmp xcform              ; $E012: DEF (defkey) -> its numeric formals in PFB
+        jmp xcformput           ; $E015: remember PFB for defkey
+
+; XCFORM: kind 5, keyed by the DEF text after the name: a block in the
+; code cache: count, text after the formals, (vptr, vtype) per formal.
+; Carry clear: copied to PFB.
+!zone xcform
+xcform: lda defkey
+        eor defkey+1
+        tax
+        lda XKHI,x
+        cmp defkey+1
+        bne .no
+        lda XKLO,x
+        cmp defkey
+        bne .no
+        lda XMOD,x
+        cmp #5
+        bne .no
+        lda XCLO,x
+        sta .src+1
+        lda XCHI,x
+        sta .src+2
+        ldx #0
+.src    lda $ffff,x
+        sta PFB,x
+        inx
+        cpx #21
+        bne .src
+        clc
+        rts
+.no     sec
+        rts
+xcformput:
+        lda XNEXT               ; room for 21 bytes?
+        clc
+        adc #21
+        lda XNEXT+1
+        adc #0
+        cmp #>XCEND
+        bcc +
+        jsr xflush
++       lda XNEXT
+        sta .dst+1
+        lda XNEXT+1
+        sta .dst+2
+        ldx #0
+-       lda PFB,x
+.dst    sta $ffff,x
+        inx
+        cpx #21
+        bne -
+        lda defkey
+        eor defkey+1
+        tax
+        lda defkey
+        sta XKLO,x
+        lda defkey+1
+        sta XKHI,x
+        lda #5
+        sta XMOD,x
+        lda XNEXT
+        sta XCLO,x
+        lda XNEXT+1
+        sta XCHI,x
+        lda XNEXT
+        clc
+        adc #21
+        sta XNEXT
+        bcc +
+        inc XNEXT+1
++       rts
 
 ; XCDEF: tp -> the name after TPROC/TFN. Carry clear: ptr1 = DEF text after
 ; the name, tp after the name, retmask (slot kind $40 | retmask).

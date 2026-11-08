@@ -956,6 +956,8 @@ arrrefq:
         bne .an
         ldz #0
         jmp arrref
+PFB     = PARBUF+$100       ; formal list (slot 0's RETURN half: retmask is 0 here)
+pfok    = $06cb             ; $FF: formals of this DEF are being recorded
 ; XC4: call overlay 4 at $E000+X, mapping the caller's overlay back after
 ; it (FN calls can come from overlay code); carry from the call
 xc4:    stx .xj+1
@@ -2524,10 +2526,25 @@ callset2:
         sta tp
         lda ptr1+1
         jsr settph
-        ; bind formal parameters
+        ; bind formal parameters: numeric formals known from an earlier
+        ; call (overlay 4, kind 5: PFB) are bound without parsing them
         lda #0
         sta tmp2                ; slot index
-        jsr nxt
+        sta pfok
+        lda tp+2
+        beq .bp
+        lda retmask
+        bne .bp
+        lda tp
+        sta defkey
+        lda tp+1
+        sta defkey+1
+        ldx #$12                ; XCFORM: PFB
+        jsr xc4
+        lbcc .fast
+        lda #$ff                ; record them this time
+        sta pfok
+.bp     jsr nxt
         cmp #'('
         lbne .nof
         inw tp
@@ -2541,6 +2558,8 @@ callset2:
         jsr nxt
 +       jsr arrrefq             ; formal array parameter name()
         bne .fv
+        lda #0                  ; (array formals: not recorded)
+        sta pfok
         lda #2
         sta vtype
         jsr savelocal
@@ -2550,7 +2569,8 @@ callset2:
         jmp syntax
 +       beq +
         jsr putvar
-+       jsr savelocal
++       jsr pfrec
+        jsr savelocal
 .fl     lda tmp2
         asl
         clc
@@ -2648,11 +2668,86 @@ callset2:
 +       jsr braket
         lda tmp2
         cmp cnt
-        bne .badarg
-        jmp xeq
+        lbne .badarg
+        bit pfok                ; all numeric: remember the formals
+        bpl +
+        lda cnt
+        sta PFB
+        lda tp
+        sta PFB+1
+        lda tp+1
+        sta PFB+2
+        ldx #$15                ; XCFORMPUT
+        jsr xc4
++       jmp xeq
 .nof    lda cnt
-        bne .badarg
+        lbne .badarg
         jmp xeq
+; fast binding: PFB = count, text after the formals, (vptr, vtype) each
+.fast   lda PFB
+        cmp cnt
+        bne .badarg
+.fb     lda tmp2
+        cmp cnt
+        bcs .fd
+        asl                     ; vptr, vtype of formal tmp2
+        adc tmp2
+        tax
+        lda PFB+3,x
+        sta vptr
+        lda PFB+4,x
+        sta vptr+1
+        lda PFB+5,x
+        sta vtype
+        jsr savelocal
+        lda tmp2                ; its value from the PARBUF slot
+        asl
+        clc
+        adc #>PARBUF
+        sta ptr2+1
+        lda #0
+        sta ptr2
+        ldy #0
+        lda (ptr2),y
+        sta etype
+        ldx #0
+-       iny
+        lda (ptr2),y
+        sta acc,x
+        inx
+        cpx #5
+        bne -
+        jsr storen              ; (a string argument: Type mismatch)
+        inc tmp2
+        bra .fb
+.fd     lda PFB+1
+        sta tp
+        lda PFB+2
+        jsr settph
+        jmp xeq
+; PFREC: note formal tmp2 (vptr, vtype) in PFB while binding (numeric only)
+pfrec:  bit pfok
+        bpl .px
+        lda vtype
+        cmp #4
+        beq +
+        cmp #5
+        bne .pn
++       lda tmp2
+        asl
+        adc tmp2
+        tax
+        lda vptr
+        sta PFB+3,x
+        lda vptr+1
+        sta PFB+4,x
+        lda vtype
+        sta PFB+5,x
+        lda farflag
+        beq .px
+.pn     lda #0
+        sta pfok
+.px     rts
 .badarg2
 .badarg lda #31                 ; Bad arguments
         jmp error
