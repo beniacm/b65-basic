@@ -830,8 +830,59 @@ chknum: lda etype
         jmp error
 +       rts
 
-; number constant -> CON (floating point package)
-number: jmp con
+; number constant: decimal integers of up to 9 digits directly (Q ops),
+; anything else (more digits, '.', 'E') through CON (floating point package)
+!zone number
+number: lda tp
+        sta fe_
+        lda tp+1
+        sta ff_
+        lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+        lda #9                  ; digits allowed on the fast path
+        sta fc_
+.l      lda [tp],z
+        cmp #'0'
+        bcc .x
+        cmp #'9'+1
+        bcs .x
+        dec fc_
+        bmi .slow
+        and #$0f
+        sta fd_
+        inw tp
+        aslq acc                ; acc = 10 * acc + digit (Q = A,X,Y,Z)
+        ldq acc
+        aslq acc
+        aslq acc
+        clc
+        adcq acc
+        stq acc
+        ldz #0
+        lda acc
+        clc
+        adc fd_
+        sta acc
+        bcc .l
+        inw acc+1
+        bne .l
+        inw acc+2
+        bra .l
+.x      cmp #'.'
+        beq .slow
+        cmp #'E'
+        beq .slow
+        rts
+.slow   lda fe_
+        sta tp
+        lda ff_
+        sta tp+1
+        jmp con
 
 !zone hexnum
 hexnum: inw tp
@@ -860,13 +911,10 @@ hexnum: inw tp
 .d      sta tmp0
         inw tp
         inc tmp1
-        ldx #4
--       asl acc
-        rol acc+1
-        rol acc+2
-        rol acc+3
-        dex
-        bne -
+        aslq acc
+        aslq acc
+        aslq acc
+        aslq acc
         lda acc
         ora tmp0
         sta acc
