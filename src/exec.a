@@ -937,6 +937,25 @@ goto:   jsr linetgt
         lda ptr1+1
         jsr settph
         jmp xeq0
+; ARRREFQ: ARRREF only when the name at tp is followed by "()" (else NZ,
+; tp unchanged): saves the name scan of every argument, formal and LOCAL
+arrrefq:
+        ldz #0
+-       lda [tp],z
+        cmp #'('
+        beq .ap
+        inz
+        jsr range0
+        bcc -
+.an     ldz #0
+        lda #1
+        rts
+.ap     inz
+        lda [tp],z
+        cmp #')'
+        bne .an
+        ldz #0
+        jmp arrref
 ; XC4: call overlay 4 at $E000+X, mapping the caller's overlay back after
 ; it (FN calls can come from overlay code); carry from the call
 xc4:    stx .xj+1
@@ -2343,7 +2362,7 @@ callset2:
         jmp .badarg
 +       pha
         jsr nxt
-        jsr arrref              ; whole array argument: name()
+        jsr arrrefq             ; whole array argument: name()
         bne .ae
         lda ptr2
         sta acc
@@ -2520,7 +2539,7 @@ callset2:
         bne +
         inw tp
         jsr nxt
-+       jsr arrref              ; formal array parameter name()
++       jsr arrrefq             ; formal array parameter name()
         bne .fv
         lda #2
         sta vtype
@@ -2738,7 +2757,7 @@ local:  cmp #TDATA
         sta vtype
         jsr savelocal
         jmp xeq
-+       jsr arrref              ; LOCAL a()
++       jsr arrrefq             ; LOCAL a()
         bne .nv
         lda #2
         sta vtype
