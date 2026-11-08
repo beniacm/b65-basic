@@ -134,7 +134,7 @@ K325T, `?&6E2`/`?&6E3` = chip RAM in KB, `?&6E4` = attic RAM in MB.
 
 | file | what |
 |---|---|
-| `examples/parallax.bas` | three-layer RRB parallax scrolling, sprites, DMA list; birds on a K325T |
+| `examples/parallax.bas` | three overlapping RRB layers of full-colour glyphs, own 256-colour palette, 16-colour sprites between the layers, DMA-list scrolling; birds on a K325T |
 | `examples/basic65/parallax65.bas` | the same in BASIC 65 |
 | `examples/rrblist_b65.bas` | RRB list mode v1: bouncing balls (K325T only) |
 | `examples/rrblist_b65v2.bas` | RRB list mode v2: bouncing balls, V400 (K325T only) |

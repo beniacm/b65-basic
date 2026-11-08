@@ -50,9 +50,9 @@ Verified on a QMTECH K325T board running the MEGA65 K325T core: the smoke
 suite passes 22/22 at commit 4df985b, SD card writing is checked with
 `fsck.fat`, and graphics, sprites, sound, mouse, big programs and attic
 arrays were checked there; see "Hardware status" in docs/DESIGN.md. The
-parallax demo's transcript test passes on the board, but its picture (RRB
-timing, sprite priority, list-mode birds) is still unchecked because the
-HDMI capture dongle failed. `tests/hw/09_textload.txt` (LOAD from the
+parallax demo was checked on the board in its earlier 80-column form; the
+256-colour rework (DBLRR on the V400 row schedule) is still to be checked
+there. `tests/hw/09_textload.txt` (LOAD from the
 D81) waits for `dist/b65.d81` on the served card. A standard MEGA65 (R3 to R6) has not
 been tested yet: its HyperRAM timing, SD controller and model detection
 paths are untested. The K325T core, the list-mode documentation and the
@@ -80,10 +80,14 @@ text and entered line by line, exactly as if typed (lines without a
 number get the highest number so far + 10). Text files need attic RAM.
 
 Examples (`examples/`): `rrblist_b65.bas` and `rrblist_b65v2.bas` (RRB
-list mode v1/v2; K325T core only), `parallax.bas` (three-layer RRB
-parallax: 80 columns, fine scroll through GOTOX, coarse scroll through one
-self-modifying DMA list per frame, two sprites between/in front of the
-layers, six list-mode v2 birds on a K325T; 50 frames per second).
+list mode v1/v2; K325T core only), `parallax.bas` (three overlapping RRB
+layers in 40 columns, all full-colour glyphs from an own 256-colour palette:
+sky gradient and snowy mountains, rolling hills seen in the mountains'
+dips, trees, fence and ground with the hills showing between the trunks; a
+shaded 16-colour balloon sprite passes behind the trees and in front of the
+hills, a 16-colour plane in front of all; fine scroll through GOTOX, coarse
+scroll through one self-modifying DMA list per frame, speeds 1:2:6; six
+shaded, flapping list-mode v2 birds on a K325T; 50 frames per second).
 `examples/basic65/parallax65.bas` is the BASIC 65 twin (same picture and
 motion; on the D81 as the BASIC 65 program `PARALLAX65`).
 `walkers.bas` / `basic65/walkers65.bas` are work in progress (a crowd demo

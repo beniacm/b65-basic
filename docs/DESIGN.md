@@ -321,28 +321,43 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 
 ### Parallax demo (`examples/parallax.bas`, BASIC 65 twin in `examples/basic65/`)
 
-* Rows of 246 tokens (492 bytes, LINESTEP/CHRCOUNT): GOTOX + 81 glyphs per
-  layer, layer 3 opaque + "behind", layer 2 transparent + behind, layer 1
-  transparent (sprite 0 has the priority bit: between layers 2 and 1).
-  Ordinary 8x8 glyphs from a 256-glyph charset at `$54000` (cheapest to
-  paint); colours constant per layer row. Bank 5: rows `$50000`, DMA list
-  `$53100`, cells `$53700`, maps `$54800` (32 rows of 512 bytes: 128
-  columns + the first 81 again, rows 256-aligned so that the window start
-  is the source low byte), sprites `$5FA00/$5FC00`, birds `$5F000-$5F8FF`;
-  colour RAM offset `$0800`.
-* Per frame: 6 cell bytes (fine X, coarse window) and one DMA list of 96
+* H320, 25 rows, rows of 126 tokens (252 bytes, LINESTEP/CHRCOUNT): GOTOX +
+  41 glyphs per layer. Every glyph is full colour (`$D054` CHR16 + FCM,
+  glyphs `$1680+n`, 64 bytes each at `$5A000`) from an own palette: ramps
+  from entry 16 on (sky, earth, rock, two greens, reds, wood, snow, warm,
+  outline, blue), written nibble-swapped to `$D100-$D3FF` by one shared
+  routine (`PROCpalette` / `gosub 2700`), entries 16-255 saved at start and
+  restored at the end (`$5F400-$5F6FF`).
+* Layer 3 (opaque, "behind"): a sky gradient (one tile per row whose eight
+  lines step through the 32-entry sky ramp) and lit/shaded snowy mountains,
+  rows 5-17. Layer 2 (transparent, behind): rolling hills, rows 11-21, so
+  the mountains show in their dips. Layer 1 (transparent, foreground):
+  tree crowns (a lit sphere over 3x3 tiles), trunks, fence, grass and earth,
+  rows 13-24, so the hills show between trunks and under the crowns. Sprite
+  6 (16-colour balloon, priority bit) passes behind layer 1 and in front of
+  layers 2 and 3; sprite 7 (16-colour plane) is in front of all. Speeds
+  1:2:6 (far to near); all map periods divide 128 so the wrap is seamless.
+* Bank 5: rows `$50000`, DMA list `$53100`, cells `$53700`, maps `$54800`
+  (36 rows of 512 bytes: 128 columns + the first 41 again, 256-aligned so
+  that the window start is the source low byte), tiles `$5A000`, birds
+  `$5F000-$5F8FF`, sprites `$5FA00/$5FC00`; colour RAM offset `$0800`.
+* Per frame: 6 cell bytes (fine X, coarse window) and one DMA list of 108
   jobs: per content row "copy the coarse cell into the next job's source
-  low byte", "copy the fine cell into the row's GOTOX", "copy 81 tokens"
+  low byte", "copy the fine cell into the row's GOTOX", "copy 41 tokens"
   (each job prefixed `$0B,$00`; the list address must be written before
-  every trigger: it advances). B65: about 27 statements per frame, 4.5 ms
-  (Xemu, without the vsync wait); BASIC 65: about 20 statements, 4.1 ms;
-  both run at 50 frames per second in Xemu.
-* RRB time: 246 tokens per raster line are ~1970 cycles with fast RRB
-  (K325T, 8 per token) and ~2700 without (11 per glyph), against 2592 per
-  line; the badline adds 493 (row fetch) and list-mode objects their
-  expansion. So the demo sets `$D051` DBLRR (V200: every glyph row is two
-  raster lines) by default (`DB%`/`db`), which doubles the time; with DB
-  off the K325T list mode lead applies (to be compared on the board).
+  every trigger: it advances). B65: 25 statements per frame, 4.6 ms (Xemu,
+  without the vsync wait); BASIC 65: 19 statements, 3.9 ms; both run at 50
+  frames per second.
+* RRB time: 3 GOTOX + 123 FCM glyphs per line, about 1970 of the 2592
+  cycles of a line (16 per FCM glyph). DBLRR is on by default (`DB%`/`db`)
+  on every machine, on the V400 row schedule: with HOTREG off `$D031` bit 3
+  (V400), `$D05B` = 0 (one line per glyph row), `$D07B` = 24 (25 rows),
+  `$D051` = `$C0`; each glyph row is painted once and shown on two lines
+  (the V200 look) with 5184 cycles per painting. DBLRR on the V200 schedule
+  is broken in the VIC-IV itself (rows become 32 lines tall). All four are
+  restored at the end. On a K325T six list-mode v2 birds (four shaded
+  frames, two token lists in opposite phase) fly in front of all; v2 X/Y are
+  masked with AND 1023.
 * `tests/smoke/21_parallax.txt` (`#include` of the example) checks the
   build and 40 frames of scrolling.
 
@@ -523,9 +538,8 @@ after every write test, no new findings, only B65* files changed):
 
 Still open or only partly checked:
 
-* The parallax demo's picture: its transcript test (21_parallax) passes on
-  the board, but RRB timing (DBLRR on/off), sprite priority and the
-  list-mode birds are unchecked: the HDMI capture dongle failed.
+* The parallax demo's 256-colour rework (DBLRR on the V400 schedule,
+  sprite priority between the layers, list-mode birds) on the board.
 * `tests/hw/09_textload.txt` (LOAD of text programs from the mounted D81,
   F011 reads): waits for `dist/b65.d81` on the served card.
 
