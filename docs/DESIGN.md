@@ -455,8 +455,8 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 * **Big program space (step 3).** The program text lives in its own bank:
   bank 1, PAGE = `&10800`, up to `&1F7FF` (the colour RAM mirror starts at
   `&1F800`), about 60 KB minus installed libraries. Variables, heap and the
-  CPU stack stay in bank 0 (LOMEM = end of the interpreter, about `&8E00`,
-  to HIMEM `&CF00`, about 16 KB).
+  CPU stack stay in bank 0 (LOMEM = the page after the interpreter, `&9800`
+  since the speed work, to HIMEM `&CF00`, about 14 KB).
   * `tp` is a 32-bit pointer (`$48`-`$4B`) and every text read is
     `lda [tp],z` (`+ldtpy` for the few Y-indexed reads). Its bank byte is
     derived from the 16-bit address whenever the high byte is stored
@@ -525,8 +525,8 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | `$1F00`-`$1FAB` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries, mouse |
 | `$1FB0`-`$1FB7` | testmode, lexmode, AUTO number/step, TRACE limit (moved out of zero page) |
 | `$1FB8`-`$1FDF` | libase/libcur, array cursors aelp/aelq, arrtop, avt2, RETURN far capture, overlay-2 element addresses |
-| `$2001`-`$8DFF` | PRG stub + resident interpreter (overlay images follow in the PRG up to `$CF00` and are copied to bank 4 at start-up) |
-| `$8E00`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
+| `$2001`-`$97FF` | PRG stub + resident interpreter (the overlay images follow the code directly in the PRG, up to `$CF00`, and are copied to bank 4 at start-up) |
+| `$9800`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
 | `$E000`-`$FFFF` | overlay window (MAP) |
 | bank 1 `$10800`-`$1F7FF` | program text (PAGE..TOP), libraries at the top |
 | bank 1 `$10000` | test script as loaded by Xemu, copied to attic `$8020000` at start-up |

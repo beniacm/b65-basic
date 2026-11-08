@@ -26,8 +26,10 @@ ovltab: !word ovl_asm_img, ovl_asm_end-$e000
         !word ovl_xtra_img, ovl_xtra_end-$e000
         !word ovl_fat_img, ovl_fat_end-$e000
 code_end:
-        !align 255, 0
-prog_start:
+; the heap starts on the page after the resident code; the overlay images
+; follow the code directly (they are copied to bank 4 at start-up and the
+; heap may then overwrite them)
+prog_start = (code_end + 255) & $ff00
 !if prog_start > $a000 { !error "interpreter too large" }
 ; ---- overlay images: copied to bank 4 at start-up, then free for programs ----
 !src "src/asm.a"
