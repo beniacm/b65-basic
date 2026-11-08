@@ -354,7 +354,9 @@ irqhandler:
         bpl .t
         jsr sndirq
         jsr kbscan
+!ifndef PROF {                  ; (profile builds: no room for the mouse)
         jsr mousirq
+}
 .iex    plz
         ply
         plx
@@ -368,6 +370,7 @@ mouse_y = $1fa6         ; 2 pixels 0..199
 mouse_ox = $1fa8        ; last pot X
 mouse_oy = $1fa9        ; last pot Y
 mouse_on = $1faa        ; $80: sprite 0 follows the mouse
+!ifndef PROF {
 !zone mouse
 mousirq:
         lda $d620
@@ -466,6 +469,7 @@ mousirq:
 .mx     !word 319, 199
 mouse_tmp = $1fab
 
+}
 ; ---------------- EVERY / AFTER / TIMELEFT / DI / EI ----------------
 ; AFTER t[,n] GOSUB line   EVERY t[,n] GOSUB line   (t in 1/50 s, n = 0..3)
 !zone everyafter
