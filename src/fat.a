@@ -1870,6 +1870,7 @@ o_install:
         sta libase
         lda ptr2+1
         sta libase+1
+        jsr xcflush             ; (compiled code may assume no "name()" in it)
         jmp xeq
 .bad0   ldz #0
         bra .bad

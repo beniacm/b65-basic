@@ -752,8 +752,9 @@ listit:
         lda ptr1+1
         adc #0
         jsr settph
-        jsr tnumlist            ; A = length
-        sta tmp4
+        jsr ovjsr               ; tmp4 = length (overlay 0)
+        !byte 0
+        !word tnumlist
         pla
         clc
         adc tmp4

@@ -958,6 +958,18 @@ arrrefq:
         jmp arrref
 PFB     = PARBUF+$100       ; formal list (slot 0's RETURN half: retmask is 0 here)
 pfok    = $06cb             ; $FF: formals of this DEF are being recorded
+; XCCOMP: overlay 4 asks for a compile: map the compiler (overlay 2), run
+; it, map overlay 4 back (A and carry from the compiler)
+xccomp: lda #2
+        jsr ovmap
+        jsr xcomp
+        php
+        pha
+        lda #4
+        jsr ovmap
+        pla
+        plp
+        rts
 ; XC4: call overlay 4 at $E000+X, mapping the caller's overlay back after
 ; it (FN calls can come from overlay code); carry from the call
 xc4:    stx .xj+1

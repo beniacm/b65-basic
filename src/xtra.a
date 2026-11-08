@@ -665,5 +665,672 @@ dotprod:
         sta xj+1
         ldz #0
         rts
+
+; ==== the expression/statement compiler for overlay 4 (moved here for room) ====
+; ---------------- compile ----------------
+; XCOMP: compile the expression at tp into XB (xbp bytes), xend = the text
+; address after it; tp is left unchanged. Carry set: A = 1 never compilable,
+; 2 not now (a variable that does not exist yet).
+!zone xcomp
+xcomp:  lda tp
+        sta xctp0
+        lda tp+1
+        sta xctp0+1
+        lda #2                  ; (bytes 0, 1: the text address after it)
+        sta xbp
+        lda #0
+        sta xdep
+        sta xcnst
+        tsx
+        stx xsps
+        tsy
+        sty xsps+1
+        lda xmode
+        cmp #1
+        bne +
+        jsr ctarget             ; statement: the target first
++       lda #1
+        jsr cexp
+        lda xmode
+        cmp #2
+        bne +
+        jsr cthen               ; IF: THEN and the ELSE/end of line targets
+        bra ++
++       lda xmode
+        beq +
+        ldx #0                  ; statement: the store (xstore, xstlen bytes)
+-       phx
+        lda xstore,x
+        jsr xemit
+        plx
+        inx
+        cpx xstlen
+        bne -
++
+++      lda #<h_end
+        jsr xemit
+        lda tp
+        sta xend
+        sta XB
+        lda tp+1
+        sta xend+1
+        sta XB+1
+        lda xctp0
+        sta tp
+        lda xctp0+1
+        sta tp+1
+        clc
+        rts
+xfail2: lda #2
+        bra +
+xfail:  lda #1
++       sta xfk
+        ldx xsps
+        ldy xsps+1
+        +setsp
+        lda xctp0
+        sta tp
+        lda xctp0+1
+        sta tp+1
+        ldz #0
+        lda xfk
+        sec
+        rts
+
+xemit:  ldx xbp
+        sta XB,x
+        inx
+        stx xbp
+        cpx #160
+        bcs xfail               ; too long for the buffer
+        rts
+; XEMITV: A = opcode, X = its no-spill variant (used for the first value)
+xemitv: ldy xfirst
+        bne xemit
+        txa
+        bra xemit
+xemitl: ldy xfirst              ; variables: h_vi/h_vf -> l_vi/l_vf
+        bne xemit
+        cmp #<h_vi
+        bne +
+        lda #<l_vi
+        bra xemit
++       lda #<l_vf
+        bra xemit
+xpush:  inc xdep                ; one more value on the stack
+        lda xdep
+        cmp #30
+        bcs xfail
+        rts
+
+; CEXP: A = minimum precedence (as EXPRP)
+cexp:   pha
+        jsr citem
+.l      lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       jsr getopa              ; A = prec (Z: none), X = op, Y = length
+        beq .done
+        sta xprec
+        pla
+        pha
+        cmp xprec
+        beq .ok
+        bcs .done
+.ok     phx                     ; op
+        tya                     ; consume the operator
+        clc
+        adc tp
+        sta tp
+        bcc +
+        inc tp+1
++       lda xprec
+        inc
+        jsr cexp
+        plx
+        stx xccop
+        lda xophand,x
+        bne +
+        lda #<h_gen             ; through BINOP: h_gen, op
+        jsr xemit
+        lda xccop
++       jsr xemit
+        dec xdep
+        bra .l
+.done   pla
+        rts
+
+xophand:                        ; by OP_ number (0: generic)
+        !byte <h_or, <h_eor, <h_and, <h_eq, <h_ne, <h_lt, <h_gt, <h_le, <h_ge
+        !byte 0, 0, 0, <h_add, <h_sub, <h_mul, 0, 0, 0, 0
+
+; CTHEN: after an IF condition: THEN (not followed by the end of the line,
+; ';' or a line number), then ELSE or the CR of this line (strings, line
+; numbers, REM and DATA skipped as IF's own scan does). Emits h_if,
+; then-address, false-address, kind (1 ELSE, 2 CR).
+cthen:  lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #TTHEN
+        lbne xfail              ; IF cond statement (no THEN): interpreter
+        inw tp
+        jsr nxt
+        cmp #CR
+        lbeq xfail              ; multi-line IF
+        cmp #';'
+        lbeq xfail
+        cmp #TLINO
+        lbeq xfail              ; THEN line
+        lda #<h_if
+        jsr xemit
+        lda tp
+        jsr xemit
+        lda tp+1
+        jsr xemit
+        ldz #0
+.f      lda [tp],z
+        cmp #CR
+        beq .cr
+        cmp #TELSE
+        beq .el
+        inz
+        lbeq xfail
+        cmp #'"'
+        beq .q
+        cmp #TLINO
+        beq .ln
+        cmp #TREM
+        beq .rem
+        cmp #TDATA
+        bne .f
+.rem    lda [tp],z
+        cmp #CR
+        beq .cr
+        inz
+        lbeq xfail
+        bra .rem
+.q      lda [tp],z
+        cmp #CR
+        beq .cr
+        inz
+        lbeq xfail
+        cmp #'"'
+        bne .q
+        bra .f
+.ln     inz
+        inz
+        inz
+        bra .f
+.el     inz                     ; after ELSE
+        lda #1
+        bra +
+.cr     lda #2
++       sta xfk
+        tza
+        ldz #0
+        clc
+        adc tp
+        pha
+        lda tp+1
+        adc #0
+        sta xcsy
+        pla
+        jsr xemit
+        lda xcsy
+        jsr xemit
+        lda xfk
+        jmp xemit
+
+; CTARGET: ?item= / !item= (address on the stack), A%= / name%= / name=
+; (the store op in xstore: opcode, and for variables the address)
+ctarget:
+        lda [tp],z
+        cmp #'?'
+        beq .ind
+        cmp #'!'
+        bne .var
+        lda #<h_st4
+        bra +
+.ind    lda #<h_st1
++       sta xstore
+        lda #1
+        sta xstlen
+        inw tp
+        jsr citem               ; the address
+        bra .eq
+.var    cmp #'@'
+        lbcc xfail
+        cmp #$80
+        lbcs xfail
+        jsr getname
+        lbcs xfail
+        jsr isarray
+        bne +
+        jsr carr                ; a%(i)= / a(i)=: index on the stack
+        ldx #<h_sai             ; h_ai/h_af -> h_sai/h_saf
+        lda xarrop
+        cmp #<h_ai
+        beq ++
+        ldx #<h_saf
+++      stx xstore
+        ldx #9
+-       lda xarr,x
+        sta xstore+1,x
+        dex
+        bpl -
+        lda #11
+        sta xstlen
+        bra .eq
++       lda [tp],z
+        cmp #'?'                ; a%?n=, a%!n=: not here
+        lbeq xfail
+        cmp #'!'
+        lbeq xfail
+        jsr locate
+        lbcs xfail
+        lbne xfail2             ; a new variable: the interpreter creates it
+        lda vtype
+        ldx #<h_svi
+        cmp #4
+        beq +
+        ldx #<h_svf
+        cmp #5
+        lbne xfail
++       stx xstore
+        lda vptr
+        sta xstore+1
+        lda vptr+1
+        sta xstore+2
+        lda #3
+        sta xstlen
+.eq     lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #'='
+        lbne xfail              ; compound assignments: the interpreter
+        ldz #1
+        lda [tp],z
+        ldz #0
+        cmp #'='
+        lbeq xfail
+        inw tp
+        rts
+
+; ARRSCAN: carry set if "name()" (NBUF, nlen bytes ending in '(', then ')')
+; occurs in the program or an installed library: then a PROC array
+; parameter or LOCAL array may rebind the name and the run-time check stays
+arrscan:
+        lda page
+        sta fptr
+        lda page+1
+        sta fptr+1
+        lda top
+        sta xcae
+        lda top+1
+        sta xcae+1
+        jsr .rng
+        bcs .r
+        lda libase+1
+        cmp #>PLIM
+        bcc +
+        clc                     ; no library
+        rts
++
+        sta fptr+1
+        lda libase
+        sta fptr
+        lda #<PLIM
+        sta xcae
+        lda #>PLIM
+        sta xcae+1
+.rng    lda #PBANK
+        sta fptr+2
+        lda #0
+        sta fptr+3
+.lp     ldz #0
+        ldx #0
+-       lda [fptr],z
+        cmp NBUF,x
+        bne .nx
+        inz
+        inx
+        cpx nlen
+        bne -
+        lda [fptr],z
+        cmp #')'
+        beq .fd
+.nx     inw fptr
+        lda fptr
+        cmp xcae
+        lda fptr+1
+        sbc xcae+1
+        bcc .lp
+        ldz #0
+        clc
+.r      rts
+.fd     ldz #0
+        sec
+        rts
+
+; CARR: after "name(" (getname): an existing one-dimensional integer or
+; float array in attic RAM (global DIM). Compiles the index (tp after ')')
+; and sets xarrop (h_ai/h_af) and xarr: pointer field address, its value
+; (the handle, checked at run time), size, element base (32-bit).
+carr:   jsr locate
+        lbcs xfail
+        lbne xfail2
+        lda vtype
+        ldx #<h_ai
+        cmp #4
+        beq +
+        ldx #<h_af
+        cmp #5
+        lbne xfail
++       stx xarrop
+        lda vptr
+        sta xarr
+        lda vptr+1
+        sta xarr+1
+        ldy #0
+        lda (vptr),y
+        sta xarr+2
+        sta ptr2
+        iny
+        lda (vptr),y
+        sta xarr+3
+        sta ptr2+1
+        cmp #ARRH0              ; attic blocks only (not LOCAL arrays)
+        lbcc xfail
+        jsr blkap
+        lda [ap],z              ; dimensions
+        cmp #1
+        lbne xfail
+        inz
+        lda [ap],z
+        sta xarr+4
+        inz
+        lda [ap],z
+        sta xarr+5
+        ldz #0
+        lda ap
+        clc
+        adc #3
+        sta xarr+6
+        lda ap+1
+        adc #0
+        sta xarr+7
+        lda ap+2
+        adc #0
+        sta xarr+8
+        lda ap+3
+        adc #0
+        sta xarr+9
+        jsr arrscan             ; never "name()" anywhere: no name check at
+        bcs +                   ; run time (field address 0)
+        lda #0
+        sta xarr
+        sta xarr+1
++       bit xcnst               ; citem, integer array, "name(TNUM)": the
+        lbpl .vix                ; element address is known now
+        lda xarrop
+        cmp #<h_ai
+        lbne .vix
+        lda [tp],z
+        cmp #TNUM
+        lbne .vix
+        ldz #1
+        lda [tp],z
+        and #7
+        clc
+        adc #4
+        taz
+        lda [tp],z
+        ldz #0
+        cmp #')'
+        lbne .vix
+        lda tp
+        pha
+        lda tp+1
+        pha
+        jsr tnumget
+        pla
+        tax
+        pla
+        ldy acc+2               ; within the size?
+        bne .nk
+        ldy acc+3
+        bne .nk
+        ldy acc
+        cpy xarr+4
+        ldy acc+1
+        pha
+        tya
+        sbc xarr+5
+        pla
+        bcs .nk
+        lda acc                 ; base + index * 4
+        sta xcae
+        lda acc+1
+        asl xcae
+        rol
+        asl xcae
+        rol
+        sta xcae+1
+        lda #0
+        rol
+        tax
+        lda xarr+6
+        clc
+        adc xcae
+        sta xarr+6
+        lda xarr+7
+        adc xcae+1
+        sta xarr+7
+        txa
+        adc xarr+8
+        sta xarr+8
+        bcc +
+        inc xarr+9
++       inw tp                  ; past ')'
+        lda xdep
+        sta xfirst
+        jsr xpush
+        lda #<h_aic
+        sta xarrop
+        rts
+.nk     stx tp+1                ; (out of range: as a variable index)
+        sta tp
+.vix    lda xarrop
+        pha
+        ldx #9
+-       lda xarr,x
+        pha
+        dex
+        bpl -
+        lda #1                  ; the index (keeps the stack depth right)
+        jsr cexp
+        ldx #0
+-       pla
+        sta xarr,x
+        inx
+        cpx #10
+        bne -
+        pla
+        sta xarrop
+        lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #')'
+        lbne xfail
+        inw tp
+        rts
+
+citem:  lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #TNUM
+        bne .n0
+        jsr tnumget
+        bra .kon
+.n0     cmp #'.'                ; decimal text (floats, long numbers): CON now
+        beq +
+        cmp #'0'
+        bcc .n1
+        cmp #'9'+1
+        bcs .n1
++       jsr con
+.kon    lda xdep
+        sta xfirst
+        jsr xpush
+        lda accx
+        ora acc+1
+        ora acc+2
+        ora acc+3
+        bne +
+        lda #<h_k8
+        ldx #<l_k8
+        jsr xemitv
+        lda acc
+        jmp xemit
++       lda #<h_k40
+        ldx #<l_k40
+        jsr xemitv
+        ldx #0
+-       phx
+        lda acc,x
+        jsr xemit
+        plx
+        inx
+        cpx #5
+        bne -
+        rts
+.n1     cmp #'('
+        bne .n2
+        inw tp
+        lda #1
+        jsr cexp
+        lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #')'
+        lbne xfail
+        inw tp
+        rts
+.n2     cmp #'-'
+        bne .n3
+        inw tp
+        jsr citem
+        lda #<h_neg
+        jmp xemit
+.n3     cmp #'+'
+        bne .n4
+        inw tp
+        jmp citem
+.n4     cmp #'@'                ; static integer @%, A%..Z%
+        lbcc xfail
+        cmp #'Z'+1
+        bcs .dyn
+        tax
+        ldz #1
+        lda [tp],z
+        cmp #'%'
+        bne .dynz
+        inz
+        lda [tp],z
+        cmp #'('
+        beq .dynz
+        cmp #'?'
+        beq .dynz
+        cmp #'!'
+        beq .dynz
+        ldz #0
+        txa
+        sec
+        sbc #'@'
+        asl
+        asl
+        clc
+        adc #<STAVAR
+        pha
+        lda #>STAVAR
+        adc #0
+        pha
+        lda tp
+        clc
+        adc #2
+        sta tp
+        bcc +
+        inc tp+1
++       lda #<h_vi
+        bra .emv
+.dynz   ldz #0
+.dyn    cmp #$80                ; tokens (functions): not compiled
+        lbcs xfail
+        jsr getname             ; an existing numeric variable
+        lbcs xfail
+        jsr isarray
+        bne +
+        lda #$ff
+        sta xcnst
+        jsr carr                ; a%(i) / a(i): one dimension, attic
+        lda #0
+        sta xcnst
+        lda xarrop
+        ldx #<l_aic
+        cmp #<h_aic
+        beq .ac
+        jsr xemit
+        bra .ao
+.ac     jsr xemitv
+.ao
+        ldx #0
+-       phx
+        lda xarr,x
+        jsr xemit
+        plx
+        inx
+        cpx #10
+        bne -
+        rts
++
+        lda [tp],z
+        cmp #'?'
+        lbeq xfail
+        cmp #'!'
+        lbeq xfail
+        jsr locate
+        lbcs xfail
+        lbne xfail2             ; not created yet
+        lda vptr
+        pha
+        lda vptr+1
+        pha
+        lda vtype
+        ldx #<h_vi
+        cmp #4
+        beq +
+        ldx #<h_vf
+        cmp #5
+        lbne xfail              ; strings, byte variables
++       txa
+.emv    pha
+        lda xdep
+        sta xfirst
+        jsr xpush
+        pla
+        jsr xemitl
+        pla
+        sta xcsy
+        pla
+        jsr xemit
+        lda xcsy
+        jmp xemit
+
 ovl_xtra_end:
 }

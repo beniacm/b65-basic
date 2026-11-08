@@ -79,6 +79,58 @@ def tokens(d):
             out.append(('L', d[i])); add(i); i += 1
     return out
 
+def gamma_bits(v):
+    return 2 * (v.bit_length() - 1) + 1
+
+def tokens_opt(d, L):
+    """cheapest parse in bits for the literal code lengths L (dynamic
+    programming over all positions; matches from the 2-byte hash chains)"""
+    n = len(d)
+    heads = {}
+    cand = [[] for _ in range(n)]
+    for i in range(n):
+        if i + 2 <= n:
+            key = bytes(d[i:i + 2])
+            best = {}
+            for j in reversed(heads.get(key, [])[-300:]):
+                l = 0
+                while i + l < n and d[j + l] == d[i + l] and l < 256:
+                    l += 1
+                dist = i - j
+                cls = dist <= 256
+                if l >= 2 and (l > best.get(cls, (0, 0))[0]):
+                    best[cls] = (l, dist)
+            cand[i] = list(best.values())
+            heads.setdefault(key, []).append(i)
+    INF = 1 << 60
+    cost = [INF] * (n + 1)
+    how = [None] * (n + 1)
+    cost[0] = 0
+    for i in range(n):
+        c = cost[i]
+        if c == INF:
+            continue
+        lc = c + 1 + L.get(d[i], 99)
+        if lc < cost[i + 1]:
+            cost[i + 1] = lc
+            how[i + 1] = ('L', d[i])
+        for l, dist in cand[i]:
+            db = 9 if dist <= 256 else 17
+            for m in range(2, l + 1):
+                if m == 2 and dist > 256:
+                    continue
+                mc = c + 1 + gamma_bits(m - 1) + db
+                if mc < cost[i + m]:
+                    cost[i + m] = mc
+                    how[i + m] = ('M', m, dist)
+    out = []
+    i = n
+    while i > 0:
+        h = how[i]
+        out.append(h)
+        i -= 1 if h[0] == 'L' else h[1]
+    return out[::-1]
+
 class Bits:
     def __init__(self):
         self.b = bytearray(); self.n = 0; self.cur = 0
@@ -98,6 +150,20 @@ class Bits:
 def pack(blobs):
     """-> (table128, [stream, ...])"""
     toks = [tokens(b) for b in blobs]
+    for rnd in range(3):                # greedy parse, then optimal ones
+        freq = {}
+        for t in toks:
+            for x in t:
+                if x[0] == 'L':
+                    freq[x[1]] = freq.get(x[1], 0) + 1
+        L = code_lengths(freq)
+        if rnd == 2:
+            break
+        LL = dict(L)
+        for v in range(256):            # unseen bytes: expensive but possible
+            LL.setdefault(v, 16)
+        toks = [tokens_opt(b, LL) for b in blobs]
+    # the final parse may use bytes with no code yet: give every literal used a code
     freq = {}
     for t in toks:
         for x in t:
