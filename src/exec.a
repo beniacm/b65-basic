@@ -2847,8 +2847,18 @@ savelocal:
         beq .q
         cmp #5
         bne .gn
-.q      lda #9
-        jsr alloc
+.q      tsx                     ; ALLOC 9 inline (our return address is off)
+        txa
+        sec
+        sbc #9
+        sta spz
+        tax
+        tsy
+        tya
+        sbc #0
+        sta spz+1
+        tay
+        +setsp
         ldy #5
         ldz #0
 -       lda (vptr),z
