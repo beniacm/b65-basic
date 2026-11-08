@@ -2974,6 +2974,8 @@ unwind: pla
         sty spz+1
         ldy #1
         lda (spz),y
+        cmp #TLOCAL             ; (the usual frame first)
+        lbeq .loc
         cmp #TRETURN            ; RETURN parameter: copy formal -> actual
         bne .nret
         ldy #2
@@ -3054,7 +3056,7 @@ unwind: pla
         jmp .l
 .nloc   cmp #TLOCAL
         lbne .x
-        iny
+.loc    iny
         lda (spz),y
         sta vptr
         iny
@@ -3070,13 +3072,28 @@ unwind: pla
         bne .gn
 .qi     ldy #5
         ldz #0
--       lda (spz),y
+        lda (spz),y
         sta (vptr),z
         iny
         inz
-        cpz vtype
-        bne -
-        ldz #0
+        lda (spz),y
+        sta (vptr),z
+        iny
+        inz
+        lda (spz),y
+        sta (vptr),z
+        iny
+        inz
+        lda (spz),y
+        sta (vptr),z
+        lda vtype
+        cmp #5
+        bne +
+        iny
+        inz
+        lda (spz),y
+        sta (vptr),z
++       ldz #0
         bra .dr
 .gn     lda #0
         sta etype
