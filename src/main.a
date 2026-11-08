@@ -152,7 +152,9 @@ cold_test:
         jsr cls
         jsr newit
         jsr tell
-vermsg: !text "B65 BASIC (45GS02) for MEGA65 - 0.1",CR,LF
+vermsg: !text "B65 BASIC "
+!src "src/version.a"
+        !text " (45GS02) for MEGA65",CR,LF
         !text "Derived from BBC BASIC (Z80) v5",CR,LF
 notice: !text "(C) Copyright R.T.Russell 2025",CR,LF,0
         jsr hwdetect
