@@ -170,7 +170,7 @@ K325T core `ON COLLISION` is accepted but never fires.
 | `examples/basic65/parallax65.bas` | the same in BASIC 65 |
 | `examples/rrblist_b65.bas` | RRB list mode v1: bouncing balls (K325T only) |
 | `examples/rrblist_b65v2.bas` | RRB list mode v2: bouncing balls, V400 (K325T only) |
-| `examples/bounce.bas` | 64 shaded balls that bounce off the walls and off each other: list mode v2 objects, the K325T collision engine (ON COLLISION, COLLIDE); elsewhere 8 sprites |
+| `examples/bounce.bas` | 64 shaded balls that bounce off the walls and off each other: list mode v2 objects, the K325T collision engine (ON COLLISION, COLLIDE); elsewhere 8 sprites. Behind them four parallax star planes (1/4, 1/2, 1, 2 pixels a frame) as sparse RRB rows: per row 6 stars a plane, each a GOTOX token and one full-colour glyph (48 tokens a row: 97 cycles of row fetch, about 384 of painting); per frame one 8-job DMA rewrites all GOTOX positions from ramp tables in attic RAM (0.6 ms in B65). B65: about 14 ms a frame in Xemu plus about 1.3 ms per colliding pair, so 50 fps; BASIC 65 twin (`examples/basic65/bounce65.bas`, 32 balls): 25 fps |
 | `examples/basic65/bounce65.bas` | the same in BASIC 65 with 32 balls (polls the engine) |
 
 ESCAPE stops a demo; the parallax demo then returns to the text screen.

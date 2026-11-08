@@ -1,5 +1,6 @@
-5 REM Per frame (64 balls): 13.5 ms in Xemu without the vsync wait (about 210 us a ball: move, walls, table), plus about 1.3 ms per colliding pair in PROChit (table walk, COLLIDE, confirm, swap): 50 fps with a few pairs
-10 REM Bounce: N% balls that bounce off the walls and off each other (B65)
+5 REM Per frame (64 balls), Xemu, no vsync wait: about 14 ms (move loop about 13.3, 210 us a ball; star planes 0.6: 8 writes, one 8-job DMA) + about 1.3 ms a colliding pair: 50 fps. RRB row: 6x4x(GOTOX+FCM star) = 48 tokens
+10 REM Bounce: N% balls that bounce off the walls and off each other (B65),
+12 REM in front of four parallax star planes (1/4, 1/2, 1, 2 pixels a frame)
 20 REM K325T core: the balls are RRB list mode v2 objects (shaded full-colour
 30 REM glyphs from an own 256-colour palette, 640x400) and the core's
 40 REM collision engine compares all of them once per frame: ON COLLISION
@@ -17,21 +18,24 @@
 110 REM BN%>0: stop after BN% frames (tests); RS%=1: back to text, timing;
 115 REM G%=1: gravity. BASIC 65 twin: examples/basic65/bounce65.bas (32 balls).
 120 BN%=0:RS%=1:N%=64:G%=0:SW%=0:BW%=6
-130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:L%=160:K%=(?&6E1=&FF)
-140 DIM P%(N%),V%(N%),LB% 255,DT% 543:PROCtables
+130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:SG%=6:L%=16*SG%:K%=(?&6E1=&FF)
+135 IF K%=0 THEN S%=&50000:GA%=&58000:REM (no chip RAM at &60000-&8FFFF)
+140 DIM P%(N%),V%(N%),LB% 255,DT% 543,ZD%(3),ZA%(3),ZK%(7):PROCtables
 150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
 160 PROCpalsave:CLS:PRINT "Bounce: ";N%;" balls":PROCpalette:PROCballs
 170 REM start on a grid (no overlaps), random velocities -3..3 (not 0)
 180 Q=RND(-42):FOR I%=0 TO N%-1:P%(I%)=12+(I% MOD 16)*39+(20+(I% DIV 16)*90)*65536
 190 REPEAT U%=RND(7)-4:UNTIL U%:REPEAT W%=RND(7)-4:UNTIL W%:V%(I%)=U%+W%*65536:NEXT
-200 IF K% THEN PROCscreen:ON COLLISION PROChit ELSE PROCsprites
+200 PROCscreen:IF K% THEN ON COLLISION PROChit ELSE PROCsprites
 210 REM main loop: wait for the frame, let PROChit run (EI), then move every
 220 REM ball without events (DI; walls: PROCwall, a negative X or Y shows as
 225 REM a large one) and write X/Y with HOLD around the batch (all move at
 226 REM once); without the K325T the table and HOLD go to scratch RAM
 230 F%=0:NP%=0:T%=TIME:IF K%=0 THEN TB%=&5E000:HO%=&5DFFF ELSE HO%=&FFD71FC
 240 REPEAT
-250 WAIT:EI:IF SW% THEN PROCsoft
+250 WAIT:X%=(ZA0%-(F%>>2)) MOD 640:!J0%=X%+K0%:!J1%=X%+K1%:X%=(ZA1%-(F%>>1)) MOD 640:!J2%=X%+K2%:!J3%=X%+K3%
+252 X%=(ZA2%-F%) MOD 640:!J4%=X%+K4%:!J5%=X%+K5%:X%=(ZA3%-2*F%) MOD 640:!J6%=X%+K6%:!J7%=X%+K7%
+254 ?&D702=DL% DIV 65536:?&D704=0:?&D701=(DL% DIV 256) AND 255:?&D705=DL% AND 255:EI:IF SW% THEN PROCsoft
 260 IF G% THEN IF (F% AND 3)=0 THEN FOR I%=0 TO N%-1:V%(I%)=V%(I%)+65536:NEXT
 270 DI:?HO%=1:TA%=TB%:FOR I%=0 TO N%-1:P%=P%(I%)+V%(I%)
 280 IF (P% AND &FFFF)>632 OR P%>>>16>392 THEN PROCwall
@@ -84,21 +88,19 @@
 1260 ?(GA%+64*C%+8*Y%+X%)=V%:NEXT:NEXT:NEXT:ENDPROC
 1300 DATA 97,11, 184,16, 152,16, 128,16, 168,16, 64,16
 1400 DEF PROCscreen:LOCAL I%,R%,A%,X%,C%
-1410 REM token lists (one per ball colour) and their colour words; object
-1420 REM table: X/Y, mask, height, bits 19-16, collision group 1, list, colour
-1430 REM offset, stride, box width BW%
-1440 FOR C%=0 TO 5:PROCw(OA%+16*C%,&1800+C%):PROCw(OA%+16*C%+2,&FFFF):PROCw(CR%-&4000+OC%+16*C%,0):NEXT
-1450 FOR I%=0 TO N%-1:A%=TB%+16*I%:C%=I% MOD 6:!A%=P%(I%):?(A%+4)=255:?(A%+5)=1:?(A%+6)=8:?(A%+7)=1
-1460 !(A%+8)=&9000+16*C%+(OC%+16*C%)*65536:!(A%+12)=BW%*65536:NEXT
-1470 REM background: 80x50 rows of dark blue dots
-1480 FOR R%=0 TO 49:A%=S%+R%*L%:FOR X%=0 TO 79:I%=32:IF RND(1)<.05 THEN I%=46
-1490 PROCw(A%+2*X%,I%):PROCw(CR%+R%*L%+2*X%,190*256):NEXT:NEXT
+1410 REM K325T: token lists (one per ball colour) and their colour words;
+1420 REM object table: X/Y, mask, height, bits 19-16, collision group 1, list,
+1430 REM colour offset, stride, box width BW%
+1440 IF K% THEN FOR C%=0 TO 5:PROCw(OA%+16*C%,&1800+C%):PROCw(OA%+16*C%+2,&FFFF):PROCw(CR%-&4000+OC%+16*C%,0):NEXT
+1450 IF K% THEN FOR I%=0 TO N%-1:A%=TB%+16*I%:C%=I% MOD 6:!A%=P%(I%):?(A%+4)=255:?(A%+5)=1:?(A%+6)=8:?(A%+7)=1:!(A%+8)=&9000+16*C%+(OC%+16*C%)*65536:!(A%+12)=BW%*65536:NEXT
+1460 PROCplanes
 1500 REM VIC-IV (HOTREG off): V400, 50 rows, one line per glyph row, CHR16 +
-1510 REM full colour above 255, rows of 80 tokens, pointers; list mode v2
+1510 REM full colour above 255, rows of 8*SG% tokens, pointers; list mode v2
 1520 ?&D05D=?&D05D AND 127:?&D031=?&D031 OR 8:?&D07B=49:?&D05B=0:?&D054=?&D054 OR 5
-1530 PROCw(&D058,L%):?&D05E=80:?&D063=?&D063 AND 192:?&D020=0:?&D021=0
-1540 ?&D060=0:?&D061=0:?&D062=8:PROCw(&D064,&4000)
-1550 ?&FFD71F8=0:?&FFD71F9=&C0:?&FFD71FA=8:?&FFD71FB=N%:?&FFD71F0=?&FFD71F0 OR &50:ENDPROC
+1530 PROCw(&D058,L%):?&D05E=8*SG%:?&D063=?&D063 AND 192:?&D020=0:?&D021=0
+1540 ?&D060=0:?&D061=(S% DIV 256) AND 255:?&D062=S% DIV 65536:PROCw(&D064,&4000)
+1550 IF K% THEN ?&FFD71F8=0:?&FFD71F9=&C0:?&FFD71FA=8:?&FFD71FB=N%:?&FFD71F0=?&FFD71F0 OR &50
+1560 ENDPROC
 1600 DEF PROCsprites:LOCAL I%,Y%,X%
 1610 REM no list mode: balls 0-7 as sprites (8x8 circle, scaled to 320x200)
 1620 FOR Y%=0 TO 20:FOR X%=0 TO 2:?(&5FC00+3*Y%+X%)=0:NEXT:NEXT
@@ -111,6 +113,41 @@
 1700 DEF PROCtext:?&D015=0:IF K% THEN ON COLLISION OFF:?&FFD71F0=?&FFD71F0 AND &AF
 1710 ?&D031=V1%:?&D05B=V5%:?&D07B=V7%:PROCpalrest:MODE 0:ENDPROC
 1720 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V% DIV 256) AND 255:ENDPROC
+1800 REM ---- background: four parallax star planes (sparse RRB) ----
+1802 REM Each row: SG% groups of 4 x (GOTOX, star glyph GA%/64+6+plane, FCM), plane
+1804 REM 0 (far, dim dot) .. 3 (near, bright). The GOTOX words of one plane are
+1806 REM every 16 bytes over the whole screen (rows are 16*SG% bytes), so per
+1808 REM frame one DMA job per plane and byte (X lo, X hi) rewrites all of them:
+1810 REM it copies with source step ZD(p) from the ramp tables ZL%/ZH% in attic
+1812 REM RAM (lo/hi byte of n MOD 640, n < 98304): star k of plane p is at X =
+1814 REM (ZA(p) - offset + k*ZD(p)) MOD 640 (a star leaving at the left comes
+1816 REM back at the right). Offsets F%/4, F%/2, F%, 2*F%; ZA(p) >= 2^30.
+1818 REM GOTOX colour flags &90: transparent, so stars never cover each other.
+1820 DEF PROCplanes:LOCAL I%,Q%,J%,D%,A%
+1822 ZN%=50*SG%:ZL%=&8400000:ZH%=&8420000:DL%=&5F000:ZT%=&5F100
+1824 FOR I%=0 TO 639:?(ZL%+I%)=I% AND 255:?(ZH%+I%)=I% DIV 256:NEXT
+1826 I%=640:REPEAT PROCdma(0,I%,ZL%,ZL%+I%,1,1):PROCdma(0,I%,ZH%,ZH%+I%,1,1):I%=I%*2:UNTIL I%=81920
+1828 PROCdma(0,16384,ZL%,ZL%+I%,1,1):PROCdma(0,16384,ZH%,ZH%+I%,1,1)
+1830 PROCdma(3,50*L%,0,S%,1,1):PROCdma(3,50*L%,0,CR%,1,1):PROCdma(3,4*ZN%,&90,CR%,1,4)
+1832 FOR Q%=0 TO 3:I%=GA% DIV 64+6+Q%:PROCdma(3,ZN%,I% AND 255,S%+4*Q%+2,1,16):PROCdma(3,ZN%,I% DIV 256,S%+4*Q%+3,1,16):NEXT
+1834 RESTORE 1850:FOR I%=0 TO 255:?(GA%+64*6+I%)=0:NEXT:FOR Q%=0 TO 3:READ ZD%(Q%),ZA%(Q%),J%
+1836 FOR I%=1 TO J%:READ A%,D%:?(GA%+64*(6+Q%)+A%)=D%:NEXT:NEXT
+1838 FOR J%=0 TO 7:Q%=J% DIV 2:A%=DL%+22*J%:?A%=&80:?(A%+1)=&84:?(A%+2)=&81:?(A%+3)=0:?(A%+4)=&83:?(A%+5)=ZD%(Q%):?(A%+6)=&85:?(A%+7)=16
+1840 D%=S%+4*Q%+(J% AND 1):PROCjob(A%+8,4*(J%<7)*-1,ZN%,(J% AND 1)*&20000,D%):ZK%(J%)=(J% AND 1)*&20000+(D% AND 255)*&1000000:NEXT
+1842 J0%=DL%+13:J1%=J0%+22:J2%=J1%+22:J3%=J2%+22:J4%=J3%+22:J5%=J4%+22:J6%=J5%+22:J7%=J6%+22
+1844 K0%=ZK%(0):K1%=ZK%(1):K2%=ZK%(2):K3%=ZK%(3):K4%=ZK%(4):K5%=ZK%(5):K6%=ZK%(6):K7%=ZK%(7)
+1846 ZA0%=ZA%(0)+640*&200000:ZA1%=ZA%(1)+640*&200000:ZA2%=ZA%(2)+640*&200000:ZA3%=ZA%(3)+640*&200000:ENDPROC
+1848 REM per plane: source step, start, pixels (offset in the glyph, colour)
+1850 DATA 211,0,1, 27,170
+1852 DATA 157,301,1, 27,175
+1854 DATA 233,612,4, 27,179,28,179,35,179,36,179
+1856 DATA 179,845,10, 19,178,20,178,26,178,27,183,28,183,29,178,34,178,35,183,36,183,37,178
+1860 DEF PROCjob(J%,C%,N%,S%,D%)
+1862 ?J%=&0B:?(J%+1)=0:?(J%+2)=C%:?(J%+3)=N% AND 255:?(J%+4)=N% DIV 256
+1864 !(J%+5)=S% AND &FFFFF:!(J%+8)=D% AND &FFFFF:?(J%+12)=0:?(J%+13)=0:ENDPROC
+1866 DEF PROCdma(C%,N%,S%,D%,SS%,DS%):?ZT%=&80:?(ZT%+1)=S% DIV &100000:?(ZT%+2)=&81:?(ZT%+3)=D% DIV &100000
+1868 ?(ZT%+4)=&83:?(ZT%+5)=SS%:?(ZT%+6)=&85:?(ZT%+7)=DS%:PROCjob(ZT%+8,C%,N%,S%,D%)
+1870 ?&D702=ZT% DIV 65536:?&D704=0:?&D701=(ZT% DIV 256) AND 255:?&D705=ZT% AND 255:ENDPROC
 2000 DEF PROCpalette:LOCAL S%,C%,D%,I%,R0%,G0%,B0%,R1%,G1%,B1%
 2010 REM own palette: ramps from 16 on (0-15 stay the standard colours)
 2020 RESTORE 2060

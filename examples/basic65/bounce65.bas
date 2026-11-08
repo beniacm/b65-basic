@@ -1,5 +1,6 @@
-5 rem per frame (32 balls): 38 ms in xemu without the vsync wait (about 1.2 ms a ball: move, walls, table), so 25 fps; basic 65 moves about 16 balls in one 20 ms frame
-10 rem bounce: n balls that bounce off the walls and off each other (basic 65)
+5 rem per frame (32 balls): 42 ms in xemu with the vsync wait, so 24 fps (move, walls, table about 1.2 ms a ball; the four star planes: 8 wpokes and one 8-job dma, about 1.5 ms). rrb per row: 6 x 4 x (gotox + fcm star) = 48 tokens
+10 rem bounce: n balls that bounce off the walls and off each other (basic 65),
+12 rem in front of four parallax star planes (1/4, 1/2, 1, 2 pixels a frame)
 20 rem twin of examples/bounce.bas (b65 basic), 32 balls instead of 64.
 30 rem k325t core ($d629=$62): the balls are rrb list mode v2 objects (shaded
 40 rem full-colour glyphs from an own 256-colour palette, 640x400) and the
@@ -18,8 +19,9 @@
 110 rem bn>0: stop after bn frames (tests); rs=1: back to text, timing;
 115 rem g=1: gravity.
 120 bn=0:rs=1:n=32:g=0:sw=0:bw=6
-130 tb=$8c000:ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:l=160:k=(peek($d629)=98)
-140 dim x(n),y(n),dx(n),dy(n)
+130 tb=$8c000:ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:sg=6:l=16*sg:k=(peek($d629)=98)
+135 if k=0 then s=$50000:ga=$58000:rem (no chip ram at $60000-$8ffff)
+140 dim x(n),y(n),dx(n),dy(n),zd(3),za(3)
 150 trap 2900
 155 v1=peek($d031):v5=peek($d05b):v7=peek($d07b):v0=peek($d054):v8=peek($d058):v9=peek($d059):va=peek($d05e)
 156 vb=peek($d060):vc=peek($d061):vd=peek($d062):ve=peek($d063):vf=peek($d064):vg=peek($d065):vh=peek($d021)
@@ -29,19 +31,22 @@
 190 dx(i)=int(rnd(1)*6)-3:if dx(i)>=0 then dx(i)=dx(i)+1
 195 dy(i)=int(rnd(1)*6)-3:if dy(i)>=0 then dy(i)=dy(i)+1
 197 next i
-200 if k then gosub 1400:else gosub 1600
+200 gosub 1400:if k=0 then gosub 1600
 210 rem main loop: wait for the frame, resolve the pairs of the last pass,
-220 rem move every ball (walls: 1135), write x/y (v2 x/y and 1023) with hold
-225 rem around the batch (all move at once)
+220 rem move every ball (walls: 1135), write x/y (v2 x/y and 1023). no hold:
+225 rem the loop takes about two frames, and the vic-iv copies the table only
+226 rem at a frame start with hold = 0 (a held batch would never be copied); a
+227 rem wpoke writes x and y at once, a ball torn for one frame is harmless
 230 f=0:np=0:t=ti
-250 vsync 251:if sw then gosub 1140
+250 vsync 251:x=mod(q0-int(f/4),640):wpoke j0,x:wpoke j1,x:x=mod(q1-int(f/2),640):wpoke j2,x:wpoke j3,x
+252 x=mod(q2-f,640):wpoke j4,x:wpoke j5,x:x=mod(q3-2*f,640):wpoke j6,x:wpoke j7,x
+254 poke $d702,int(dl/65536):poke $d704,0:poke $d701,mod(int(dl/256),256):poke $d705,mod(dl,256):if sw then gosub 1140
 255 if k then if peek($ffd71c0) and 1 then gosub 1010:poke $ffd71c0,1
 260 if g then if (f and 3)=0 then for i=0 to n-1:dy(i)=dy(i)+1:next i
-270 if k then poke $ffd71fc,1
 280 for i=0 to n-1:x=x(i)+dx(i):y=y(i)+dy(i):if x<0 or x>632 or y<0 or y>392 then gosub 1135
 300 x(i)=x:y(i)=y:if k then wpoke tb+16*i,x and 1023,y and 1023
 310 next i
-320 if k then poke $ffd71fc,0:else gosub 1660
+320 if k=0 then gosub 1660
 330 f=f+1:if f<>bn then 250
 340 t=ti-t:if rs then gosub 1700:print bn;"frames in";t;"seconds,";np;"pairs"
 350 end
@@ -68,26 +73,58 @@
 1250 if (2*x-7)*(2*x-7)+(2*y-7)*(2*y-7)<=60 then d=(2*x-4)*(2*x-4)+(2*y-4)*(2*y-4):v=r+m-1-int(d*(m-1)/110):if v<r then v=r
 1260 poke ga+64*c+8*y+x,v:next x,y,c:return
 1300 data 97,11, 184,16, 152,16, 128,16, 168,16, 64,16
-1400 rem token lists (one per ball colour) and their colour words; object
-1410 rem table: x/y, mask, height, bits 19-16, collision group 1, list, colour
-1420 rem offset, stride, box width bw
+1400 rem k325t: token lists (one per ball colour) and their colour words;
+1410 rem object table: x/y, mask, height, bits 19-16, collision group 1, list,
+1420 rem colour offset, stride, box width bw
+1430 if k=0 then 1470
 1440 for c=0 to 5:wpoke oa+16*c,$1800+c,$ffff:wpoke cr-$4000+oc+16*c,0:next c
 1450 for i=0 to n-1:a=tb+16*i:c=mod(i,6):wpoke a,x(i),y(i):poke a+4,255,1,8,1
 1460 wpoke a+8,$9000+16*c,oc+16*c:poke a+12,0,0,bw,0:next i
-1470 rem background: 80x50 rows of dark blue dots
-1480 for r=0 to 49:a=s+r*l:for x=0 to 79:v=32:if rnd(1)<.05 then v=46
-1490 wpoke a+2*x,v:poke cr+r*l+2*x,0,190:next x,r
+1470 gosub 1800
 1500 rem vic-iv (hotreg off): v400, 50 rows, one line per glyph row, chr16 +
-1510 rem full colour above 255, rows of 80 tokens, pointers; list mode v2
+1510 rem full colour above 255, rows of 8*sg tokens, pointers; list mode v2
 1520 poke $d05d,peek($d05d) and 127:poke $d031,peek($d031) or 8:poke $d07b,49:poke $d05b,0:poke $d054,peek($d054) or 5
-1530 wpoke $d058,l:poke $d05e,80:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
-1540 poke $d060,0,0,8:wpoke $d064,$4000
-1550 poke $ffd71f8,0,$c0,8,n:poke $ffd71f0,peek($ffd71f0) or $50:return
+1530 wpoke $d058,l:poke $d05e,8*sg:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
+1540 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000
+1550 if k then poke $ffd71f8,0,$c0,8,n:poke $ffd71f0,peek($ffd71f0) or $50
+1560 return
 1600 rem no list mode: balls 0-7 as sprites (8x8 circle, scaled to 320x200)
 1620 for y=0 to 20:poke $5fc00+3*y,0,0,0:next y
 1630 restore 1650:for y=0 to 7:read v:poke $5fc00+3*y,v:next y
 1640 poke $d06c,0,$fa,$85:for i=0 to 7:wpoke $5fa00+2*i,$17f0:poke $d027+i,2+i:next i:poke $d015,255:return
 1650 data 60,126,255,255,255,255,126,60
+1800 rem ---- background: four parallax star planes (sparse rrb), as in
+1802 rem examples/bounce.bas: per row sg groups of 4 x (gotox, star glyph
+1804 rem ga/64+6+plane, full colour); plane p's gotox words are every 16 bytes
+1806 rem over the whole screen, so one dma job per plane and byte (x lo, x hi)
+1808 rem rewrites them per frame, copying with source step zd(p) from ramp
+1810 rem tables in attic ram (lo/hi byte of n mod 640): star k of plane p is
+1812 rem at x = (za(p) - offset + k*zd(p)) mod 640. offsets f/4, f/2, f, 2*f.
+1814 rem gotox colour flags $90: transparent, stars never cover each other.
+1820 zn=50*sg:zl=$8400000:zh=$8420000:dl=$5f000:zt=$5f100:sk=1:dk=1:c=0
+1824 for i=0 to 639:poke zl+i,mod(i,256):poke zh+i,int(i/256):next i
+1826 i=640
+1827 nn=i:sr=zl:de=zl+i:gosub 1880:sr=zh:de=zh+i:gosub 1880:i=i*2:if i<81920 then 1827
+1828 nn=16384:sr=zl:de=zl+i:gosub 1880:sr=zh:de=zh+i:gosub 1880
+1830 c=3:sr=0:nn=50*l:de=s:gosub 1880:de=cr:gosub 1880:sr=$90:nn=4*zn:dk=4:gosub 1880:dk=16:nn=zn
+1832 for q=0 to 3:i=ga/64+6+q:sr=mod(i,256):de=s+4*q+2:gosub 1880:sr=int(i/256):de=s+4*q+3:gosub 1880:next q
+1834 restore 1850:for i=0 to 255:poke ga+384+i,0:next i
+1836 for q=0 to 3:read zd(q),za(q),j:for i=1 to j:read a,d:poke ga+64*(6+q)+a,d:next i,q
+1838 for j=0 to 7:q=int(j/2):a=dl+22*j:poke a,$80,$84,$81,0,$83,zd(q),$85,16
+1840 c=-4*(j<7):nn=zn:sr=(j and 1)*$20000:de=s+4*q+(j and 1):ja=a+8:gosub 1890:next j
+1842 j0=dl+13:j1=j0+22:j2=j1+22:j3=j2+22:j4=j3+22:j5=j4+22:j6=j5+22:j7=j6+22
+1846 q0=za(0)+640*2^21:q1=za(1)+640*2^21:q2=za(2)+640*2^21:q3=za(3)+640*2^21:return
+1848 rem per plane: source step, start, pixels (offset in the glyph, colour)
+1850 data 211,0,1, 27,170
+1852 data 157,301,1, 27,175
+1854 data 233,612,4, 27,179,28,179,35,179,36,179
+1856 data 179,845,10, 19,178,20,178,26,178,27,183,28,183,29,178,34,178,35,183,36,183,37,178
+1880 rem dma job c: nn bytes from sr (fill: value) to de, steps sk/dk
+1882 poke zt,$80,int(sr/2^20),$81,int(de/2^20),$83,sk,$85,dk:ja=zt+8:gosub 1890
+1884 poke $d702,int(zt/65536):poke $d704,0:poke $d701,mod(int(zt/256),256):poke $d705,mod(zt,256):return
+1890 v=sr-int(sr/2^20)*2^20:w=de-int(de/2^20)*2^20
+1892 poke ja,$0b,0,c,mod(nn,256),int(nn/256),mod(v,256),mod(int(v/256),256),int(v/65536)
+1894 poke ja+8,mod(w,256),mod(int(w/256),256),int(w/65536),0,0,0:return
 1660 poke $d010,0:for i=0 to 7:xx=24+int(x(i)/2):poke $d000+2*i,xx and 255,50+int(y(i)/2)
 1670 if xx>255 then poke $d010,peek($d010) or 2^i
 1680 next i:return
