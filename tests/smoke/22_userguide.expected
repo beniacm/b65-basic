@@ -3,20 +3,15 @@ Derived from BBC BASIC (Z80) v5
 (C) Copyright R.T.Russell 2025
 MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
->10 EVERY 50,1 GOSUB 100 : REM every second on timer 1
->20 AFTER 250 GOSUB 200 : REM once, after 5 s (timer 0)
->30 REPEAT : UNTIL TIME>=T%+600
->40 DI:END
->100 PRINT "tick" : RETURN
->200 PRINT "five seconds" : RETURN
->T%=TIME:RUN
-tick
-tick
-tick
-tick
-tick
-five seconds
-tick
+>10 N%=0:F%=0:T%=TIME
+>20 EVERY 50,1 GOSUB 100 : REM every second on timer 1
+>30 AFTER 250 GOSUB 200 : REM once, after 5 s (timer 0)
+>40 REPEAT : UNTIL F% AND TIME>=T%+600
+>50 DI:PRINT "ticks>=5 ";N%>=5;" five seconds ";F%:END
+>100 N%+=1 : RETURN
+>200 F%=1 : RETURN
+>RUN
+ticks>=5 -1 five seconds 1
 >NEW
 >ENVELOPE 1,2,1,-1,0,4,4,0,126,-4,0,-126,126,100
 >SOUND 1,1,100,40 : REM 2 s of warbling tone on channel 1
@@ -46,6 +41,6 @@ tick
         17 39
 >S$()="a","b":S$()=S$()+"!":PRINT S$(0);S$(1);" ";SUMLEN(S$());" ";DIM(M(),1)
 a!b! 4 1
->PRINT ~?&6E0;" ";?&6E1;" ";?&6E2+256*?&6E3;" ";?&6E4
-         3 0 384 8
+>PRINT (?&6E1=&FF)=(?&6E0=&62);" ";?&6E2+256*?&6E3>=384;" ";?&6E4>=8
+        -1 -1 -1
 >

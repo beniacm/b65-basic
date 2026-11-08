@@ -88,8 +88,20 @@ def load(reset=True):
     time.sleep(3)
 
 
+def expand_includes(script):
+    """'#include path' lines (path relative to the repository) insert that
+    file, as in tests/run.py"""
+    out = []
+    for ln in script.split(b'\n'):
+        if ln.startswith(b'#include '):
+            out.append(open(os.path.join(ROOT, ln[9:].strip().decode()), 'rb').read().rstrip(b'\n'))
+        else:
+            out.append(ln)
+    return b'\n'.join(out)
+
+
 def run_script(path, timeout=300):
-    script = open(path, 'rb').read()
+    script = expand_includes(open(path, 'rb').read())
     if not script.endswith(b'\n'):
         script += b'\n'
     blob = b'B65HWTS:' + script + b'\0'
