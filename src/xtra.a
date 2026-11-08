@@ -24,56 +24,244 @@ XB2     = 16            ;   dot: first element of c
 
 ovl_xtra_img:
 !pseudopc $e000 {
-; ---- a() = b() OP c() | b() OP scalar | b() . c() ----
-; entry: ablk/avt = destination, ptr2 = first source block, tp at the operator
+; ---- a() = b() OP c() | b() OP scalar | scalar OP b() | -b() | b() . c() ----
+; numeric arrays: + - * /; string arrays: + (concatenation)
+XSS     = $1a00         ; string scalar (length, text): PARBUF slot 5, free here
+xt1     = $1fe0         ; element type of b()
+xt2     = $1fe1         ; element type of c()
+xtsc    = $1fe2         ; type of the scalar
+xflag   = $1fe3         ; bit 7: the scalar is the LEFT operand
+; entry: ablk/avt = destination, ptr2 = first source block (vtype = its
+; type), tp at the operator after it
 !zone arrarith
 arrarith:
+        lda vtype
+        sta xt1
         lda ptr2
         sta xb1
         lda ptr2+1
         sta xb1+1
-        lda avt
-        bpl +
-        lda #6                  ; string arrays: only copy is supported
-        jmp error
-+       jsr nxt
+        lda #0
+        sta xflag
+        jsr nxt
         inw tp
         cmp #'.'
         bne +
-        jmp dotprod
-+       ldx #OP_ADD
-        cmp #'+'
-        beq .op
-        ldx #OP_SUB
-        cmp #'-'
-        beq .op
-        ldx #OP_MUL
-        cmp #'*'
-        beq .op
-        ldx #OP_FDIV
-        cmp #'/'
-        beq .op
-        jmp mistake
-.op     stx xop
+        lda avt                 ; matrix product: numeric only
+        ora xt1
+        bpl ++
+        lda #6
+        jmp error
+++      jmp dotprod
++       jsr .opc
+        stx xop
         lda #0
         sta xb2
         sta xb2+1
         jsr nxt
         jsr arrref              ; second operand: array or scalar
         bne .sc
+        lda vtype
+        sta xt2
         lda ptr2
         sta xb2
         lda ptr2+1
         sta xb2+1
-        bra .go
+        lbra .go
 .sc     jsr expr
-        jsr chknum
+        jsr .savesc
+        lbra .go
+; .OPC: A = operator character -> X = OP_xx (Mistake if none)
+.opc    ldx #OP_ADD
+        cmp #'+'
+        beq +
+        ldx #OP_SUB
+        cmp #'-'
+        beq +
+        ldx #OP_MUL
+        cmp #'*'
+        beq +
+        ldx #OP_FDIV
+        cmp #'/'
+        beq +
+        jmp mistake
++       rts
+; .SAVESC: keep the scalar value (acc or ACCS)
+.savesc lda etype
+        sta xtsc
+        bmi +
         ldx #4
 -       lda acc,x
         sta xsc,x
         dex
         bpl -
-.go     ; sizes: destination, source 1 (, source 2) must have the same count
+        rts
++       ldx slen
+        stx XSS
+-       dex
+        cpx #$ff
+        beq +
+        lda ACCS,x
+        sta XSS+1,x
+        bra -
++       rts
+; .LDSC: scalar -> acc or ACCS
+.ldsc   lda xtsc
+        sta etype
+        bmi +
+        ldx #4
+-       lda xsc,x
+        sta acc,x
+        dex
+        bpl -
+        rts
++       ldx XSS
+        stx slen
+-       dex
+        cpx #$ff
+        beq +
+        lda XSS+1,x
+        sta ACCS,x
+        bra -
++       rts
+; ARRPRE (from arrlet, "a() = ..." without an array first): handles
+; "a() = -b()" and "a() = item OP b()" (the scalar is one item: a number,
+; variable, string, function or bracketed expression). Back to the core at
+; arrle1 (ordinary expression) or arrle1x (value of a fill already in acc).
+arrpre: jsr .hasarr
+        bcs +
+        jmp arrle1
++       jsr nxt
+        cmp #'-'
+        bne .it
+        lda tp
+        pha
+        lda tp+1
+        pha
+        inw tp
+        jsr nxt
+        jsr arrref
+        bne .nm
+        pla                     ; -b(): 0 - b()
+        pla
+        lda #0
+        ldx #4
+-       sta acc,x
+        dex
+        bpl -
+        sta etype
+        ldx #OP_SUB
+        stx xop
+        jsr .savesc
+        lda #$80
+        sta xflag
+        lda #0
+        sta xb2
+        sta xb2+1
+        jmp .have
+.nm     pla
+        jsr settph
+        pla
+        sta tp
+.it     jsr item
+        jsr nxt
+        cmp #'+'
+        beq .op2
+        cmp #'-'
+        beq .op2
+        cmp #'*'
+        beq .op2
+        cmp #'/'
+        beq .op2
+        jsr termq               ; just a value after all: fill with it
+        bne +
+        jmp arrle1x
++       jmp mistake
+.op2    jsr .opc
+        inw tp
+        bra arrsc
+; .HASARR: carry set if "()" follows in this statement (outside strings)
+.hasarr ldz #0
+-       lda [tp],z
+        cmp #CR
+        beq .no
+        cmp #':'
+        beq .no
+        cmp #TELSE
+        beq .no
+        cmp #'"'
+        bne +
+--      inz
+        beq .no
+        lda [tp],z
+        cmp #CR
+        beq .no
+        cmp #'"'
+        bne --
+        bra .nx
++       cmp #'('
+        bne .nx
+        inz
+        beq .no
+        lda [tp],z
+        cmp #')'
+        bne -
+        ldz #0
+        sec
+        rts
+.nx     inz
+        bne -
+.no     ldz #0
+        clc
+        rts
+; ARRSC: X = op, scalar in acc/ACCS, tp at the array: scalar OP b()
+arrsc:  stx xop
+        jsr .savesc
+        lda #$80
+        sta xflag
+        lda #0
+        sta xb2
+        sta xb2+1
+        jsr nxt
+        jsr arrref
+        beq .have
+        jmp syntax
+.have   lda vtype
+        sta xt1
+        lda ptr2
+        sta xb1
+        lda ptr2+1
+        sta xb1+1
+.go     ; types: string destination -> '+' with string operands only
+        lda avt
+        bpl .num
+        lda xop
+        cmp #OP_ADD
+        bne .tm
+        lda xt1
+        bpl .tm
+        lda xb2
+        ora xb2+1
+        beq +
+        lda xt2
+        bpl .tm
+        bra .sz
++       lda xtsc
+        bpl .tm
+        bra .sz
+.num    lda xt1
+        bmi .tm
+        lda xb2
+        ora xb2+1
+        beq +
+        lda xt2
+        bmi .tm
+        bra .sz
++       lda xtsc
+        bpl .sz
+.tm     lda #6                  ; Type mismatch
+        jmp error
+.sz     ; sizes: destination, source 1 (, source 2) must have the same count
         lda ablk
         sta ptr2
         lda ablk+1
@@ -108,39 +296,53 @@ arrarith:
         ora xcnt+1
         bne +
         jmp xeq
-+       lda #X1                 ; left = b[i]
-        jsr .xset
-        jsr loadn
-        jsr movleft
-        lda xb2                 ; right = c[i] or scalar
-        ora xb2+1
-        beq .rs
-        lda #X2
-        jsr .xset
-        jsr loadn
++       bit xflag               ; left operand: scalar or b[i]
+        bpl +
+        jsr .ldsc
+        bra ++
++       jsr .ld1
+++      jsr movleft             ; -> arg / STRBUF (tmp5 = type)
+        bit xflag               ; right operand: b[i], c[i] or scalar
+        bpl +
+        jsr .ld1
         bra .bin
-.rs     ldx #4
--       lda xsc,x
-        sta acc,x
-        dex
-        bpl -
-        lda #0
++       lda xb2
+        ora xb2+1
+        beq +
+        lda #X2
+        ldy xt2
+        jsr .xsett
+        jsr loadvar
+        bra .bin
++       jsr .ldsc
+.bin    lda avt
+        bpl +
+        jsr sconcat             ; STRBUF + ACCS -> ACCS
+        lda #$80
         sta etype
-.bin    lda #0
+        bra ++
++       lda #0
         sta tmp5
         ldx xop
         jsr binop
-        lda #X0
+++      lda #X0
         jsr .xset
         jsr storevar
         jsr .step
-        bra .loop
-.step   lda #X0                 ; advance all pointers by the element size
-        jsr .xadd
+        jmp .loop
+.ld1    lda #X1                 ; b[i] -> acc / ACCS
+        ldy xt1
+        jsr .xsett
+        jmp loadvar
+.step   lda #X0                 ; advance all pointers by their element sizes
+        ldy avt
+        jsr .xaddt
         lda #X1
-        jsr .xadd
+        ldy xt1
+        jsr .xaddt
         lda #X2
-        jsr .xadd
+        ldy xt2
+        jsr .xaddt
         lda xcnt
         bne +
         dec xcnt+1
@@ -166,7 +368,9 @@ arrarith:
         cpy #4
         bne -
         rts
-.xset   tax
+.xset   ldy avt
+.xsett  sty vtype               ; (Y = element type)
+        tax
         ldy #0
 -       lda XP,x
         sta ap,y
@@ -174,11 +378,10 @@ arrarith:
         iny
         cpy #4
         bne -
-        lda avt
-        sta vtype
         jmp setel
-.xadd   tax
-        lda avt
+.xadd   ldy avt
+.xaddt  tax
+        tya
         bpl +
         lda #4
 +       clc

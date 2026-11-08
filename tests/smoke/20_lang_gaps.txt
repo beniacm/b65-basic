@@ -1,0 +1,29 @@
+10 REM RETURN parameters
+20 A=1:B$="x":C%=5:DIM Q(3),Q$(2):Q(2)=7
+30 PROCchg(A,B$,C%):PRINT A;" ";B$;" ";C%
+40 PROCchg(Q(2),Q$(1),C%):PRINT Q(2);" ";Q$(1)
+50 X=FNtwice(A):PRINT X;" ";A
+60 PROCouter(A):PRINT "nested ";A
+70 REM DIM var LOCAL n
+80 S1%=FNsp:PROCbuf(4):PROCbuf(9):S2%=FNsp:PRINT "stack balanced ";S1%=S2%
+90 REM ELSE IF on one line and in a block
+100 FOR N%=1 TO 4
+110 IF N%=1 THEN PRINT "one" ELSE IF N%=2 THEN PRINT "two" ELSE IF N%=3 PRINT "three" ELSE PRINT "other"
+120 NEXT
+130 FOR N%=1 TO 3
+140 IF N%=1 THEN
+150   PRINT "block one"
+160 ELSE IF N%=2 THEN
+170   PRINT "block two"
+180 ELSE
+190   PRINT "block else"
+200 ENDIF
+210 NEXT
+220 END
+300 DEF PROCchg(RETURN p, RETURN q$, r%):p=p*10:q$=q$+"y":r%=99:ENDPROC
+310 DEF FNtwice(RETURN v):v=v*2:=v+1
+320 DEF PROCouter(RETURN o):PROCinner(o):ENDPROC
+330 DEF PROCinner(RETURN i):i=i+100:ENDPROC
+340 DEF PROCbuf(n%):LOCAL i%:DIM p% LOCAL n%:FOR i%=0 TO n%:p%?i%=i%:NEXT:PRINT "buf ";p%?n%;" ";(p%>&8000):ENDPROC
+350 DEF FNsp:LOCAL s%:DIM s% LOCAL -1:=s%
+RUN

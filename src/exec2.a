@@ -699,7 +699,15 @@ arrlet: jsr arrref
         sta acnt+1
         lda #0
         sta alist
+        lda aop                 ; "a() = n OP b()" / "a() = -b()": overlay 2
+        cmp #$ff
+        bne .e1
+        jsr ovjmp               ; (comes back at arrle1 or arrle1x)
+        !byte 2
+        !word arrpre
+arrle1:
 .e1     jsr expr
+arrle1x:
         lda etype
         eor avt
         and #$80

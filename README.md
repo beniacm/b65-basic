@@ -25,8 +25,8 @@ Version: **v0.1-dev** (shown in the start-up banner; the string lives only in
 | READ/DATA/RESTORE [n/+n], LOCAL DATA, RESTORE DATA/LOCAL | done |
 | String functions (LEFT$/MID$/RIGHT$ incl. assignment, INSTR, STRING$, STR$, VAL, CHR$, ASC, LEN, EVAL, GET$, INKEY$) | done |
 | Whole-array: init lists, copy, fill, op=, SUM, SUMLEN, DIM() | done |
-| Whole-array arithmetic `a()=b()+c()`, array op scalar, dot product `a()=b().c()` | done |
-| String array expressions (`a$()=b$()+c$()`) | missing |
+| Whole-array arithmetic `a()=b()+c()`, `a()=b()*n`, `a()=n-b()`, `a()=-b()`, dot product `a()=b().c()` | done (a leading scalar must be one item: number, variable, function or bracketed expression) |
+| String array expressions `a$()=b$()+c$()`, `a$()=b$()+"x"`, `a$()="x"+b$()` | done |
 | SWAP, `^` address-of, `?` `!` `$` `\|` indirection, `<< >> >>>` | done |
 | INSTALL "library" (FN/PROC searched after the program) | done |
 | Files: LOAD, CHAIN, RUN "f", SAVE, *CAT, *DELETE | done (reading through Hyppo DOS, writing with B65's own FAT32 writer) |

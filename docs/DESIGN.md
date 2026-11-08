@@ -410,6 +410,11 @@ must fit below `libase`. Up to 32 KB per library. Tested by
     variable: near -> `vptr`; far -> `farad`/`farflag` and a copy in
     `FARBUF` (`farld`), written back by `storevar` (`farst`, now also for
     string descriptors: `farsz` = 4 for strings).
+  * Whole-array expressions (overlay 2, `arrarith`/`arrpre`): `a()=b() OP
+    c()`, `b() OP n`, `n OP b()` (n = one item), `-b()`, `b().c()`; string
+    arrays with `+` (concatenation; the string scalar is kept in PARBUF
+    slot 5 at `$1A00`). Operand element types may differ (each array is
+    read with its own type). Tested by `tests/smoke/19_array_ops.txt`.
   * Whole-array code (copy, `a()=expr` / init lists / `op=`, SUM, SUMLEN,
     DIM(), arithmetic, dot product) walks elements with 32-bit cursors
     (`aelp`/`aelq` at `$1FBC`, `XP` at `$1FC8` in overlay 2) and
