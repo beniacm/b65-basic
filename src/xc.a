@@ -56,9 +56,19 @@ xcrun:  lda tp
 .no     sec
         rts
 .miss   jsr xcomp
-        bcc .new
-        cmp #2                  ; temporary (variable not there yet): try again
+        bcs +
+        lda xbp                 ; a lone 0..255 or integer variable: the
+        cmp #3                  ; interpreter is quicker
+        beq .never
+        cmp #4
+        bne .new
+        lda XB
+        cmp #<l_vi
+        bne .new
+        bra .never
++       cmp #2                  ; temporary (variable not there yet): try again
         beq .no
+.never
         ldx xslot               ; never: remember that
         lda tp
         sta XKLO,x
@@ -176,7 +186,7 @@ h_end:  ldx xslot
         clc
         rts
 h_k8:   +spill                  ; integer 0..255
-        jsr xrd
+y_k8:   jsr xrd
         sta acc
         lda #0
         sta acc+1
@@ -187,6 +197,10 @@ h_k8:   +spill                  ; integer 0..255
 h_k40:  jmp x_k40
 h_vi:   jmp x_vi
 h_vf:   jmp x_vf
+l_k8:   jmp y_k8                ; first value: nothing to spill
+l_k40:  jmp y_k40
+l_vi:   jmp y_vi
+l_vf:   jmp y_vf
 h_add:  jmp x_add
 h_sub:  jmp x_sub
 h_and:  jmp x_and
@@ -204,6 +218,7 @@ xhend:
 !if xhend - xhand > 256 { !error "xc handlers exceed a page" }
 
 x_k40:  +spill                  ; 5 bytes (integer: exponent 0)
+y_k40:
         jsr xrd
         sta acc
         jsr xrd
@@ -216,6 +231,7 @@ x_k40:  +spill                  ; 5 bytes (integer: exponent 0)
         sta accx
         jmp xnext
 x_vi:   +spill                  ; integer variable (4 bytes at a bank-0 address)
+y_vi:
         jsr xrd
         sta .vi+1
         jsr xrd
@@ -231,6 +247,7 @@ x_vi:   +spill                  ; integer variable (4 bytes at a bank-0 address)
         sta accx
         jmp xnext
 x_vf:   +spill                  ; variant variable (5 bytes)
+y_vf:
         jsr xrd
         sta .vf+1
         jsr xrd
@@ -469,6 +486,19 @@ xemit:  ldx xbp
         cpx #192
         bcs xfail               ; too long for the buffer
         rts
+; XEMITV: A = opcode, X = its no-spill variant (used for the first value)
+xemitv: ldy xfirst
+        bne xemit
+        txa
+        bra xemit
+xemitl: ldy xfirst              ; variables: h_vi/h_vf -> l_vi/l_vf
+        bne xemit
+        cmp #<h_vi
+        bne +
+        lda #<l_vi
+        bra xemit
++       lda #<l_vf
+        bra xemit
 xpush:  inc xdep                ; one more value on the stack
         lda xdep
         cmp #60
@@ -532,18 +562,22 @@ citem:  lda [tp],z
         cmp #'9'+1
         bcs .n1
 +       jsr con
-.kon    jsr xpush
+.kon    lda xdep
+        sta xfirst
+        jsr xpush
         lda accx
         ora acc+1
         ora acc+2
         ora acc+3
         bne +
         lda #<h_k8
-        jsr xemit
+        ldx #<l_k8
+        jsr xemitv
         lda acc
         jmp xemit
 +       lda #<h_k40
-        jsr xemit
+        ldx #<l_k40
+        jsr xemitv
         ldx #0
 -       phx
         lda acc,x
@@ -641,9 +675,11 @@ citem:  lda [tp],z
         lbne xfail              ; strings, byte variables
 +       txa
 .emv    pha
+        lda xdep
+        sta xfirst
         jsr xpush
         pla
-        jsr xemit
+        jsr xemitl
         pla
         sta xsy
         pla
@@ -660,6 +696,7 @@ xbp     !byte 0
 xdep    !byte 0
 xprec   !byte 0
 xfk     !byte 0
+xfirst  !byte 0
 xtp0    !word 0
 xend    !word 0
 xsps    !word 0

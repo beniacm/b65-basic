@@ -10,7 +10,12 @@ OVBASE  = $040000
 
 ; OVINIT: copy the overlay images to bank 4 (called once at start-up)
 !zone ovinit
-ovinit: ldx #0
+ovinit: lda lzhtabp
+        sta ptr1
+        lda lzhtabp+1
+        sta ptr1+1
+        jsr lzhinit
+        ldx #0
 .l      cpx #NOVL*4
         beq .x
         lda ovltab,x            ; source (bank 0)
@@ -35,7 +40,7 @@ ovinit: ldx #0
         lda #0
         sta fptr+3
         phx
-        jsr lzbdec              ; the image is LZB-packed (tools/packovl.py)
+        jsr lzhdec              ; the image is LZH-packed (tools/packovl.py)
         plx
         ; vectors at offset $1FFA (NMI, RESET, IRQ) -> core handlers
         txa
@@ -68,36 +73,76 @@ ovinit: ldx #0
         rts
 ovvec:  !word irq_rti, cold_prg, irqhandler
 
-; LZBDEC: unpack ptr1 (bank 0) to fptr (32-bit). Tokens: T < $80: T+1
-; literal bytes; T >= $80: copy (T & $7F) + 3 bytes from D (2 bytes) back;
-; D = 0 ends the stream.
-lzbdec: ldy #0
-        ldz #0
-.t      lda (ptr1),y
-        inw ptr1
-        tax
-        bmi .m
-        inx
--       lda (ptr1),y
-        sta [fptr],z
-        inw ptr1
-        inw fptr
+; ---- LZH unpacker (tools/lzh.py): LZ77 with canonical-Huffman literals ----
+; LZHINIT: ptr1 -> the shared code-length table (256 nibbles): builds
+; LZCNT (codes per length) and LZSYM (symbols by length, then value).
+LZSYM   = STRBUF            ; (start-up only)
+LZCNT   = NUMBUF
+lzhtabp: !word 0            ; set by tools/packovl.py
+lzhinit:
+        ldx #15
+        lda #0
+-       sta LZCNT,x
         dex
-        bne -
+        bpl -
+        ldx #0
+        lda #1
+        sta tmp3                ; length
+.ln     lda #0
+        sta tmp4                ; symbol
+.s      lda tmp4
+        lsr
+        tay
+        lda (ptr1),y
+        bcs +
+        lsr
+        lsr
+        lsr
+        lsr
++       and #$0f
+        cmp tmp3
+        bne .nx
+        lda tmp4
+        sta LZSYM,x
+        inx
+        ldy tmp3
+        lda LZCNT,y
+        inc
+        sta LZCNT,y
+.nx     inc tmp4
+        bne .s
+        inc tmp3
+        lda tmp3
+        cmp #16
+        bne .ln
+        rts
+; LZHDEC: unpack the stream at ptr1 to fptr (32-bit)
+lzhdec: lda #0
+        sta tmp1                ; bits left in tmp0
+        ldy #0
+        ldz #0
+.t      jsr lzbit
+        bcs .m
+        jsr lzhuff
+        sta [fptr],z
+        inw fptr
         bra .t
-.m      and #$7f
-        clc
-        adc #3
-        tax
-        lda (ptr1),y
-        sta tmpw
-        inw ptr1
-        lda (ptr1),y
-        sta tmpw+1
-        inw ptr1
-        ora tmpw
-        beq .e
-        sec
+.m      jsr lzgam               ; length - 1
+        lda tmpw
+        sta tmp2
+        jsr lzbit
+        bcs .lg
+        ldx #8
+        jsr lzbits
+        inw tmpw                ; distance 1..256
+        bra .cp
+.lg     ldx #16
+        jsr lzbits
+        lda tmpw
+        ora tmpw+1
+        bne .cp
+        rts                     ; distance 0: end
+.cp     sec
         lda fptr
         sbc tmpw
         sta ap
@@ -112,10 +157,96 @@ lzbdec: ldy #0
         sta [fptr],z
         inw ap
         inw fptr
+        lda tmp2
+        beq .t
+        dec tmp2
+        bra -
+lzbit:  dec tmp1                ; carry = next bit
+        bpl +
+        lda (ptr1),y
+        sta tmp0
+        inw ptr1
+        lda #7
+        sta tmp1
++       asl tmp0
+        rts
+lzbits: lda #0                  ; tmpw = X bits
+        sta tmpw
+        sta tmpw+1
+-       jsr lzbit
+        rol tmpw
+        rol tmpw+1
         dex
         bne -
-        bra .t
-.e      rts
+        rts
+lzgam:  ldx #0                  ; tmpw = gamma value
+-       jsr lzbit
+        bcs +
+        inx
+        bra -
++       lda #1
+        sta tmpw
+        lda #0
+        sta tmpw+1
+        cpx #0
+        beq +
+-       jsr lzbit
+        rol tmpw
+        rol tmpw+1
+        dex
+        bne -
++       rts
+; LZHUFF: A = next literal (as puff.c: code, first, index per length)
+lzhuff: lda #0
+        sta tmpw2               ; code
+        sta tmpw2+1
+        sta ptr2                ; first
+        sta ptr2+1
+        sta ptr3                ; index
+        sta ptr3+1
+        ldx #1
+.hl     jsr lzbit
+        lda tmpw2
+        adc #0                  ; code |= bit (bit 0 is clear)
+        sta tmpw2
+        lda ptr2                ; tmpw = first + count
+        clc
+        adc LZCNT,x
+        sta tmpw
+        lda ptr2+1
+        adc #0
+        sta tmpw+1
+        lda tmpw2               ; code < first + count: found
+        cmp tmpw
+        lda tmpw2+1
+        sbc tmpw+1
+        lbcs .hn
+        lda ptr3                ; symbol index = index + code - first
+        clc
+        adc tmpw2
+        sec
+        sbc ptr2
+        tay
+        lda LZSYM,y
+        ldy #0
+        rts
+.hn     lda ptr3                ; index += count
+        clc
+        adc LZCNT,x
+        sta ptr3
+        lda ptr3+1
+        adc #0
+        sta ptr3+1
+        lda tmpw                ; first = (first + count) << 1
+        asl
+        sta ptr2
+        lda tmpw+1
+        rol
+        sta ptr2+1
+        asl tmpw2               ; code <<= 1
+        rol tmpw2+1
+        inx
+        bra .hl
 
 ; OVMAP: A = overlay number ($FF = none): map it at $E000
 ovmap:  sta curovl

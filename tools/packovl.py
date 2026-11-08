@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Pack the overlay images of build/b65.prg with LZB (tools/lzb.py).
+"""Pack the overlay images of build/b65.prg with LZH (tools/lzh.py).
 
 ACME assembles the overlay images uncompressed after the resident code
 (code_end .. ovl_images_end, see src/b65.a). This tool replaces them with
-LZB streams (each ending in a match token with distance 0), points the
-ovltab source words at the streams, and checks that the PRG ends below
-$CF00 (it is loaded into bank 0 below the I/O area). OVINIT unpacks the
-streams into bank 4 at start-up."""
+the shared literal code-length table and one LZH stream per overlay, points
+lzhtabp and the ovltab source words at them, and checks that the PRG ends
+below $CF00 (it is loaded into bank 0 below the I/O area). OVINIT unpacks
+the streams into bank 4 at start-up."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import lzb
+import lzh
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRG = os.path.join(ROOT, 'build/b65.prg')
 syms = {}
@@ -24,20 +24,27 @@ load = prg[0] | prg[1] << 8
 mem = lambda a: a - load + 2
 code_end = syms['code_end']
 ovltab = syms['ovltab']
-names = ['asm', 'gfx', 'xtra', 'fat'] + (['xc'] if 'ovl_xc_img' in syms else [])
-out = bytearray(prg[:mem(code_end)])
-addr = code_end
-for i, n in enumerate(names):
+names = ['asm', 'gfx', 'xtra', 'fat', 'xc']
+blobs = []
+for n in names:
     img = syms['ovl_%s_img' % n]
-    ln = syms['ovl_%s_end' % n] - 0xe000
-    data = bytes(prg[mem(img):mem(img) + ln])
-    c = lzb.compress(data) + bytes([0x80, 0, 0])
-    assert lzb.decompress(c, len(data)) == data
+    blobs.append(bytes(prg[mem(img):mem(img) + syms['ovl_%s_end' % n] - 0xe000]))
+table, streams = lzh.pack(blobs)
+L = [table[k // 2] >> (4 * (1 - k % 2)) & 15 for k in range(256)]
+assert all(L.count(n) < 256 for n in range(1, 16))     # LZCNT is 8 bits
+out = bytearray(prg[:mem(code_end)])
+t = mem(syms['lzhtabp'])
+out[t] = code_end & 255
+out[t + 1] = code_end >> 8
+out += table
+addr = code_end + len(table)
+for i, (b, s) in enumerate(zip(blobs, streams)):
+    assert lzh.unpack(table, s) == b
     t = mem(ovltab + 4 * i)
     out[t] = addr & 255
     out[t + 1] = addr >> 8
-    out += c
-    addr += len(c)
+    out += s
+    addr += len(s)
 if addr > 0xcf00:
     sys.exit('packovl: PRG too large: ends at $%04x (limit $cf00)' % addr)
 open(PRG, 'wb').write(out)
