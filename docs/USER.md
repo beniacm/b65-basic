@@ -120,7 +120,10 @@ chip RAM (bank 1 and up), `&8000000` is attic RAM, `&FF80000` colour RAM,
 
 Whole arrays: `A()=B()+C()`, `A()=B()*2`, `A()=2-B()`, `A()=-B()`,
 `A()=B().C()` (matrix product), `A$()=B$()+"!"`, `SUM(A())`,
-`SUMLEN(A$())`, `DIM(A(),1)`.
+`SUMLEN(A$())`, `DIM(A(),1)`. B65 extension: `A%()=B%() AND C%()` or
+`AND n` (for example `Q%()=P%() AND &3FF03FF` to mask packed X/Y). Integer
+`+`, `-` and `AND` of whole arrays run a tight loop (about 6 us an element
+in Xemu).
 
 **Hardware info:** `?&6E0` = model id (`$D629`), `?&6E1` = `&FF` on a
 K325T, `?&6E2`/`?&6E3` = chip RAM in KB, `?&6E4` = attic RAM in MB.

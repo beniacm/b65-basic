@@ -85,6 +85,9 @@ arrarith:
         ldx #OP_FDIV
         cmp #'/'
         beq +
+        ldx #OP_AND
+        cmp #TAND
+        beq +
         jmp mistake
 +       rts
 ; .SAVESC: keep the scalar value (acc or ACCS)
@@ -1472,6 +1475,8 @@ fasti:  lda avt
         beq .add
         cmp #OP_SUB
         lbeq .sub
+        cmp #OP_AND
+        beq .and
 .no     rts
 .done   ldz #0                  ; back: element pointers for the generic loop
         ldy #3
@@ -1486,6 +1491,9 @@ fasti:  lda avt
         rts
 .add    lda #$18                ; clc / adc [fr],z
         ldx #$72
+        bra .as
+.and    lda #$b8                ; clv / and [fr],z
+        ldx #$32
         bra .as
 .sub    lda #$38                ; sec / sbc [fr],z
         ldx #$f2
@@ -1869,6 +1877,8 @@ o_arrlet:
         cmp #'*'
         beq .ar
         cmp #'/'
+        beq .ar
+        cmp #TAND               ; (B65: a() = b() AND c() / n)
         beq .ar
         cmp #'.'
         bne .cpy
