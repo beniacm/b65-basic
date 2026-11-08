@@ -239,6 +239,10 @@ h_gt:   jmp x_gt
 h_le:   jmp x_le
 h_ge:   jmp x_ge
 h_gen:  jmp x_gen
+h_ai:   jmp x_ai
+h_af:   jmp x_af
+h_sai:  jmp x_sai
+h_saf:  jmp x_saf
 h_if:   jmp x_if
 h_mul:  jmp x_mul
 h_st1:  jmp x_st1
@@ -485,6 +489,145 @@ x_mul:  +intop OP_MUL
         ldy xsy
         jmp xgo
 
+; ---- array elements: operands field (2), handle (2), size (2), base (4) ----
+; XAEL: index (acc, or the stack below the value for stores) -> fptr =
+; element address; bails (interpreter: errors) on another array behind the
+; name, a float index or one out of range. A = element size on return.
+xael:   stx xsx
+        sty xsy
+        jsr xrd                 ; the name still refers to this array?
+        sta .fa+1
+        jsr xrd
+        sta .fa+2
+        ldx #0
+.fa     lda $ffff,x
+        sta xae,x
+        inx
+        cpx #2
+        bne .fa
+        jsr xrd
+        cmp xae
+        lbne .bl
+        jsr xrd
+        cmp xae+1
+        lbne .bl
+        jsr xrd                 ; size
+        sta xae
+        jsr xrd
+        sta xae+1
+        lda xix+4               ; integer index 0 .. size-1
+        lbne .bl
+        lda xix+2
+        ora xix+3
+        bne .bl
+        lda xix
+        cmp xae
+        lda xix+1
+        sbc xae+1
+        bcs .bl
+        lda xix                 ; offset = index * size of an element
+        sta xae
+        lda xix+1
+        sta xae+1
+        lda #0
+        sta xae+2
+        asl xae
+        rol xae+1
+        rol xae+2
+        asl xae
+        rol xae+1
+        rol xae+2
+        lda xel
+        cmp #4
+        beq +
+        lda xae                 ; * 5 = * 4 + 1
+        clc
+        adc xix
+        sta xae
+        lda xae+1
+        adc xix+1
+        sta xae+1
+        lda xae+2
+        adc #0
+        sta xae+2
++       jsr xrd                 ; + base
+        clc
+        adc xae
+        sta fptr
+        jsr xrd
+        adc xae+1
+        sta fptr+1
+        jsr xrd
+        adc xae+2
+        sta fptr+2
+        jsr xrd
+        adc #0
+        sta fptr+3
+        ldz #0
+        ldx xsx
+        rts
+.bl     ldx xsx                 ; (stack pointer: XBAIL resets it)
+        pla
+        pla
+        jmp xbail
+x_ai:   lda #4
+        bra +
+x_af:   lda #5
++       sta xel
+        sty xsy
+        ldy #4
+-       lda acc,y
+        sta xix,y
+        dey
+        bpl -
+        ldy xsy
+        jsr xael
+        sty xsy                 ; (Y is past the operands now)
+        ldy #0
+-       lda [fptr],z
+        sta acc,y
+        inz
+        iny
+        cpy xel
+        bne -
+        ldz #0
+        cpy #5
+        beq +
+        lda #0
+        sta accx
++       ldy xsy
+        jmp xnext
+x_sai:  lda #4                  ; a%(i)=value: index below the value
+        bra +
+x_saf:  lda #5
++       sta xel
+        cmp #4
+        bne +
+        jsr xint                ; (as STOREN: SFIX)
++       lda XS0,x
+        sta xix
+        lda XS1,x
+        sta xix+1
+        lda XS2,x
+        sta xix+2
+        lda XS3,x
+        sta xix+3
+        lda XS4,x
+        sta xix+4
+        dex
+        jsr xael
+        sty xsy
+        ldy #0
+-       lda acc,y
+        sta [fptr],z
+        inz
+        iny
+        cpy xel
+        bne -
+        ldz #0
+        ldy xsy
+        jmp xnext
+
 ; stores (the last op of a statement): value in acc/accx
 x_st1:  lda #1                  ; ?addr=value
         bra +
@@ -695,17 +838,14 @@ xcomp:  lda tp
         bra ++
 +       lda xmode
         beq +
-        lda xstore              ; statement: the store
+        ldx #0                  ; statement: the store (xstore, xstlen bytes)
+-       phx
+        lda xstore,x
         jsr xemit
-        lda xstore
-        cmp #<h_svi
-        beq .ops
-        cmp #<h_svf
-        bne +
-.ops    lda xstore+1            ; variables: the address
-        jsr xemit
-        lda xstore+2
-        jsr xemit
+        plx
+        inx
+        cpx xstlen
+        bne -
 +
 ++      lda #<h_end
         jsr xemit
@@ -893,8 +1033,8 @@ ctarget:
         bra +
 .ind    lda #<h_st1
 +       sta xstore
-        lda #0
-        sta xstore+1
+        lda #1
+        sta xstlen
         inw tp
         jsr citem               ; the address
         bra .eq
@@ -905,8 +1045,23 @@ ctarget:
         jsr getname
         lbcs xfail
         jsr isarray
-        lbeq xfail
-        lda [tp],z
+        bne +
+        jsr carr                ; a%(i)= / a(i)=: index on the stack
+        ldx #<h_sai             ; h_ai/h_af -> h_sai/h_saf
+        lda xarrop
+        cmp #<h_ai
+        beq ++
+        ldx #<h_saf
+++      stx xstore
+        ldx #9
+-       lda xarr,x
+        sta xstore+1,x
+        dex
+        bpl -
+        lda #11
+        sta xstlen
+        bra .eq
++       lda [tp],z
         cmp #'?'                ; a%?n=, a%!n=: not here
         lbeq xfail
         cmp #'!'
@@ -926,6 +1081,8 @@ ctarget:
         sta xstore+1
         lda vptr+1
         sta xstore+2
+        lda #3
+        sta xstlen
 .eq     lda [tp],z
         cmp #' '
         bne +
@@ -937,6 +1094,85 @@ ctarget:
         ldz #0
         cmp #'='
         lbeq xfail
+        inw tp
+        rts
+
+; CARR: after "name(" (getname): an existing one-dimensional integer or
+; float array in attic RAM (global DIM). Compiles the index (tp after ')')
+; and sets xarrop (h_ai/h_af) and xarr: pointer field address, its value
+; (the handle, checked at run time), size, element base (32-bit).
+carr:   jsr locate
+        lbcs xfail
+        lbne xfail2
+        lda vtype
+        ldx #<h_ai
+        cmp #4
+        beq +
+        ldx #<h_af
+        cmp #5
+        lbne xfail
++       stx xarrop
+        lda vptr
+        sta xarr
+        lda vptr+1
+        sta xarr+1
+        ldy #0
+        lda (vptr),y
+        sta xarr+2
+        sta ptr2
+        iny
+        lda (vptr),y
+        sta xarr+3
+        sta ptr2+1
+        cmp #ARRH0              ; attic blocks only (not LOCAL arrays)
+        lbcc xfail
+        jsr blkap
+        lda [ap],z              ; dimensions
+        cmp #1
+        lbne xfail
+        inz
+        lda [ap],z
+        sta xarr+4
+        inz
+        lda [ap],z
+        sta xarr+5
+        ldz #0
+        lda ap
+        clc
+        adc #3
+        sta xarr+6
+        lda ap+1
+        adc #0
+        sta xarr+7
+        lda ap+2
+        adc #0
+        sta xarr+8
+        lda ap+3
+        adc #0
+        sta xarr+9
+        lda xarrop
+        pha
+        ldx #9
+-       lda xarr,x
+        pha
+        dex
+        bpl -
+        lda #1                  ; the index (keeps the stack depth right)
+        jsr cexp
+        ldx #0
+-       pla
+        sta xarr,x
+        inx
+        cpx #10
+        bne -
+        pla
+        sta xarrop
+        lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #')'
+        lbne xfail
         inw tp
         rts
 
@@ -1046,7 +1282,20 @@ citem:  lda [tp],z
         jsr getname             ; an existing numeric variable
         lbcs xfail
         jsr isarray
-        lbeq xfail
+        bne +
+        jsr carr                ; a%(i) / a(i): one dimension, attic
+        lda xarrop
+        jsr xemit
+        ldx #0
+-       phx
+        lda xarr,x
+        jsr xemit
+        plx
+        inx
+        cpx #10
+        bne -
+        rts
++
         lda [tp],z
         cmp #'?'
         lbeq xfail
@@ -1090,9 +1339,15 @@ xdep    !byte 0
 xprec   !byte 0
 xfk     !byte 0
 xmode   !byte 0
+xel     !byte 0
+xix     !fill 5, 0
+xae     !fill 3, 0
 xsgn    !byte 0
 xsav    !byte 0, 0, 0, 0
-xstore  !byte 0, 0, 0
+xstore  !fill 12, 0
+xstlen  !byte 0
+xarr    !fill 10, 0             ; array operands: field, handle, size, base (4)
+xarrop  !byte 0
 xfirst  !byte 0
 xtp0    !word 0
 xend    !word 0

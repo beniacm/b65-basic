@@ -1,0 +1,8 @@
+10 DIM A%(10),B(5),C%(3,3):FOR I%=0 TO 10:A%(I%)=I%*I%:NEXT:FOR I%=0 TO 5:B(I%)=I%/4:NEXT
+20 S%=0:FOR I%=0 TO 10:S%=S%+A%(I%):NEXT:PRINT S%;" ";A%(3)+A%(4)*2;" ";B(2)+B(3);" ";A%(A%(2))
+30 A%(5)=2.9:B(1)=A%(5)+0.5:PRINT A%(5);" ";B(1):C%(1,2)=7:PRINT C%(1,2)+A%(1)
+40 PROCp(A%()):PRINT A%(0);" ";A%(10)
+50 ON ERROR PRINT REPORT$;" at ";ERL:END
+60 PRINT A%(11)
+70 DEF PROCp(Z%()):LOCAL I%:FOR I%=0 TO 2:Z%(I%)=Z%(I%)+100:NEXT:ENDPROC
+RUN
