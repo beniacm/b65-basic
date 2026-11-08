@@ -1,0 +1,4 @@
+#include examples/bounce.bas
+120 BN%=150:RS%=0:N%=8:G%=0:SW%=1:BW%=6
+350 PROCtext:S%=0:FOR I%=0 TO N%-1:S%=S%+(P%(I%) AND &FFFF)*3+(P%(I%)>>>16)*7+V%(I%) MOD 9973:NEXT:PRINT "pairs ";NP%;" sum ";S%:END
+RUN

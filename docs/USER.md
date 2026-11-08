@@ -130,6 +130,31 @@ K325T, `?&6E2`/`?&6E3` = chip RAM in KB, `?&6E4` = attic RAM in MB.
 `docs/rrb_list_mode.md` in the harness repository and the examples
 `rrblist_b65.bas` (v1) and `rrblist_b65v2.bas` (v2).
 
+**K325T collision engine** (list mode v2, K325T core only). Objects that
+share a bit in their collision group mask (object table `+7`) are compared
+once per frame; the box is X..X+W-1 by Y..Y+8*H-1 (`+14` = width W, 0 = 8;
+H from `+5`), edges count, objects with draw mask 0 never collide. The box
+test fires a little early for round shapes at the diagonals: confirm a pair
+with a centre-distance test (`dx*dx+dy*dy <= (2*r)*(2*r)`) before reacting,
+and a box narrower than the glyph (for an 8-pixel ball width 6) helps.
+
+    10 ON COLLISION PROChit : REM after each pass that found a collision
+    ...
+    100 DEF PROChit : LOCAL I%,Q%
+    110 FOR I%=0 TO 63 : Q%=COLLIDE(I%) : IF Q%>I% THEN PROCpair(I%,Q%)
+    120 NEXT : ENDPROC
+
+`ON COLLISION PROCname` enables the engine's interrupt; when a pass finds a
+collision, B65's interrupt handler acknowledges it at once (writes `3` to
+`&FFD71C0`: clear, interrupt stays on) and the PROC runs between statements
+like an EVERY/AFTER handler (one at a time, held back by `DI`). It reads
+the results of the last completed pass: `COLLIDE(n)` is the first
+(lowest-numbered) partner of object n or -1 (also -1 without the engine),
+`?(&FFD71A0+n DIV 8) AND 1<<(n AND 7)` tells whether object n collided.
+`ON COLLISION OFF` (also RUN and the prompt) switches it off. Pairs: call
+the handler work once per pair (the lower object number). Without the
+K325T core `ON COLLISION` is accepted but never fires.
+
 ## Examples
 
 | file | what |
@@ -138,5 +163,7 @@ K325T, `?&6E2`/`?&6E3` = chip RAM in KB, `?&6E4` = attic RAM in MB.
 | `examples/basic65/parallax65.bas` | the same in BASIC 65 |
 | `examples/rrblist_b65.bas` | RRB list mode v1: bouncing balls (K325T only) |
 | `examples/rrblist_b65v2.bas` | RRB list mode v2: bouncing balls, V400 (K325T only) |
+| `examples/bounce.bas` | 64 shaded balls that bounce off the walls and off each other: list mode v2 objects, the K325T collision engine (ON COLLISION, COLLIDE); elsewhere 8 sprites |
+| `examples/basic65/bounce65.bas` | the same in BASIC 65 with 32 balls (polls the engine) |
 
 ESCAPE stops a demo; the parallax demo then returns to the text screen.

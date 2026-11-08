@@ -100,6 +100,13 @@ scroll through one self-modifying DMA list per frame, speeds 1:2:6; six
 shaded, flapping list-mode v2 birds on a K325T; 50 frames per second).
 `examples/basic65/parallax65.bas` is the BASIC 65 twin (same picture and
 motion; on the D81 as the BASIC 65 program `PARALLAX65`).
+`bounce.bas`: 64 shaded balls that bounce off the walls and off each other,
+list-mode v2 objects whose pairs come from the K325T core's collision engine
+(`ON COLLISION PROChit`, `COLLIDE(n)`; every reported pair is confirmed with
+a centre-distance test, the boxes are 6 wide); 50 frames per second.
+`basic65/bounce65.bas` is the BASIC 65 twin with 32 balls (polls the
+engine; 25 frames per second). Without the K325T core both show 8 balls as
+sprites.
 `walkers.bas` / `basic65/walkers65.bas` are work in progress (a crowd demo
 on a destructible tile map; parked while B65's speed is worked on; not on the D81
 or in dist/sd until it is finished). To try it in Xemu:

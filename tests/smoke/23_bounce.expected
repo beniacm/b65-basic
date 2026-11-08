@@ -1,0 +1,129 @@
+B65 BASIC v0.1-dev (45GS02) for MEGA65
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>5 REM Per frame (64 balls): 15 ms in Xemu without the vsync wait (about 230 us a ball: move, walls, table), plus about 0.9 ms per colliding pair: 50 fps
+>10 REM Bounce: N% balls that bounce off the walls and off each other (B65)
+>20 REM K325T core: the balls are RRB list mode v2 objects (shaded full-colour
+>30 REM glyphs from an own 256-colour palette, 640x400) and the core's
+>40 REM collision engine compares all of them once per frame: ON COLLISION
+>50 REM PROChit then runs between statements and COLLIDE(i) gives ball i's
+>60 REM first partner. The engine tests boxes, inclusive edges (here 6x8:
+>70 REM table +14 = 6 for an 8-pixel ball), so it fires a little early at the
+>80 REM diagonals: every pair is confirmed with the centre distance
+>85 REM (dx*dx+dy*dy <= 64, two radius-4 balls) before the two velocities are
+>90 REM swapped and both balls moved one step apart (no new collision then).
+>95 REM Position and velocity of a ball are one integer each (X + 65536*Y), so
+>96 REM one addition moves a ball and the same value (AND &3FF03FF: v2 X/Y AND
+>97 REM 1023) goes into the object table.
+>100 REM Elsewhere (Xemu, standard MEGA65): the first 8 balls are sprites, the
+>105 REM pairs are found in BASIC only with SW%=1 (tests; slow with many balls).
+>110 REM BN%>0: stop after BN% frames (tests); RS%=1: back to text, timing;
+>115 REM G%=1: gravity. BASIC 65 twin: examples/basic65/bounce65.bas (32 balls).
+>120 BN%=0:RS%=1:N%=64:G%=0:SW%=0:BW%=6
+>130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:L%=160:K%=(?&6E1=&FF)
+>140 DIM P%(N%),V%(N%)
+>150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
+>160 PROCpalsave:CLS:PRINT "Bounce: ";N%;" balls":PROCpalette:PROCballs
+>170 REM start on a grid (no overlaps), random velocities -3..3 (not 0)
+>180 Q=RND(-42):FOR I%=0 TO N%-1:P%(I%)=12+(I% MOD 16)*39+(20+(I% DIV 16)*90)*65536
+>190 REPEAT U%=RND(7)-4:UNTIL U%:REPEAT W%=RND(7)-4:UNTIL W%:V%(I%)=U%+W%*65536:NEXT
+>200 IF K% THEN PROCscreen:ON COLLISION PROChit ELSE PROCsprites
+>210 REM main loop: wait for the frame, let PROChit run (EI), then move every
+>220 REM ball without events (DI; walls: PROCwall, a negative X or Y shows as
+>225 REM a large one) and write X/Y with HOLD around the batch (all move at
+>226 REM once); without the K325T the table and HOLD go to scratch RAM
+>230 F%=0:NP%=0:T%=TIME:IF K%=0 THEN TB%=&5E000:HO%=&5DFFF ELSE HO%=&FFD71FC
+>240 REPEAT
+>250 WAIT:EI:IF SW% THEN PROCsoft
+>260 IF G% THEN IF (F% AND 3)=0 THEN FOR I%=0 TO N%-1:V%(I%)=V%(I%)+65536:NEXT
+>270 DI:?HO%=1:FOR I%=0 TO N%-1:P%=P%(I%)+V%(I%)
+>280 IF (P% AND &FFFF)>632 OR P%>>>16>392 THEN PROCwall
+>300 P%(I%)=P%:!(TB%+16*I%)=P% AND &3FF03FF:NEXT
+>320 ?HO%=0:IF K%=0 THEN PROCspr
+>330 F%=F%+1:UNTIL F%=BN%
+>340 T%=TIME-T%:IF RS% THEN PROCtext:PRINT BN%;" frames in ";T%;" cs, ";NP%;" pairs"
+>350 END
+>1000 REM ---- pairs ----
+>1010 DEF PROChit:LOCAL J%,M%,I%,Q%:REM ON COLLISION (B65 acknowledged the engine)
+>1020 FOR J%=0 TO (N%-1) DIV 8:M%=?(&FFD71A0+J%):I%=J%*8:REM collided objects
+>1030 WHILE M%:IF M% AND 1 THEN Q%=COLLIDE(I%):IF Q%>I% THEN A%=I%:B%=Q%:PROCpair
+>1040 M%=M%>>>1:I%=I%+1:ENDWHILE
+>1050 NEXT:ENDPROC
+>1060 DEF PROCpair:REM A%, B%: confirm (centre distance), swap, separate
+>1070 U%=(P%(B%) AND &FFFF)-(P%(A%) AND &FFFF):W%=(P%(B%)>>>16)-(P%(A%)>>>16):IF U%*U%+W%*W%>64 THEN ENDPROC
+>1080 NP%=NP%+1:U%=V%(A%):V%(A%)=V%(B%):V%(B%)=U%:REM then one step each (if inside)
+>1090 U%=P%(A%)+V%(A%):IF (U% AND &FFFF)<=632 AND U%>>>16<=392 THEN P%(A%)=U%
+>1100 U%=P%(B%)+V%(B%):IF (U% AND &FFFF)<=632 AND U%>>>16<=392 THEN P%(B%)=U%
+>1110 ENDPROC
+>1135 DEF PROCwall:LOCAL X%,Y%,U%,W%:REM reflect the velocity at a wall
+>1136 X%=P%(I%) AND &FFFF:Y%=P%(I%)>>>16:U%=(V%(I%) AND &FFFF EOR &8000)-&8000:W%=(V%(I%)-U%) DIV 65536
+>1137 IF X%+U%<0 OR X%+U%>632 THEN U%=-U%
+>1138 IF Y%+W%<0 OR Y%+W%>392 THEN W%=-W%
+>1139 V%(I%)=U%+W%*65536:P%=P%(I%)+V%(I%):ENDPROC
+>1140 DEF PROCsoft:LOCAL I%,J%:REM without the engine: all pairs in BASIC (box test)
+>1150 FOR I%=0 TO N%-2:FOR J%=I%+1 TO N%-1
+>1160 IF ABS((P%(J%) AND &FFFF)-(P%(I%) AND &FFFF))<8 AND ABS((P%(J%)>>>16)-(P%(I%)>>>16))<8 THEN A%=I%:B%=J%:PROCpair
+>1170 NEXT:NEXT:ENDPROC
+>1200 REM ---- set-up ----
+>1210 DEF PROCballs:LOCAL C%,R%,M%,X%,Y%,D%,V%
+>1220 REM six shaded balls (8x8 full colour, lit from the top left) at GA% =
+>1230 REM glyphs &1800-&1805: palette ramps (first entry, length)
+>1240 RESTORE 1300:FOR C%=0 TO 5:READ R%,M%:FOR Y%=0 TO 7:FOR X%=0 TO 7:V%=0
+>1250 IF (2*X%-7)*(2*X%-7)+(2*Y%-7)*(2*Y%-7)<=60 THEN D%=(2*X%-4)*(2*X%-4)+(2*Y%-4)*(2*Y%-4):V%=R%+M%-1-D%*(M%-1) DIV 110:IF V%<R% THEN V%=R%
+>1260 ?(GA%+64*C%+8*Y%+X%)=V%:NEXT:NEXT:NEXT:ENDPROC
+>1300 DATA 97,11, 184,16, 152,16, 128,16, 168,16, 64,16
+>1400 DEF PROCscreen:LOCAL I%,R%,A%,X%,C%
+>1410 REM token lists (one per ball colour) and their colour words; object
+>1420 REM table: X/Y, mask, height, bits 19-16, collision group 1, list, colour
+>1430 REM offset, stride, box width BW%
+>1440 FOR C%=0 TO 5:PROCw(OA%+16*C%,&1800+C%):PROCw(OA%+16*C%+2,&FFFF):PROCw(CR%-&4000+OC%+16*C%,0):NEXT
+>1450 FOR I%=0 TO N%-1:A%=TB%+16*I%:C%=I% MOD 6:!A%=P%(I%):?(A%+4)=255:?(A%+5)=1:?(A%+6)=8:?(A%+7)=1
+>1460 !(A%+8)=&9000+16*C%+(OC%+16*C%)*65536:!(A%+12)=BW%*65536:NEXT
+>1470 REM background: 80x50 rows of dark blue dots
+>1480 FOR R%=0 TO 49:A%=S%+R%*L%:FOR X%=0 TO 79:I%=32:IF RND(1)<.05 THEN I%=46
+>1490 PROCw(A%+2*X%,I%):PROCw(CR%+R%*L%+2*X%,190*256):NEXT:NEXT
+>1500 REM VIC-IV (HOTREG off): V400, 50 rows, one line per glyph row, CHR16 +
+>1510 REM full colour above 255, rows of 80 tokens, pointers; list mode v2
+>1520 ?&D05D=?&D05D AND 127:?&D031=?&D031 OR 8:?&D07B=49:?&D05B=0:?&D054=?&D054 OR 5
+>1530 PROCw(&D058,L%):?&D05E=80:?&D063=?&D063 AND 192:?&D020=0:?&D021=0
+>1540 ?&D060=0:?&D061=0:?&D062=8:PROCw(&D064,&4000)
+>1550 ?&FFD71F8=0:?&FFD71F9=&C0:?&FFD71FA=8:?&FFD71FB=N%:?&FFD71F0=?&FFD71F0 OR &50:ENDPROC
+>1600 DEF PROCsprites:LOCAL I%,Y%,X%
+>1610 REM no list mode: balls 0-7 as sprites (8x8 circle, scaled to 320x200)
+>1620 FOR Y%=0 TO 20:FOR X%=0 TO 2:?(&5FC00+3*Y%+X%)=0:NEXT:NEXT
+>1630 RESTORE 1650:FOR Y%=0 TO 7:READ X%:?(&5FC00+3*Y%)=X%:NEXT
+>1640 ?&D06C=0:?&D06D=&FA:?&D06E=&85:FOR I%=0 TO 7:PROCw(&5FA00+2*I%,&17F0):?(&D027+I%)=2+I%:NEXT:?&D015=255:ENDPROC
+>1650 DATA 60,126,255,255,255,255,126,60
+>1660 DEF PROCspr:LOCAL I%,X%:?&D010=0
+>1670 FOR I%=0 TO 7:X%=24+(P%(I%) AND &FFFF) DIV 2:?(&D000+2*I%)=X% AND 255:IF X%>255 THEN ?&D010=?&D010 OR 1<<I%
+>1680 ?(&D001+2*I%)=50+(P%(I%)>>>16) DIV 2:NEXT:ENDPROC
+>1700 DEF PROCtext:?&D015=0:IF K% THEN ON COLLISION OFF:?&FFD71F0=?&FFD71F0 AND &AF
+>1710 ?&D031=V1%:?&D05B=V5%:?&D07B=V7%:PROCpalrest:MODE 0:ENDPROC
+>1720 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V% DIV 256) AND 255:ENDPROC
+>2000 DEF PROCpalette:LOCAL S%,C%,D%,I%,R0%,G0%,B0%,R1%,G1%,B1%
+>2010 REM own palette: ramps from 16 on (0-15 stay the standard colours)
+>2020 RESTORE 2060
+>2030 READ S%:IF S%<0 THEN ENDPROC
+>2040 READ C%,R0%,G0%,B0%,R1%,G1%,B1%:D%=C%-1:IF D%<1 THEN D%=1
+>2045 FOR I%=0 TO C%-1
+>2050 PROCpal(S%+I%,R0%+(R1%-R0%)*I% DIV D%,G0%+(G1%-G0%)*I% DIV D%,B0%+(B1%-B0%)*I% DIV D%):NEXT:GOTO 2030
+>2060 DATA 16,32,14,18,70,255,190,140, 48,16,40,22,10,190,140,80, 64,16,30,35,60,175,185,215
+>2070 DATA 80,16,5,35,10,110,200,70, 97,11,90,0,0,255,140,120, 108,2,60,40,20,120,90,50
+>2080 DATA 110,2,110,60,20,170,110,50, 113,8,50,55,70,235,240,250, 121,4,200,150,0,255,230,90
+>2090 DATA 125,1,90,170,255,90,170,255, 126,2,30,30,40,220,30,30, 128,16,90,30,0,255,240,150
+>2100 DATA 144,8,0,0,0,40,35,55, 152,16,20,60,15,200,235,110, 168,16,130,150,190,255,255,255
+>2110 DATA 184,16,20,25,70,140,170,240, 200,16,45,25,10,190,130,70, 216,40,0,0,0,255,255,255, -1
+>2120 DEF PROCpal(I%,R%,G%,B%):REM the VIC-IV stores palette bytes nibble-swapped
+>2130 ?(&D100+I%)=(R% MOD 16)*16+R% DIV 16:?(&D200+I%)=(G% MOD 16)*16+G% DIV 16:?(&D300+I%)=(B% MOD 16)*16+B% DIV 16:ENDPROC
+>2140 DEF PROCpalsave:LOCAL I%
+>2150 FOR I%=16 TO 255:?(&5F400+I%)=?(&D100+I%):?(&5F500+I%)=?(&D200+I%):?(&5F600+I%)=?(&D300+I%):NEXT:ENDPROC
+>2160 DEF PROCpalrest:LOCAL I%
+>2170 FOR I%=16 TO 255:?(&D100+I%)=?(&5F400+I%):?(&D200+I%)=?(&5F500+I%):?(&D300+I%)=?(&5F600+I%):NEXT:ENDPROC
+>120 BN%=150:RS%=0:N%=8:G%=0:SW%=1:BW%=6
+>350 PROCtext:S%=0:FOR I%=0 TO N%-1:S%=S%+(P%(I%) AND &FFFF)*3+(P%(I%)>>>16)*7+V%(I%) MOD 9973:NEXT:PRINT "pairs ";NP%;" sum ";S%:END
+>RUN
+Bounce: 8 balls
+pairs 8 sum 860
+>
