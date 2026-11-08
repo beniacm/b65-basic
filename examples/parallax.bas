@@ -1,4 +1,4 @@
-5 REM Per frame: 25 statements (46 with the K325T birds), 4.6 ms in Xemu without the vsync wait: 50 fps. RRB: 3 GOTOX + 123 FCM glyphs a line, ~1970 of 2592 cycles (16 per FCM glyph); DBLRR on the V400 schedule doubles that
+5 REM Per frame: 25 statements (46 with the K325T birds), 1.1 ms in Xemu without the vsync wait: 50 fps. RRB: 3 GOTOX + 123 FCM glyphs a line, ~1970 of 2592 cycles (16 per FCM glyph); DBLRR on the V400 schedule doubles that
 10 REM Parallax demo for B65 BASIC: three overlapping RRB layers (VIC-IV)
 20 REM 40 columns (H320), 25 rows (V200), every glyph full colour (FCM) from an
 30 REM own 256-colour palette (0-15 kept). Layer 3: sky gradient and snowy

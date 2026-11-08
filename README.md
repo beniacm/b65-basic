@@ -42,7 +42,8 @@ Version: **v0.1-dev** (shown in the start-up banner; the string lives only in
 | SPRITE n,x,y[,c] / OFF; MOUSE x,y,b / TO / ON / OFF (1351 in port 1) | done |
 | 28-bit `?` `!` `\|` indirection to chip RAM and attic RAM | done |
 | Program space | done: program text in its own bank (PAGE=&10800), about 60 KB |
-| Variable space | about 16 KB in bank 0 for variables and strings; global arrays in attic RAM (2 MB, up to 65535 elements each) |
+| Variable space | about 14 KB in bank 0 for variables and strings; global arrays in attic RAM (2 MB, up to 65535 elements each) |
+| Speed | integer constants pre-tokenised; numeric expressions, assignments and single-line IF compiled once into cached code (overlay 4). Per statement in Xemu: `?a=I% AND 255` 26 us, `!a=I%+I%*65536` 38 us, a MOD/AND expression 62 us (BASIC 65 on the board: 135, 162, 328 us); see docs/DESIGN.md |
 
 ## Hardware status
 

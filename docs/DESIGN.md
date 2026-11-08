@@ -100,26 +100,41 @@ currently about 15 KB without floating point or the assembler.
     instructions; LIST and the assembler listing print it as typed (leading
     zeros, hex case); `linnum` accepts it (LIST/DELETE/RENUMBER/AUTO
     arguments). Floats, longer numbers, binary `%` and DATA stay text.
-  * Compiled expressions (overlay 4, `src/xc.a`, bank 4 `$48000`-`$49FFF`):
-    EXPR sends program-text expressions (not immediate mode or EVAL) to
-    XCRUN. A numeric expression of constants, numeric variables (`@%`,
-    `A%`-`Z%`, `name%`, `name`), parentheses, unary -/+ and the binary
-    operators is compiled once into RPN code (cached by its text address in
-    a 256-slot direct-mapped table, code space about 4 KB) and then run
-    there: value stack in the window, integer + - AND OR EOR and
-    comparisons inline, everything else through the interpreter's BINOP (so
-    float results, overflow to floating point and the errors are the
-    interpreter's). Strings, arrays, functions and indirection are never
-    compiled (the slot remembers it). A lone constant skips the overlay.
-    CLEAR (RUN, program edits, LOAD, NEW, ...) flushes the cache; a program
-    that pokes its own text must not rely on old expressions. The previous
-    overlay is mapped back after the call, so overlay code may call EXPR.
-  * The overlay images are packed (`tools/lzb.py`, `tools/packovl.py`):
-    the PRG has to end below `$CF00`.
+  * Compiled code (overlay 4, `src/xc.a`, bank 4 `$48000`-`$49FFF`, mapped
+    at `$E000`): EXPR (program text, not immediate mode or EVAL), LET and
+    the single-line IF go to XCRUN / XCLET / XCIF first. Compiled once,
+    cached by text address and kind (a 256-slot direct-mapped table; the
+    code cache is what is left of the 8 KB after the code and tables, about
+    2.7 KB, flushed when full):
+    * numeric expressions of constants (TNUM, decimal/float text), numeric
+      variables (`@%`, `A%`-`Z%`, `name%`, `name`), parentheses, unary -/+
+      and all binary operators, as RPN with the value stack in the window:
+      integer + - * AND OR EOR and comparisons inline (* on the hardware
+      multiplier), everything else and any overflow through the
+      interpreter's BINOP, so results and errors are the interpreter's;
+    * assignments `?item=e`, `!item=e`, `A%=e`, `name%=e`, `name=e` to
+      existing variables (stored as STOREN does);
+    * `IF cond THEN statements [ELSE ...]` on one line: the condition (as
+      EXPRI) and the targets after THEN / after ELSE / the end of the line.
+    Strings, arrays, functions, indirection inside expressions, compound
+    assignments, new variables, THEN/ELSE line numbers in the THEN part,
+    multi-line IF: interpreted (the slot remembers "never"). A lone small
+    constant or integer variable is left to the interpreter (cheaper). CLEAR
+    (RUN, program edits, LOAD, NEW, CHAIN, ...) flushes the cache; a program
+    that pokes its own text must not rely on old code. The previous overlay
+    is mapped back after the call, so overlay code may call EXPR.
+  * The overlay images are packed with LZH (`tools/lzh.py`,
+    `tools/packovl.py`: LZ77 with canonical-Huffman literals, unpacked by
+    OVINIT): the PRG has to end below `$CF00`.
   * Decimal/hex text constants (DATA, VAL, EVAL of floats) are read with Q
     operations; DIV/MOD use the hardware divider; integer FOR/NEXT, static
-    integer variables (`@%`, `A%`-`Z%`) and operator recognition (a 256-byte
-    table) have fast paths.
+    integer variables (`@%`, `A%`-`Z%`), `?`/`!` stores, the single-line IF
+    false path and operator recognition (a table) have fast paths in the
+    interpreter too.
+  * `tests/bench/bench.sh` (Xemu, us per iteration incl. a 16 us loop):
+    e347057: empty 32, poke 146, int 188, float 188, pling 200, expr 384,
+    dma 252; now: empty 16, poke 42, int 64, float 66, pling 54, expr 78,
+    dma 86. `tests/bench/*_check.txt` compare results with older builds.
 * **No KERNAL.** The program maps out every ROM (`MAP` cleared, `$D030=0`,
   `$01=$35`) and drives the hardware itself:
   * VIC-IV in 80x25 text mode at `$0800`, using the lowercase char ROM
@@ -382,7 +397,7 @@ must fit below `libase`. Up to 32 KB per library. Tested by
   jobs: per content row "copy the coarse cell into the next job's source
   low byte", "copy the fine cell into the row's GOTOX", "copy 41 tokens"
   (each job prefixed `$0B,$00`; the list address must be written before
-  every trigger: it advances). B65: 25 statements per frame, 4.6 ms (Xemu,
+  every trigger: it advances). B65: 25 statements per frame, 1.1 ms (Xemu,
   without the vsync wait); BASIC 65: 19 statements, 3.9 ms; both run at 50
   frames per second.
 * RRB time: 3 GOTOX + 123 FCM glyphs per line, about 1970 of the 2592
