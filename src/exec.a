@@ -1566,7 +1566,7 @@ next:   jsr getsp
         lda #32                 ; Not in a FOR loop
         jmp error
 +       jsr termq
-        beq .go
+        beq .go2                ; (spz is still the frame from GETSP)
         lda [tp],z
         cmp #','
         beq .go
@@ -1592,7 +1592,7 @@ next:   jsr getsp
 .cm     lda #33                 ; Can't match FOR
         jmp error
 .go     jsr getsp0
-        ldy #2
+.go2    ldy #2
         lda (spz),y
         sta vptr
         iny
@@ -1608,7 +1608,7 @@ next:   jsr getsp
         lda (spz),y
         ldy #14
         ora (spz),y
-        bne .slow
+        lbne .slow
         ldy #0                  ; acc = var + step (Y: var, Z: frame)
         ldz #10
         clc
@@ -1632,10 +1632,16 @@ next:   jsr getsp
         sta acc+3
         ldz #0
         bvs .slow               ; overflow: the general path decides
--       lda acc,y
+        sta (vptr),y            ; (Y = 3, A = acc+3)
+        dey
+        lda acc+2
         sta (vptr),y
         dey
-        bpl -
+        lda acc+1
+        sta (vptr),y
+        dey
+        lda acc
+        sta (vptr),y
         ldy #13                 ; step sign
         lda (spz),y
         bmi .fneg
@@ -1670,12 +1676,12 @@ next:   jsr getsp
         eor #$80
 +       tax
         bmi .done
-        ldy #15                 ; continue loop
+        ldy #15                 ; continue loop (same text bank as the FOR)
         lda (spz),y
         sta tp
         iny
         lda (spz),y
-        jsr settph
+        sta tp+1
         jmp xeq
 .slow   jsr loadn               ; var -> acc
         ldy #10
