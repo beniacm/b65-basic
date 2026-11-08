@@ -917,6 +917,339 @@ p10b1:  !byte >1, >10, >100, >1000, >10000, >100000, >1000000, >10000000, >10000
 p10b2:  !byte ^1, ^10, ^100, ^1000, ^10000, ^100000, ^1000000, ^10000000, ^100000000
 p10b3:  !byte 0, 0, 0, 0, 0, 0, 0, 0, 100000000 >> 24
 
+; RENUMBER [start[,step]]
+!zone renum
+o_renum:
+        jsr pair
+        ; pass 1: build table old->new in the free area
+        jsr clear
+        lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+        lda free
+        sta ptr2
+        lda free+1
+        sta ptr2+1
+        lda lnum
+        sta tmpw
+        lda lnum+1
+        sta tmpw+1
+.p1     ldy #0
+        jsr lp1y
+        beq .p1x
+        tax
+        iny                     ; table entry: old lo, old hi, new lo, new hi
+        jsr lp1y
+        ldy #0
+        sta (ptr2),y
+        ldy #2
+        jsr lp1y
+        ldy #1
+        sta (ptr2),y
+        lda tmpw
+        ldy #2
+        sta (ptr2),y
+        lda tmpw+1
+        iny
+        sta (ptr2),y
+        lda tmpw                ; set new number in line
+        ldy #1
+        jsr sp1y
+        lda tmpw+1
+        iny
+        jsr sp1y
+        lda tmpw
+        clc
+        adc lnum2
+        sta tmpw
+        bcc +
+        inc tmpw+1
+        beq .toobig
++       txa
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +
+        inc ptr1+1
++       lda ptr2
+        clc
+        adc #4
+        sta ptr2
+        lbcc .p1
+        inc ptr2+1
+        lbra .p1
+.toobig lda #20
+        jmp error
+.p1x    lda ptr2                ; end of table
+        sta ptr3
+        lda ptr2+1
+        sta ptr3+1
+        ; pass 2: fix TLINO references
+        lda page
+        sta ptr1
+        lda page+1
+        sta ptr1+1
+.p2     ldy #0
+        jsr lp1y
+        lbeq .done
+        ldy #3
+.p2c    jsr lp1y
+        cmp #CR
+        beq .p2n
+        cmp #'"'
+        bne +
+-       iny                     ; skip string
+        jsr lp1y
+        cmp #CR
+        beq .p2n
+        cmp #'"'
+        bne -
+        iny
+        bra .p2c
++       cmp #TLINO
+        beq .fix
+        iny
+        bra .p2c
+.fix    sty tmp6
+        tya
+        clc
+        adc ptr1
+        sta tp
+        lda ptr1+1
+        adc #0
+        jsr settph
+        inw tp
+        jsr decode0             ; lnum = referenced line
+        ; look up in table
+        lda free
+        sta ptr2
+        lda free+1
+        sta ptr2+1
+.lk     lda ptr2
+        cmp ptr3
+        bne +
+        lda ptr2+1
+        cmp ptr3+1
+        beq .nf
++       ldy #0
+        lda (ptr2),y
+        cmp lnum
+        bne .lkn
+        iny
+        lda (ptr2),y
+        cmp lnum+1
+        bne .lkn
+        iny
+        lda (ptr2),y
+        sta lnum
+        iny
+        lda (ptr2),y
+        sta lnum+1
+        ldy tmp6                ; re-encode in place
+        jsr encodey
+        bra .cont
+.lkn    lda ptr2
+        clc
+        adc #4
+        sta ptr2
+        bcc .lk
+        inc ptr2+1
+        bra .lk
+.nf     ; leave unchanged
+.cont   ldy tmp6
+        iny
+        iny
+        iny
+        iny
+        lbra .p2c
+.p2n    ldy #0
+        jsr lp1y
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +
+        inc ptr1+1
++       jmp .p2
+.done   jsr clear
+        jmp clopp
+
+!zone list
+o_list: jsr nxt
+        cmp #'O'
+        bne .l0
+        inw tp                  ; LISTO n
+        jsr expri
+        lda acc
+        sta listo
+        jmp clopp
+.l0     jsr dlpair
+        lda #0
+        sta indent
+.l1     ldy #0
+        jsr lp1y
+        beq .lx
+        iny
+        jsr lp1y
+        sta lnum
+        iny
+        jsr lp1y
+        sta lnum+1
+        lda lnum2
+        cmp lnum
+        lda lnum2+1
+        sbc lnum+1
+        bcc .lx
+        jsr trap
+        jsr listit
+        ldy #0
+        jsr lp1y
+        clc
+        adc ptr1
+        sta ptr1
+        bcc .l1
+        inc ptr1+1
+        bra .l1
+.lx     jmp clopp
+
+; LISTIT: list line at ptr1 (lnum = number). Uses indent.
+!zone listit
+listit:
+        lda #1
+        sta listflg
+        jsr .li
+        lda #0
+        sta listflg
+        rts
+.li     jsr pbcd
+        ldy #3
+        jsr lp1y
+        jsr insub_q             ; outdent tokens at line start
+        lda listo
+        and #1
+        beq +
+        lda #' '
+        jsr outchr
++       lda listo
+        and #2
+        beq +
+        lda indent
+        asl
+        jsr spaces
++       ldy #3
+        jsr lp1y
+        jsr inadd_q
+        lda #0
+        sta tmp6                ; quote flag
+        ldy #3
+.l8     jsr lp1y
+        iny
+        cmp #CR
+        lbeq .l9
+        sta tmp5                ; last char
+        cmp #'"'
+        bne +
+        lda tmp6
+        eor #1
+        sta tmp6
+        lda #'"'
++       ldx tmp6
+        bne .lit
+        cmp #TNUM
+        bne +
+        dey                     ; pre-encoded constant: tp -> TNUM
+        phy
+        tya
+        clc
+        adc ptr1
+        sta tp
+        lda ptr1+1
+        adc #0
+        jsr settph
+        jsr tnumlist            ; tmp4 = length
+        pla
+        clc
+        adc tmp4
+        tay
+        bra .l8
++       cmp #TLINO
+        bne .tok
+        phy                     ; line number reference
+        tya
+        clc
+        adc ptr1
+        sta tp
+        lda ptr1+1
+        adc #0
+        jsr settph
+        lda lnum
+        pha
+        lda lnum+1
+        pha
+        jsr decode0
+        jsr pbcdl
+        pla
+        sta lnum+1
+        pla
+        sta lnum
+        ply
+        iny
+        iny
+        iny
+        bra .l8
+.tok    sty tmp4
+        jsr out
+        ldy tmp4
+        cpy #4                  ; first token was handled at line start
+        beq .l8
+        ; tokens that change indent mid-line
+        lda tmp5
+        ldx #3
+-       cmp TOKSUB-1,x
+        beq .sub
+        dex
+        bne -
+        ldx #4
+-       cmp TOKADD-1,x
+        beq .add
+        dex
+        bne -
+        lbra .l8
+.sub    jsr indsub
+        lbra .l8
+.add    jsr indadd
+        lbra .l8
+.lit    jsr outchr
+        lbra .l8
+.l9     lda tmp5
+        cmp #TTHEN              ; multi-line IF
+        bne +
+        lda tmp6
+        bne +
+        jsr indadd
++       jmp crlf
+
+insub_q:
+        ldx #LENSUB
+-       cmp TOKSUB-1,x
+        beq indsub
+        dex
+        bne -
+        rts
+inadd_q:
+        ldx #LENADD
+-       cmp TOKADD-1,x
+        beq indadd
+        dex
+        bne -
+        rts
+indsub: lda indent
+        beq +
+        dec indent
++       rts
+indadd: inc indent
+        rts
+
 !src "src/asmtab.a"
 ovl_asm_end:
 }

@@ -2332,5 +2332,128 @@ d81load:
         sta d81s
         bra .s
 .x      rts
+; (TEST_INIT lives here: called once at start-up, after OVINIT)
+!zone testinit
+; Xemu:     "B65TEST:" + script at $10000, transcript at $18000, exit via $D6CF
+; hardware: "B65HWTS:" + script in attic RAM at $8000000, transcript at
+;           $8010000 (cleared here), done marker "B65DONE" at $800FFF0
+test_init:
+        lda #0
+        sta testmode
+        ldx #<TSTMAGIC
+        ldy #>TSTMAGIC
+        lda #^TSTMAGIC
+        ldz #0
+        jsr .chk
+        bcs +
+        ldx #0
+        ldy #0
+        lda #0
+        ldz #$08
+        jsr .chk
+        lbcc .no
+        lda #$c0                ; hardware test mode
+        sta testmode
+        lda #0                  ; consume the magic (no re-run after a reset)
+        ldz #0
+        sta [tsp],z
+        lda #8
+        sta tsp
+        lda #$00                ; transcript = $8010000, cleared (64 KB)
+        sta twp
+        sta twp+1
+        lda #$01
+        sta twp+2
+        lda #$08
+        sta twp+3
+        lda #0
+        ldx #0
+--      ldz #0
+-       sta [twp],z
+        inz
+        bne -
+        inc twp+1
+        dex
+        bne --
+        stx twp+1
+        bra .no
++       lda #<TSTCOPY           ; copy 16 KB of script to attic RAM
+        sta twp
+        lda #>TSTCOPY
+        sta twp+1
+        lda #^TSTCOPY
+        sta twp+2
+        lda #TSTCOPY>>24
+        sta twp+3
+        ldx #$40
+--      ldz #0
+-       lda [tsp],z
+        sta [twp],z
+        inz
+        bne -
+        inc tsp+1
+        inc twp+1
+        dex
+        bne --
+        ldx #3
+-       lda .tc,x
+        sta tsp,x
+        dex
+        bpl -
+        lda #8
+        sta tsp
+        lda #$80
+        sta testmode
+        lda #<TRANSCR
+        sta twp
+        lda #>TRANSCR
+        sta twp+1
+        lda #^TRANSCR
+        sta twp+2
+        lda #0
+        sta twp+3
+        ldx #TRANSEND-(>TRANSCR) ; clear it
+--      ldz #0
+-       sta [twp],z
+        inz
+        bne -
+        inc twp+1
+        dex
+        bne --
+        lda #>TRANSCR
+        sta twp+1
+.no     ldz #0
+        rts
+.tc     !byte <TSTCOPY, >TSTCOPY, ^TSTCOPY, TSTCOPY>>24
+; .chk: X/Y/A/Z = address bytes 0..3 -> tsp; carry set if "B65TEST:" (Xemu)
+; or "B65HWTS:" (hardware, then V... carry set too; caller decides by order)
+.chk    stx tsp
+        sty tsp+1
+        sta tsp+2
+        tza
+        sta tsp+3
+        ldz #0
+        ldx #0
+-       lda [tsp],z
+        cmp .mg1,x
+        beq +
+        lda tsp+3               ; second magic only for the attic address
+        beq .nm
+        lda [tsp],z
+        cmp .mg2,x
+        bne .nm
++       inz
+        inx
+        cpx #8
+        bne -
+        ldz #0
+        sec
+        rts
+.nm     ldz #0
+        clc
+        rts
+.mg1    !text "B65TEST:"
+.mg2    !text "B65HWTS:"
+
 ovl_fat_end:
 }

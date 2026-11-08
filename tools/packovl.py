@@ -5,7 +5,7 @@ ACME assembles the overlay images uncompressed after the resident code
 (code_end .. ovl_images_end, see src/b65.a). This tool replaces them with
 the shared literal code-length table and one LZH stream per overlay, points
 lzhtabp and the ovltab source words at them, and checks that the PRG ends
-below $CF00 (it is loaded into bank 0 below the I/O area). OVINIT unpacks
+below $D000 (it is loaded into bank 0 below the I/O area). OVINIT unpacks
 the streams into bank 4 at start-up."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,8 +47,11 @@ for i, (b, s) in enumerate(zip(blobs, streams)):
     out[t + 1] = addr >> 8
     out += s
     addr += len(s)
-if addr > 0xcf00:
-    sys.exit('packovl: PRG too large: ends at $%04x (limit $cf00)' % addr)
+# up to the I/O area: OVINIT unpacks the images into bank 4 before the
+# 16-bit stack (from HIMEM $CF00 down) or anything else uses $CF00-$CFFF
+limit = 0xd000
+if addr > limit:
+    sys.exit('packovl: PRG too large: ends at $%04x (limit $%04x)' % (addr, limit))
 open(PRG, 'wb').write(out)
 print('packovl: overlays %d -> %d bytes, PRG ends at $%04x ($%x free)' % (
-    syms['ovl_images_end'] - code_end, addr - code_end, addr, 0xcf00 - addr))
+    syms['ovl_images_end'] - code_end, addr - code_end, addr, limit - addr))

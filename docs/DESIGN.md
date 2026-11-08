@@ -125,7 +125,8 @@ currently about 15 KB without floating point or the assembler.
     is mapped back after the call, so overlay code may call EXPR.
   * The overlay images are packed with LZH (`tools/lzh.py`,
     `tools/packovl.py`: LZ77 with canonical-Huffman literals, unpacked by
-    OVINIT): the PRG has to end below `$CF00`.
+    OVINIT): the PRG has to end below `$D000` (the I/O area; OVINIT has
+    unpacked them before the stack at HIMEM `$CF00` is used).
   * Decimal/hex text constants (DATA, VAL, EVAL of floats) are read with Q
     operations; DIV/MOD use the hardware divider; integer FOR/NEXT, static
     integer variables (`@%`, `A%`-`Z%`), `?`/`!` stores, the single-line IF
@@ -564,7 +565,7 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | `$1F00`-`$1FAB` | pitch envelopes (16 x 8), channel pitch state, sound IRQ temporaries, mouse |
 | `$1FB0`-`$1FB7` | testmode, lexmode, AUTO number/step, TRACE limit (moved out of zero page) |
 | `$1FB8`-`$1FDF` | libase/libcur, array cursors aelp/aelq, arrtop, avt2, RETURN far capture, overlay-2 element addresses |
-| `$2001`-`$97FF` | PRG stub + resident interpreter (the overlay images follow the code directly in the PRG, up to `$CF00`, and are copied to bank 4 at start-up) |
+| `$2001`-`$97FF` | PRG stub + resident interpreter (the overlay images follow the code directly in the PRG, up to `$D000`, and are copied to bank 4 at start-up) |
 | `$9800`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
 | `$E000`-`$FFFF` | overlay window (MAP) |
 | bank 1 `$10800`-`$1F7FF` | program text (PAGE..TOP), libraries at the top |
