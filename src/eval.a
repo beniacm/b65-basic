@@ -177,6 +177,23 @@ popval: pla
 !zone getop
 getop:  ldy #0
         lda [tp],z
+        tax
+        lda optab,x             ; prec << 5 | op, $ff: relational, 0: none
+        lbeq .ret
+        cmp #$ff
+        beq .rel
+        tay
+        and #$1f
+        tax
+        tya
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        ldy #1
+        rts
+.rel    lda [tp],z
         cmp #TOR
         bne +
         ldx #OP_OR
@@ -272,6 +289,34 @@ getop:  ldy #0
         rts
 .none   lda #0
         rts
+optab:  !fill 256, 0
+* = optab + '+', overlay
+        !byte 4<<5 | OP_ADD
+* = optab + '-', overlay
+        !byte 4<<5 | OP_SUB
+* = optab + '*', overlay
+        !byte 5<<5 | OP_MUL
+* = optab + '/', overlay
+        !byte 5<<5 | OP_FDIV
+* = optab + '^', overlay
+        !byte 6<<5 | OP_POW
+* = optab + '<', overlay
+        !byte $ff
+* = optab + '=', overlay
+        !byte $ff
+* = optab + '>', overlay
+        !byte $ff
+* = optab + TOR, overlay
+        !byte 1<<5 | OP_OR
+* = optab + TEOR, overlay
+        !byte 1<<5 | OP_EOR
+* = optab + TAND, overlay
+        !byte 2<<5 | OP_AND
+* = optab + TMOD, overlay
+        !byte 5<<5 | OP_MOD
+* = optab + TDIV, overlay
+        !byte 5<<5 | OP_IDIV
+* = optab + 256, overlay
 
 ; ---- BINOP: arg/argx (or STRBUF) OP acc -> acc; X = op, tmp5 = left type ----
 !zone binop
