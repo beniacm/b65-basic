@@ -36,6 +36,7 @@ def main():
     ap.add_argument('--realtime', action='store_true', help='run at real MEGA65 speed (no -sleepless)')
     ap.add_argument('--prg', help='run this PRG under the MEGA65 ROM instead of B65 (BASIC 65 programs; script "-")')
     ap.add_argument('--card', help='use this SD card image (written to!) instead of the virtual SD directory')
+    ap.add_argument('--memout', help='copy the memory dump to this file')
     ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
     script = b'' if a.script == '-' else open(a.script, 'rb').read()
@@ -129,6 +130,8 @@ def main():
             print(r.stdout.decode(errors='replace')[-3000:])
             return 2
         m = open(mem, 'rb').read()
+        if a.memout:
+            open(a.memout, 'wb').write(m)
         t = m[0x48000:0x4f000]
         t = t[:t.index(0)] if 0 in t else t
         out = t.decode('latin-1').replace('\r\n', '\n').replace('\r', '')

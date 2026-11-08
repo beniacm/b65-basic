@@ -165,8 +165,96 @@ irqinit:
         sta irqon
         lda #$ff
         sta evon
+!ifdef PROF {
+        jsr profinit
+}
         cli
         rts
+
+!ifdef PROF {
+; ---- sampling profiler (profile builds only: make PROF=1) ----
+; CIA 1 timer A interrupts every PROFRATE ticks; each sample adds 1 to a
+; 16-bit counter for the interrupted PC (4-byte buckets) at $50000-$57FFF.
+PROFRATE = 997
+profinit:
+        lda #0
+        sta fptr
+        sta fptr+1
+        lda #5
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldz #0
+        ldx #$80
+-       lda #0
+        sta [fptr],z
+        inz
+        bne -
+        inc fptr+1
+        dex
+        bne -
+        lda #<PROFRATE
+        sta $dc04
+        lda #>PROFRATE
+        sta $dc05
+        lda #$11
+        sta $dc0e
+        lda #$81
+        sta $dc0d
+        lda $dc0d
+        rts
+profsample:                     ; stack: SP+1,2 return, +3 Z +4 Y +5 X +6 A +7 P +8 PCL +9 PCH
+        lda $dc0d
+        and #1
+        beq .pr
+        tsx
+        tsy
+        sty .pa+2
+        sty .pb+2
+.pa     lda+2 $0009,x             ; PCH
+        lsr
+        sta .ph
+.pb     lda+2 $0008,x             ; PCL
+        ror
+        and #$fe
+        sta .pl
+        lda fptr
+        pha
+        lda fptr+1
+        pha
+        lda fptr+2
+        pha
+        lda fptr+3
+        pha
+        lda .pl
+        sta fptr
+        lda .ph
+        sta fptr+1
+        lda #5
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldz #0
+        lda [fptr],z
+        inc
+        sta [fptr],z
+        bne +
+        inz
+        lda [fptr],z
+        inc
+        sta [fptr],z
++       pla
+        sta fptr+3
+        pla
+        sta fptr+2
+        pla
+        sta fptr+1
+        pla
+        sta fptr
+.pr     rts
+.pl     !byte 0
+.ph     !byte 0
+}
 
 nmihandler:
         rti
@@ -176,6 +264,14 @@ irqhandler:
         phx
         phy
         phz
+!ifdef PROF {
+        jsr profsample
+        lda $d019
+        and #1
+        bne +
+        jmp .iex
++
+}
         lda $d019
         sta $d019               ; acknowledge
         ; TIME: +2 cs per PAL frame, NTSC: 2,2,1 (= 5/3)
@@ -232,7 +328,7 @@ irqhandler:
         jsr sndirq
         jsr kbscan
         jsr mousirq
-        plz
+.iex    plz
         ply
         plx
         pla

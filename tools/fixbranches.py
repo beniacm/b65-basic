@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run ACME repeatedly; turn short branches that are out of range into
 45GS02 16-bit branches (lbxx)."""
-import re, subprocess, sys
+import os, re, subprocess, sys
 for it in range(20):
-    r = subprocess.run(['acme', 'src/b65.a'], capture_output=True, text=True)
+    r = subprocess.run(['acme'] + os.environ.get('ACMEFLAGS', '').split() + ['src/b65.a'], capture_output=True, text=True)
     errs = re.findall(r'File (\S+), line (\d+) \(Zone [^)]*\): Target out of range', r.stderr)
     if not errs:
         print(r.stderr, end='')
