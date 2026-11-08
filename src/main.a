@@ -94,6 +94,7 @@ cold_test:
         bpl -
         jsr hw_init
         jsr ovinit
+        jsr xcflush
         jsr test_init
         ; 16-bit stack from HIMEM down
         lda #<HIMEM0
@@ -1676,6 +1677,43 @@ gettop: lda page
         inc ptr2+1
 +       rts
 
+; XCFLUSH: empty the compiled-expression cache (overlay 4 in bank 4:
+; key table $48900, next free byte $487FE = $F000)
+xcflush:
+        ldx #3
+-       lda fptr,x
+        pha
+        dex
+        bpl -
+        lda #$00
+        sta fptr
+        lda #$89
+        sta fptr+1
+        lda #$04
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldz #0
+-       sta [fptr],z
+        inz
+        bne -
+        lda #$87
+        sta fptr+1
+        ldz #$fe
+        lda #<$f000
+        sta [fptr],z
+        inz
+        lda #>$f000
+        sta [fptr],z
+        ldz #0
+        ldx #0
+-       pla
+        sta fptr,x
+        inx
+        cpx #4
+        bne -
+        rts
+
 ; CLEAN: write end marker &FFFF and CLEAR
 clean:  jsr gettop
         ldy #$fe                ; TOP-2, TOP-1 := $FF
@@ -1702,7 +1740,8 @@ newit:  lda page
         jsr sp1y
 ; CLEAR: clear dynamic variables; TOP = end of program (bank PBANK),
 ; LOMEM = FREE = start of the heap (bank 0, after the interpreter)
-clear:  jsr gettop
+clear:  jsr xcflush
+        jsr gettop
         lda ptr2
         sta top
         lda ptr2+1

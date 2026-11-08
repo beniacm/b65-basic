@@ -100,6 +100,22 @@ currently about 15 KB without floating point or the assembler.
     instructions; LIST and the assembler listing print it as typed (leading
     zeros, hex case); `linnum` accepts it (LIST/DELETE/RENUMBER/AUTO
     arguments). Floats, longer numbers, binary `%` and DATA stay text.
+  * Compiled expressions (overlay 4, `src/xc.a`, bank 4 `$48000`-`$49FFF`):
+    EXPR sends program-text expressions (not immediate mode or EVAL) to
+    XCRUN. A numeric expression of constants, numeric variables (`@%`,
+    `A%`-`Z%`, `name%`, `name`), parentheses, unary -/+ and the binary
+    operators is compiled once into RPN code (cached by its text address in
+    a 256-slot direct-mapped table, code space about 4 KB) and then run
+    there: value stack in the window, integer + - AND OR EOR and
+    comparisons inline, everything else through the interpreter's BINOP (so
+    float results, overflow to floating point and the errors are the
+    interpreter's). Strings, arrays, functions and indirection are never
+    compiled (the slot remembers it). A lone constant skips the overlay.
+    CLEAR (RUN, program edits, LOAD, NEW, ...) flushes the cache; a program
+    that pokes its own text must not rely on old expressions. The previous
+    overlay is mapped back after the call, so overlay code may call EXPR.
+  * The overlay images are packed (`tools/lzb.py`, `tools/packovl.py`):
+    the PRG has to end below `$CF00`.
   * Decimal/hex text constants (DATA, VAL, EVAL of floats) are read with Q
     operations; DIV/MOD use the hardware divider; integer FOR/NEXT, static
     integer variables (`@%`, `A%`-`Z%`) and operator recognition (a 256-byte
@@ -438,7 +454,7 @@ must fit below `libase`. Up to 32 KB per library. Tested by
     row to the next, so it has no gaps. a, b are clamped to 4095.
   * `FILL x,y`: scan-line flood fill (4-connected) of the area that has the
     colour of the seed pixel, with the GCOL colour. The seed stack is in
-    bank 4 at `$48000` (about 10,000 seeds; more are dropped).
+    bank 4 at `$4A000` (about 7,300 seeds; more are dropped).
   * `SPRITE n,x,y[,c]`, `SPRITE n OFF`, `SPRITE OFF` (new keyword, token
     `$16`): pixel coordinates like the graphics (VIC x+24, y+50, ORIGIN not
     applied), 16-bit sprite pointers at `$5FA00` (re-set on every SPRITE,
@@ -530,8 +546,10 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | `$E000`-`$FFFF` | overlay window (MAP) |
 | bank 1 `$10800`-`$1F7FF` | program text (PAGE..TOP), libraries at the top |
 | bank 1 `$10000` | test script as loaded by Xemu, copied to attic `$8020000` at start-up |
-| bank 4 `$48000`-`$4EFFF` | Xemu test transcript (test mode only) |
-| attic `$8508000` | FILL seed stack |
+| bank 4 `$40000`-`$47FFF` | overlays 0-3 (unpacked at start-up) |
+| bank 4 `$48000`-`$49FFF` | overlay 4: expression compiler, its tables and code cache |
+| bank 4 `$4A000`-`$4EFFF` | Xemu test transcript (test mode only) |
+| attic `$850A000` | FILL seed stack |
 | attic `$8600000`-`$87FFFFF` | global arrays (2 MB, 256-byte pages) |
 | bank 4 `$40000`-`$47FFF` | overlay images (assembler, graphics, array arithmetic, files) |
 | bank 4 `$4F700`/`$4F800` | line history / font |

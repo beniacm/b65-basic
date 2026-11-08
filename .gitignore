@@ -7,3 +7,4 @@ out/
 *.d81
 tests/scratch/
 dist/
+__pycache__/

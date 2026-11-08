@@ -1260,7 +1260,7 @@ gx_ellipse:
 
 ; FILL x,y: flood fill (4-connected) of the area that has the colour of the
 ; pixel at x,y, with the graphics colour. Scan-line algorithm; the seed stack is
-; in attic RAM at $8508000 ($48000 without attic RAM), 10,000 seeds (more: dropped).
+; in attic RAM at $850A000 ($4A000 without attic RAM), 7,300 seeds (more: dropped).
 gtgt    = NBUF+24       ; colour being replaced
 gfsp    = NBUF+25       ; 2 stack offset (bytes)
 gfxx    = NBUF+27       ; 2
@@ -1379,11 +1379,11 @@ gx_fill:
 +       inw gx0
         bra .s1
 ++      rts
-.sp     lda gfsp                ; stack at $8508000 (attic), else $48000
+.sp     lda gfsp                ; stack at $850A000 (attic), else $4A000
         sta gstk
         lda gfsp+1
         clc
-        adc #$80
+        adc #$a0
         sta gstk+1
         lda hw_attic
         beq +
@@ -1398,7 +1398,7 @@ gx_fill:
         sta gstk+3
         rts
 .push   lda gfsp+1              ; full: drop the seed
-        cmp #$75
+        cmp #$56
         bcs +
         jsr .sp
         lda gfxx

@@ -67,7 +67,49 @@ braket: jsr nxt
 
 ; ---- EXPR ----
 !zone expr
-expr:   lda #1
+; EXPR: program text goes to the compiled-expression overlay first (xc.a);
+; the previous overlay is mapped back afterwards
+expr:   lda tp+2
+        beq expr1               ; immediate mode, EVAL: interpret
+        lda [tp],z              ; a lone constant: interpret (cheaper)
+        cmp #TNUM
+        bne +
+        ldz #1
+        lda [tp],z
+        and #7
+        clc
+        adc #3
+        taz
+        lda [tp],z
+        ldz #0
+        cmp #' '
+        beq +
+        sec
+        sbc #'*'
+        cmp #TOR+1-'*'
+        bcs expr1
+        tax
+        lda optab,x
+        beq expr1
++       lda curovl
+        cmp #4
+        bne .map
+        jsr $e000               ; XCRUN: carry clear = done
+        bcs expr1
+        rts
+.map    pha
+        lda #4
+        jsr ovmap
+        jsr $e000
+        pla
+        php
+        cmp #$ff
+        beq +
+        jsr ovmap
++       plp
+        bcs expr1
+        rts
+expr1:  lda #1
 exprp:  pha                     ; minimum precedence
         jsr item
 .loop   lda [tp],z              ; (NXT inline)
@@ -225,6 +267,10 @@ popval: pla
 !zone getop
 getop:  lda [tp],z
 getopa: ldy #0                  ; (A = the byte at tp)
+        sec
+        sbc #'*'                ; OPTAB covers '*' .. TOR
+        cmp #TOR+1-'*'
+        lbcs .none
         tax
         lda optab,x             ; prec << 5 | op, $ff: relational, 0: none
         lbeq .ret
@@ -337,34 +383,34 @@ getopa: ldy #0                  ; (A = the byte at tp)
         rts
 .none   lda #0
         rts
-optab:  !fill 256, 0
-* = optab + '+', overlay
+optab:  !fill TOR+1-'*', 0
+* = optab + '+' - '*', overlay
         !byte 4<<5 | OP_ADD
-* = optab + '-', overlay
+* = optab + '-' - '*', overlay
         !byte 4<<5 | OP_SUB
-* = optab + '*', overlay
+* = optab + '*' - '*', overlay
         !byte 5<<5 | OP_MUL
-* = optab + '/', overlay
+* = optab + '/' - '*', overlay
         !byte 5<<5 | OP_FDIV
-* = optab + '^', overlay
+* = optab + '^' - '*', overlay
         !byte 6<<5 | OP_POW
-* = optab + '<', overlay
+* = optab + '<' - '*', overlay
         !byte $ff
-* = optab + '=', overlay
+* = optab + '=' - '*', overlay
         !byte $ff
-* = optab + '>', overlay
+* = optab + '>' - '*', overlay
         !byte $ff
-* = optab + TOR, overlay
+* = optab + TOR - '*', overlay
         !byte 1<<5 | OP_OR
-* = optab + TEOR, overlay
+* = optab + TEOR - '*', overlay
         !byte 1<<5 | OP_EOR
-* = optab + TAND, overlay
+* = optab + TAND - '*', overlay
         !byte 2<<5 | OP_AND
-* = optab + TMOD, overlay
+* = optab + TMOD - '*', overlay
         !byte 5<<5 | OP_MOD
-* = optab + TDIV, overlay
+* = optab + TDIV - '*', overlay
         !byte 5<<5 | OP_IDIV
-* = optab + 256, overlay
+* = optab + TOR+1-'*', overlay
 
 ; ---- BINOP: arg/argx (or STRBUF) OP acc -> acc; X = op, tmp5 = left type ----
 !zone binop

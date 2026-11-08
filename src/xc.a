@@ -1,0 +1,668 @@
+; B65 BASIC - overlay 4: compiled numeric expressions
+;
+; EXPR (eval.a) maps this overlay (bank 4 $48000, CPU $E000) for program
+; text and calls XCRUN. A numeric expression made of constants (TNUM and
+; decimal/float text), numeric variables (@%, A%..Z%, name%, name),
+; parentheses, unary - and +, and the binary operators is compiled once into
+; a small RPN code, cached by its text address, and run from here: the value
+; stack is in this window (absolute indexed), the top in acc/accx. Integer
+; + - AND OR EOR and comparisons run inline; everything else (and any float
+; or integer overflow) goes through the interpreter's BINOP, so the results
+; and errors are the interpreter's. Strings, arrays, functions, indirection
+; and anything else are never compiled (the interpreter evaluates them).
+; The cache is flushed by CLEAR (RUN, program edits, LOAD, NEW, ...).
+
+; window layout (CPU addresses while mapped)
+XKLO    = $e800         ; 256-entry direct-mapped table: key (text address)
+XKHI    = $e900         ;   key high byte; 0 = empty slot
+XCLO    = $ea00         ;   code address; high 0 = not compilable
+XCHI    = $eb00
+XELO    = $ec00         ;   text address after the expression
+XEHI    = $ed00
+XS0     = $ee00         ; value stack: 4 mantissa bytes + exponent (64 each)
+XS1     = $ee40
+XS2     = $ee80
+XS3     = $eec0
+XS4     = $ef00
+XB      = $ef40         ; compile buffer (192)
+XCODE   = $f000         ; code cache ... $FFEF
+XCEND   = $fff0
+XNEXT   = $e7fe         ; 2: next free byte in the code cache
+; (resident XCFLUSH clears XKHI and resets XNEXT through bank 4 directly)
+
+ovl_xc_img:
+!pseudopc $e000 {
+        jmp xcrun
+
+; ---------------- run ----------------
+; XCRUN: tp -> expression (program text). Carry clear: acc/accx = value,
+; tp after it. Carry set: interpret it.
+!zone xcrun
+xcrun:  lda tp
+        eor tp+1
+        tax
+        stx xslot
+        lda XKHI,x
+        cmp tp+1
+        bne .miss
+        lda XKLO,x
+        cmp tp
+        bne .miss
+        lda XCHI,x
+        beq .no
+        tay
+        lda XCLO,x
+        jmp xexec
+.no     sec
+        rts
+.miss   jsr xcomp
+        bcc .new
+        cmp #2                  ; temporary (variable not there yet): try again
+        beq .no
+        ldx xslot               ; never: remember that
+        lda tp
+        sta XKLO,x
+        lda tp+1
+        sta XKHI,x
+        lda #0
+        sta XCHI,x
+        sec
+        rts
+.new    lda XNEXT               ; room in the cache?
+        clc
+        adc xbp
+        lda XNEXT+1
+        adc #0
+        cmp #>XCEND
+        bcc +
+        jsr xflush
++       lda XNEXT
+        sta .dst+1
+        lda XNEXT+1
+        sta .dst+2
+        ldx #0
+-       lda XB,x
+.dst    sta $ffff,x
+        inx
+        cpx xbp
+        bne -
+        ldx xslot
+        lda tp
+        sta XKLO,x
+        lda tp+1
+        sta XKHI,x
+        lda xend
+        sta XELO,x
+        lda xend+1
+        sta XEHI,x
+        lda XNEXT
+        sta XCLO,x
+        ldy XNEXT+1
+        tya
+        sta XCHI,x
+        lda XNEXT
+        clc
+        adc xbp
+        sta XNEXT
+        bcc +
+        inc XNEXT+1
++       lda XCLO,x
+        jmp xexec
+
+xflush: lda #0
+        tax
+-       sta XKHI,x
+        inx
+        bne -
+        lda #<XCODE
+        sta XNEXT
+        lda #>XCODE
+        sta XNEXT+1
+        rts
+
+; XEXEC: A/Y = code. X = value stack index, acc/accx = top of stack;
+; Q operations clobber X and Y: handlers keep them in xsx/xsy around them.
+xexec:  sta xnext+1
+        sty xnext+2
+        sta xrd+1
+        sty xrd+2
+        ldx #0
+        ldy #0
+xnext:  lda $ffff,y
+        iny
+        sta .j+1
+.j      jmp xhand
+xrd:    lda $ffff,y             ; operand byte
+        iny
+        rts
+
+!macro spill {
+        inx
+        lda acc
+        sta XS0,x
+        lda acc+1
+        sta XS1,x
+        lda acc+2
+        sta XS2,x
+        lda acc+3
+        sta XS3,x
+        lda accx
+        sta XS4,x
+}
+!macro pop {
+        lda XS0,x
+        sta arg
+        lda XS1,x
+        sta arg+1
+        lda XS2,x
+        sta arg+2
+        lda XS3,x
+        sta arg+3
+        lda XS4,x
+        sta argx
+        dex
+}
+
+; ---- handlers: one page, the opcode is the low byte of the address ----
+        !align 255, 0
+xhand:
+h_end:  ldx xslot
+        lda XELO,x
+        sta tp
+        lda XEHI,x
+        sta tp+1
+        lda #0
+        sta etype
+        clc
+        rts
+h_k8:   +spill                  ; integer 0..255
+        jsr xrd
+        sta acc
+        lda #0
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        jmp xnext
+h_k40:  jmp x_k40
+h_vi:   jmp x_vi
+h_vf:   jmp x_vf
+h_add:  jmp x_add
+h_sub:  jmp x_sub
+h_and:  jmp x_and
+h_or:   jmp x_or
+h_eor:  jmp x_eor
+h_eq:   jmp x_eq
+h_ne:   jmp x_ne
+h_lt:   jmp x_lt
+h_gt:   jmp x_gt
+h_le:   jmp x_le
+h_ge:   jmp x_ge
+h_gen:  jmp x_gen
+h_neg:  jmp x_neg
+xhend:
+!if xhend - xhand > 256 { !error "xc handlers exceed a page" }
+
+x_k40:  +spill                  ; 5 bytes (integer: exponent 0)
+        jsr xrd
+        sta acc
+        jsr xrd
+        sta acc+1
+        jsr xrd
+        sta acc+2
+        jsr xrd
+        sta acc+3
+        jsr xrd
+        sta accx
+        jmp xnext
+x_vi:   +spill                  ; integer variable (4 bytes at a bank-0 address)
+        jsr xrd
+        sta .vi+1
+        jsr xrd
+        sta .vi+2
+        phy
+        ldy #3
+.vi     lda $ffff,y
+        sta acc,y
+        dey
+        bpl .vi
+        ply
+        lda #0
+        sta accx
+        jmp xnext
+x_vf:   +spill                  ; variant variable (5 bytes)
+        jsr xrd
+        sta .vf+1
+        jsr xrd
+        sta .vf+2
+        phy
+        ldy #4
+.vf     lda $ffff,y
+        sta acc,y
+        dey
+        bpl .vf
+        ply
+        jmp xnext
+
+; generic: BINOP with the operator from the code (also for floats and
+; integer overflow, which BINOP turns into floating point)
+x_gen:  jsr xrd
+        sta xcop
+        +pop
+xgo:    stx xsx
+        sty xsy
+        lda #0
+        sta tmp5
+        sta etype
+        ldx xcop
+        jsr binop
+        ldz #0
+        ldx xsx
+        ldy xsy
+        jmp xnext
+!macro intop .op {
+        +pop
+        lda #.op
+        sta xcop
+        lda accx
+        ora argx
+        lbne xgo
+}
+x_add:  +intop OP_ADD
+        stx xsx
+        sty xsy
+        lda arg+3
+        eor acc+3
+        bmi .ad                 ; different signs never overflow
+        ldq arg
+        clc
+        adcq acc
+        pha
+        tza
+        eor arg+3
+        bmi xovf
+        pla
+        lbra x_lst
+.ad     ldq arg
+        clc
+        adcq acc
+        lbra x_lst
+xovf    pla                     ; overflow: BINOP (floating point)
+        ldz #0
+        ldx xsx
+        ldy xsy
+        bra xgo
+x_sub:  +intop OP_SUB
+        stx xsx
+        sty xsy
+        lda arg+3
+        eor acc+3
+        bpl .sb                 ; same signs never overflow
+        ldq arg
+        sec
+        sbcq acc
+        pha
+        tza
+        eor arg+3
+        bmi xovf
+        pla
+        lbra x_lst
+.sb     ldq arg
+        sec
+        sbcq acc
+        lbra x_lst
+x_and:  +intop OP_AND
+        stx xsx
+        sty xsy
+        ldq arg
+        andq acc
+        bra x_lst
+x_or:   +intop OP_OR
+        stx xsx
+        sty xsy
+        ldq arg
+        orq acc
+        bra x_lst
+x_eor:  +intop OP_EOR
+        stx xsx
+        sty xsy
+        ldq arg
+        eorq acc
+x_lst:  stq acc
+        ldz #0
+        ldx xsx
+        ldy xsy
+        jmp xnext
+x_neg:  lda accx                ; as ITEM's unary minus
+        beq +
+        lda acc+3
+        eor #$80
+        sta acc+3
+        jmp xnext
++       stx xsx
+        sty xsy
+        lda acc+3               ; -(-2^31) needs floating point
+        cmp #$80
+        bne .ng
+        lda acc
+        ora acc+1
+        ora acc+2
+        bne .ng
+        jsr sfloat
+        lda acc+3
+        eor #$80
+        sta acc+3
+        bra +
+.ng     jsr ineg
++       ldx xsx
+        ldy xsy
+        jmp xnext
+; comparisons: integers inline (TRUE -1 / FALSE 0), otherwise BINOP
+!macro cmpop .op {
+        +intop .op
+        jsr xcmp
+}
+x_eq:   +cmpop OP_EQ
+        lbeq xtrue
+        lbra xfalse
+x_ne:   +cmpop OP_NE
+        lbne xtrue
+        lbra xfalse
+x_lt:   +cmpop OP_LT
+        lbmi xtrue
+        lbra xfalse
+x_gt:   +cmpop OP_GT
+        beq xfalse
+        bpl xtrue
+        bra xfalse
+x_le:   +cmpop OP_LE
+        bmi xtrue
+        beq xtrue
+        bra xfalse
+x_ge:   +cmpop OP_GE
+        bpl xtrue
+xfalse: lda #0
+        bra +
+xtrue:  lda #$ff
++       sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        jmp xnext
+; XCMP: A = -1 / 0 / 1 (flags from it) for arg <, =, > acc (signed)
+xcmp:   lda arg+3
+        eor #$80
+        sta arg+3
+        lda acc+3
+        eor #$80
+        sta acc+3
+        lda arg+3
+        cmp acc+3
+        bne .d
+        lda arg+2
+        cmp acc+2
+        bne .d
+        lda arg+1
+        cmp acc+1
+        bne .d
+        lda arg
+        cmp acc
+        bne .d
+        lda #0
+        rts
+.d      bcc +
+        lda #1
+        rts
++       lda #$ff
+        rts
+
+; ---------------- compile ----------------
+; XCOMP: compile the expression at tp into XB (xbp bytes), xend = the text
+; address after it; tp is left unchanged. Carry set: A = 1 never compilable,
+; 2 not now (a variable that does not exist yet).
+!zone xcomp
+xcomp:  lda tp
+        sta xtp0
+        lda tp+1
+        sta xtp0+1
+        lda #0
+        sta xbp
+        sta xdep
+        tsx
+        stx xsps
+        tsy
+        sty xsps+1
+        lda #1
+        jsr cexp
+        lda #<h_end
+        jsr xemit
+        lda tp
+        sta xend
+        lda tp+1
+        sta xend+1
+        lda xtp0
+        sta tp
+        lda xtp0+1
+        sta tp+1
+        clc
+        rts
+xfail2: lda #2
+        bra +
+xfail:  lda #1
++       sta xfk
+        ldx xsps
+        ldy xsps+1
+        +setsp
+        lda xtp0
+        sta tp
+        lda xtp0+1
+        sta tp+1
+        ldz #0
+        lda xfk
+        sec
+        rts
+
+xemit:  ldx xbp
+        sta XB,x
+        inx
+        stx xbp
+        cpx #192
+        bcs xfail               ; too long for the buffer
+        rts
+xpush:  inc xdep                ; one more value on the stack
+        lda xdep
+        cmp #60
+        bcs xfail
+        rts
+
+; CEXP: A = minimum precedence (as EXPRP)
+cexp:   pha
+        jsr citem
+.l      lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       jsr getopa              ; A = prec (Z: none), X = op, Y = length
+        beq .done
+        sta xprec
+        pla
+        pha
+        cmp xprec
+        beq .ok
+        bcs .done
+.ok     phx                     ; op
+        tya                     ; consume the operator
+        clc
+        adc tp
+        sta tp
+        bcc +
+        inc tp+1
++       lda xprec
+        inc
+        jsr cexp
+        plx
+        stx xcop
+        lda xophand,x
+        bne +
+        lda #<h_gen             ; through BINOP: h_gen, op
+        jsr xemit
+        lda xcop
++       jsr xemit
+        dec xdep
+        bra .l
+.done   pla
+        rts
+
+xophand:                        ; by OP_ number (0: generic)
+        !byte <h_or, <h_eor, <h_and, <h_eq, <h_ne, <h_lt, <h_gt, <h_le, <h_ge
+        !byte 0, 0, 0, <h_add, <h_sub, 0, 0, 0, 0, 0
+
+citem:  lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #TNUM
+        bne .n0
+        jsr tnumget
+        bra .kon
+.n0     cmp #'.'                ; decimal text (floats, long numbers): CON now
+        beq +
+        cmp #'0'
+        bcc .n1
+        cmp #'9'+1
+        bcs .n1
++       jsr con
+.kon    jsr xpush
+        lda accx
+        ora acc+1
+        ora acc+2
+        ora acc+3
+        bne +
+        lda #<h_k8
+        jsr xemit
+        lda acc
+        jmp xemit
++       lda #<h_k40
+        jsr xemit
+        ldx #0
+-       phx
+        lda acc,x
+        jsr xemit
+        plx
+        inx
+        cpx #5
+        bne -
+        rts
+.n1     cmp #'('
+        bne .n2
+        inw tp
+        lda #1
+        jsr cexp
+        lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #')'
+        lbne xfail
+        inw tp
+        rts
+.n2     cmp #'-'
+        bne .n3
+        inw tp
+        jsr citem
+        lda #<h_neg
+        jmp xemit
+.n3     cmp #'+'
+        bne .n4
+        inw tp
+        jmp citem
+.n4     cmp #'@'                ; static integer @%, A%..Z%
+        lbcc xfail
+        cmp #'Z'+1
+        bcs .dyn
+        tax
+        ldz #1
+        lda [tp],z
+        cmp #'%'
+        bne .dynz
+        inz
+        lda [tp],z
+        cmp #'('
+        beq .dynz
+        cmp #'?'
+        beq .dynz
+        cmp #'!'
+        beq .dynz
+        ldz #0
+        txa
+        sec
+        sbc #'@'
+        asl
+        asl
+        clc
+        adc #<STAVAR
+        pha
+        lda #>STAVAR
+        adc #0
+        pha
+        lda tp
+        clc
+        adc #2
+        sta tp
+        bcc +
+        inc tp+1
++       lda #<h_vi
+        bra .emv
+.dynz   ldz #0
+.dyn    cmp #$80                ; tokens (functions): not compiled
+        lbcs xfail
+        jsr getname             ; an existing numeric variable
+        lbcs xfail
+        jsr isarray
+        lbeq xfail
+        lda [tp],z
+        cmp #'?'
+        lbeq xfail
+        cmp #'!'
+        lbeq xfail
+        jsr locate
+        lbcs xfail
+        lbne xfail2             ; not created yet
+        lda vptr
+        pha
+        lda vptr+1
+        pha
+        lda vtype
+        ldx #<h_vi
+        cmp #4
+        beq +
+        ldx #<h_vf
+        cmp #5
+        lbne xfail              ; strings, byte variables
++       txa
+.emv    pha
+        jsr xpush
+        pla
+        jsr xemit
+        pla
+        sta xsy
+        pla
+        jsr xemit
+        lda xsy
+        jmp xemit
+
+; workspace (in the window)
+xslot   !byte 0
+xsx     !byte 0
+xsy     !byte 0
+xcop     !byte 0
+xbp     !byte 0
+xdep    !byte 0
+xprec   !byte 0
+xfk     !byte 0
+xtp0    !word 0
+xend    !word 0
+xsps    !word 0
+ovl_xc_end:
+}
+!if ovl_xc_end > XNEXT { !error "overlay 4 code too large" }

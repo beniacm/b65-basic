@@ -108,8 +108,16 @@ def main():
         if rc is None:
             try:
                 s = socket.socket(socket.AF_UNIX); s.connect(sock); s.settimeout(1)
-                s.send(b'r\n'); time.sleep(0.3)
-                print('[uartmon] ' + s.recv(4096).decode(errors='replace').strip())
+                s.send(b'r\n'); time.sleep(0.5)
+                rep = b''
+                try:
+                    while True:
+                        d = s.recv(4096)
+                        if not d: break
+                        rep += d
+                except Exception:
+                    pass
+                print('[uartmon] ' + rep.decode(errors='replace').strip())
                 s.close()
             except Exception as e:
                 print('[uartmon failed]', e)
@@ -132,7 +140,7 @@ def main():
         m = open(mem, 'rb').read()
         if a.memout:
             open(a.memout, 'wb').write(m)
-        t = m[0x48000:0x4f000]
+        t = m[0x4a000:0x4f000]
         t = t[:t.index(0)] if 0 in t else t
         out = t.decode('latin-1').replace('\r\n', '\n').replace('\r', '')
         sys.stdout.write(out)

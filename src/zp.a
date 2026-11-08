@@ -72,7 +72,7 @@ HIMEM0  = $CF00         ; default HIMEM (stack grows down from here)
 ; TSTCOPY in attic RAM first. The Xemu transcript is in bank 4 (28 KB).
 TSTMAGIC = $00010000    ; "B65TEST:" magic, script follows
 TSTCOPY  = $08020000    ; attic copy of the script (Xemu)
-TRANSCR  = $00048000    ; transcript of all output (Xemu testing only)
+TRANSCR  = $0004a000    ; transcript of all output (Xemu testing only)
 TRANSEND = $f0          ; ... up to $4F000
 
 ; ---------------- zero page ----------------

@@ -20,11 +20,12 @@
 !src "src/ovl.a"
 !src "src/m65.a"
 !src "src/sound.a"
-NOVL = 4
+NOVL = 5
 ovltab: !word ovl_asm_img, ovl_asm_end-$e000
         !word ovl_gfx_img, ovl_gfx_end-$e000
         !word ovl_xtra_img, ovl_xtra_end-$e000
         !word ovl_fat_img, ovl_fat_end-$e000
+        !word ovl_xc_img, ovl_xc_end-$e000
 code_end:
 ; the heap starts on the page after the resident code; the overlay images
 ; follow the code directly (they are copied to bank 4 at start-up and the
@@ -40,6 +41,7 @@ prog_start = (code_end + 255) & $ff00
 !if ovl_xtra_end-$e000 > $1ffa { !error "overlay 2 too large" }
 !src "src/fat.a"
 !if ovl_fat_end-$e000 > $1ffa { !error "overlay 3 too large" }
+!src "src/xc.a"
 ovl_images_end:
 ; (tools/packovl.py packs the overlay images after assembly and checks that
 ; the packed PRG ends below $CF00)
