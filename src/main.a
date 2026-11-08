@@ -1677,19 +1677,19 @@ gettop: lda page
         inc ptr2+1
 +       rts
 
-; XCFLUSH: empty the compiled-expression cache (overlay 4 in bank 4:
-; key table $48900, next free byte $487FE = $F000)
+; XCFLUSH: empty the compiled-expression cache (overlay 4 in bank 4: the
+; key table XKHI and the next free byte XNEXT = XCODE, see xc.a)
 xcflush:
         ldx #3
 -       lda fptr,x
         pha
         dex
         bpl -
-        lda #$00
+        lda #<XKHI_F
         sta fptr
-        lda #$89
+        lda #>XKHI_F
         sta fptr+1
-        lda #$04
+        lda #^XKHI_F
         sta fptr+2
         lda #0
         sta fptr+3
@@ -1697,13 +1697,14 @@ xcflush:
 -       sta [fptr],z
         inz
         bne -
-        lda #$87
+        lda #<XNEXT_F
+        sta fptr
+        lda #>XNEXT_F
         sta fptr+1
-        ldz #$fe
-        lda #<$f000
+        lda #<XCODE
         sta [fptr],z
         inz
-        lda #>$f000
+        lda #>XCODE
         sta [fptr],z
         ldz #0
         ldx #0

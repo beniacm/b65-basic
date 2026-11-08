@@ -23,6 +23,8 @@ prg = bytearray(open(PRG, 'rb').read())
 load = prg[0] | prg[1] << 8
 mem = lambda a: a - load + 2
 code_end = syms['code_end']
+if syms.get('XCODE', 0) > 0xf800:
+    sys.exit('packovl: overlay 4 code too large (XCODE $%04x > $f800)' % syms['XCODE'])
 ovltab = syms['ovltab']
 names = ['asm', 'gfx', 'xtra', 'fat', 'xc']
 blobs = []

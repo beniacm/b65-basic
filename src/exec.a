@@ -414,7 +414,17 @@ vdu:    jsr termq
 
 ; ---- LET ----
 !zone let
-let:    lda [tp],z
+let:    lda tp+2                ; program text: compiled assignment (xc.a)?
+        beq .lint
+        lda curovl
+        cmp #4
+        beq +
+        lda #4
+        jsr ovmap
++       jsr $e003               ; XCLET: carry clear = done
+        bcs .lint
+        jmp xeq
+.lint   lda [tp],z
         cmp #'?'
         lbeq .ind1
         cmp #'!'
@@ -1218,7 +1228,19 @@ mlscan: sta tmp5
 .miss   lda #49
         jmp error
 
-if:     jsr expri
+if:     lda tp+2                ; program text: compiled IF (xc.a)?
+        beq .iint
+        lda curovl
+        cmp #4
+        beq +
+        lda #4
+        jsr ovmap
++       jsr $e006               ; XCIF
+        bcs .iint
+        cmp #1
+        lbeq .felse             ; false, tp after ELSE
+        jmp xeq                 ; true (tp after THEN) or false at the CR
+.iint   jsr expri
         jsr nxt
         cmp #TTHEN
         bne .nothen
@@ -1281,7 +1303,8 @@ if:     jsr expri
         sta tp
         bcc +
         inc tp+1
-+       jsr nxt
++
+.felse  jsr nxt
         cmp #TLINO
         bne +
         inw tp
