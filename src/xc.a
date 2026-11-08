@@ -627,6 +627,9 @@ h_ld4:  jmp x_ld4
 h_dld1: jmp x_dld1              ; base?offset / base!offset (bank 0)
 h_dld4: jmp x_dld4
 h_coll: jmp x_coll              ; COLLIDE(acc)
+h_shl:  jmp x_shl               ; << >> >>> (integers; count AND 31)
+h_asr:  jmp x_asr
+h_lsr:  jmp x_lsr
 xhend:
 !if xhend - xhand > 256 { !error "xc handlers exceed a page" }
 
@@ -873,6 +876,93 @@ x_lst:  stq acc
         ldx xsx
         ldy xsy
         jmp xnext
+; shifts as I_SHL / I_ASR / I_LSR: whole bytes first, then bits
+!zone xsh
+x_shl:  +intop OP_SHL
+        jsr .cnt
+-       cmp #8
+        bcc +
+        lda arg+2
+        sta arg+3
+        lda arg+1
+        sta arg+2
+        lda arg
+        sta arg+1
+        lda #0
+        sta arg
+        lda xcop
+        sbc #8
+        sta xcop
+        bra -
++       phx
+        tax
+        beq .o
+-       asl arg
+        rol arg+1
+        rol arg+2
+        rol arg+3
+        dex
+        bne -
+        bra .o
+x_asr:  +intop OP_ASR
+        lda #0                  ; fill byte: the sign
+        bit arg+3
+        bpl +
+        lda #$ff
++       sta xsgn
+        lda #$80
+        bra .r
+x_lsr:  +intop OP_LSR
+        lda #0
+        sta xsgn
+.r      sta xsav                ; $80: arithmetic
+        jsr .cnt
+-       cmp #8
+        bcc +
+        lda arg+1
+        sta arg
+        lda arg+2
+        sta arg+1
+        lda arg+3
+        sta arg+2
+        lda xsgn
+        sta arg+3
+        lda xcop
+        sbc #8
+        sta xcop
+        bra -
++       phx
+        tax
+        beq .o
+-       lda arg+3
+        bit xsav
+        bpl +
+        asl                     ; (carry = sign)
+        bra ++
++       clc
+++      ror arg+3
+        ror arg+2
+        ror arg+1
+        ror arg
+        dex
+        bne -
+.o      plx
+        lda arg
+        sta acc
+        lda arg+1
+        sta acc+1
+        lda arg+2
+        sta acc+2
+        lda arg+3
+        sta acc+3
+        lda #0
+        sta accx
+        jmp xnext
+.cnt    lda acc
+        and #31
+        sta xcop
+        rts
+!zone xif
 ; IF: acc (as an integer, as EXPRI) zero -> the false address and its
 ; kind, else the then-address and 0; the END after it is not reached
 x_if:   lda accx
