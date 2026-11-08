@@ -659,6 +659,11 @@ elsize: lda vtype
 !zone loadn
 loadn:  ldy #0
         lda vtype
+        cmp #4
+        beq .i
+        cmp #5
+        beq .f
+        cmp #0
         beq .b
         cmp #2
         beq .w
@@ -719,13 +724,14 @@ storen: lda etype
         jmp error
 +       ldy #0
         lda vtype
+        cmp #4
+        beq .i
+        cmp #0
         beq .b
         cmp #1
         beq .b
         cmp #2
         beq .w
-        cmp #4
-        beq .i
         cmp #5
         beq .f
         lda #6

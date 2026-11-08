@@ -109,12 +109,19 @@ xeq:    lda tp
         sta curlin
         lda tp+1
         sta curlin+1
-        jsr trap
-        lda evpend
+        lda escflag             ; TRAP only when ESCAPE is pending or the
+        bne +                   ; keyboard is not interrupt driven
+        bit irqon
+        bmi ++
++       jsr trap
+++      lda evpend
         beq xeq1
         jsr evcheck
-xeq1:   jsr nxt
-        inw tp
+xeq1:   lda [tp],z              ; (NXT inline)
+        cmp #' '
+        bne +
+        jsr nxt
++       inw tp
         cmp #':'
         beq xeq1
         cmp #CR
@@ -130,8 +137,11 @@ xeq1:   jsr nxt
         sta tmpw
         lda cmdjmp+1,y
         sta tmpw+1
+        lda [tp],z              ; (NXT inline)
+        cmp #' '
+        bne +
         jsr nxt
-        jmp (tmpw)
++       jmp (tmpw)
 .extras txa
         cmp #$80                ; characters: implied LET unless * = [
         bcs .xt
