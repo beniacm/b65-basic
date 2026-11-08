@@ -41,4 +41,5 @@ prog_start = (code_end + 255) & $ff00
 !src "src/fat.a"
 !if ovl_fat_end-$e000 > $1ffa { !error "overlay 3 too large" }
 ovl_images_end:
-!if ovl_images_end > $cf00 { !error "PRG too large" }
+; (tools/packovl.py packs the overlay images after assembly and checks that
+; the packed PRG ends below $CF00)

@@ -7,6 +7,10 @@ for it in range(20):
     errs = re.findall(r'File (\S+), line (\d+) \(Zone [^)]*\): Target out of range', r.stderr)
     if not errs:
         print(r.stderr, end='')
+        if r.returncode == 0:
+            p = subprocess.run([sys.executable, 'tools/packovl.py'])
+            if p.returncode:
+                sys.exit(p.returncode)
         if os.environ.get('ACMEFLAGS') and os.path.exists('build/b65.prg'):
             os.utime('build/b65.prg', (0, 0))   # special build: make rebuilds next time
         sys.exit(r.returncode)

@@ -34,21 +34,10 @@ ovinit: ldx #0
         sta fptr+2
         lda #0
         sta fptr+3
-        ldy #0
-        ldz #0
--       lda tmpw
-        ora tmpw+1
-        beq +
-        lda (ptr1),y
-        sta [fptr],z
-        inw ptr1
-        inw fptr
-        lda tmpw
-        bne ++
-        dec tmpw+1
-++      dec tmpw
-        bra -
-+       ; vectors at offset $1FFA (NMI, RESET, IRQ) -> core handlers
+        phx
+        jsr lzbdec              ; the image is LZB-packed (tools/packovl.py)
+        plx
+        ; vectors at offset $1FFA (NMI, RESET, IRQ) -> core handlers
         txa
         asl
         asl
@@ -78,6 +67,55 @@ ovinit: ldx #0
         sta curovl
         rts
 ovvec:  !word irq_rti, cold_prg, irqhandler
+
+; LZBDEC: unpack ptr1 (bank 0) to fptr (32-bit). Tokens: T < $80: T+1
+; literal bytes; T >= $80: copy (T & $7F) + 3 bytes from D (2 bytes) back;
+; D = 0 ends the stream.
+lzbdec: ldy #0
+        ldz #0
+.t      lda (ptr1),y
+        inw ptr1
+        tax
+        bmi .m
+        inx
+-       lda (ptr1),y
+        sta [fptr],z
+        inw ptr1
+        inw fptr
+        dex
+        bne -
+        bra .t
+.m      and #$7f
+        clc
+        adc #3
+        tax
+        lda (ptr1),y
+        sta tmpw
+        inw ptr1
+        lda (ptr1),y
+        sta tmpw+1
+        inw ptr1
+        ora tmpw
+        beq .e
+        sec
+        lda fptr
+        sbc tmpw
+        sta ap
+        lda fptr+1
+        sbc tmpw+1
+        sta ap+1
+        lda fptr+2
+        sta ap+2
+        lda #0
+        sta ap+3
+-       lda [ap],z
+        sta [fptr],z
+        inw ap
+        inw fptr
+        dex
+        bne -
+        bra .t
+.e      rts
 
 ; OVMAP: A = overlay number ($FF = none): map it at $E000
 ovmap:  sta curovl
