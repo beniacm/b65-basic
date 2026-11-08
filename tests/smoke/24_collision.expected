@@ -1,0 +1,24 @@
+B65 BASIC v0.1-dev (45GS02) for MEGA65
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 N%=0:ON COLLISION PROChit
+>20 PRINT COLLIDE(0);COLLIDE(63)
+>30 ?&6ED=?&6ED OR 16:PRINT "a":PRINT "b"
+>40 DI:?&6ED=?&6ED OR 16:PRINT "c":EI:PRINT "d"
+>50 ON COLLISION OFF:?&6ED=?&6ED OR 16:PRINT "e ";N%:END
+>60 DEF PROChit:N%=N%+1:PRINT "hit ";N%:ENDPROC
+>LIST 10,20
+   10 N%=0:ON COLLISION PROChit
+   20 PRINT COLLIDE(0);COLLIDE(63)
+>RUN
+        -1-1
+hit 1
+a
+b
+c
+hit 2
+d
+e 2
+>

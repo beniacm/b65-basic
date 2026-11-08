@@ -434,6 +434,14 @@ must fit below `libase`. Up to 32 KB per library. Tested by
     what is left and stops the timer), `DI`/`EI`.
   * Events are dispatched between statements, higher timer number first. A
     handler ends with RETURN.
+  * `ON COLLISION PROCname` / `OFF` (tokens `$18`, `COLLIDE(` `$17`), K325T
+    collision engine: the handler text `PROCname:RETURN` is built in
+    `BUFFER+$C0` and run like an event GOSUB (evpend bit 4, after the
+    timers). The IRQ handler checks `$FFD71C0` on every interrupt while ON
+    COLLISION is active on a K325T (bit 0 or 7: write `$03` to acknowledge
+    and keep the engine's interrupt on); only the raster interrupt does the
+    frame work (TIME, timers, sound, keyboard). `COLLIDE(n)` writes n to
+    `$FFD71C1` and reads `$FFD71C2` (`$FF` = -1).
   * The new keywords use tokens `$11`-`$16` (SPRITE is `$16`). EXTWDS must
     stay in alphabetical order (the lexer stops early). In program text these values
     are free; upstream uses `$11`-`$1B` only as message fragments in error

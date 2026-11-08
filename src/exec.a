@@ -3003,9 +3003,47 @@ throw:  jsr expri
         pla
         jmp exterr
 
+; ---- ON COLLISION PROCname | OFF (K325T collision engine) ----
+; The handler text "PROCname:RETURN" is built in COLTXT (bank 0); the
+; interrupt makes it pending, EVCHECK runs it between statements like an
+; EVERY/AFTER handler (one at a time).
+!zone oncoll
+oncoll: inw tp
+        jsr nxt
+        cmp #TOFF
+        bne +
+        inw tp
+        jsr coloff
+        jmp xeq
++       cmp #TPROC
+        lbne syntax
+        ldx #0
+-       lda [tp],z              ; TPROC and the name
+        sta COLTXT,x
+        inx
+        cpx #56
+        lbcs syntax
+        inw tp
+        lda [tp],z
+        jsr range1
+        bcc -
+        lda #':'
+        sta COLTXT,x
+        lda #TRETURN
+        sta COLTXT+1,x
+        lda #CR
+        sta COLTXT+2,x
+        lda #$ff
+        sta col_on
+        lda #$03                ; clear the latch, interrupt on
+        jsr colhw
+        jmp xeq
+
 ; ---- ON ERROR / ON expr GOTO|GOSUB ----
 !zone on
-on:     cmp #TERROR
+on:     cmp #TCOLLISION
+        lbeq oncoll
+        cmp #TERROR
         bne .ongo
         inw tp
         jsr nxt

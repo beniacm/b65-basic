@@ -212,6 +212,8 @@ clopp:
         sta asmq
         sta inevt
         sta evpend
+        jsr coloff
+        lda #0
         sta ev_mode
         sta ev_mode+1
         sta ev_mode+2
@@ -1898,7 +1900,9 @@ out:    cmp #$20
         cmp #$11
         bcc +
         cmp #$20
-        bcc .t1
+        bcs +
+        lda listflg             ; (listing extension keywords: no marker space)
+        beq .t1
 +       ldx #$a1
 .t1     iny
         bne +

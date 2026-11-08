@@ -26,6 +26,10 @@ TTLEFT  = $13
 TDI     = $14
 TEI     = $15
 TSPRITE = $16
+TCOLLIDE = $17          ; COLLIDE( function
+TCOLLISION = $18        ; ON COLLISION PROCname / OFF
+col_on  = $06c8         ; $FF: ON COLLISION active
+COLTXT  = BUFFER+$c0    ; handler text: TPROC name ':' TRETURN CR (bank 0)
 TNUM    = $1f           ; pre-encoded integer constant (see LEXNUM)
 TEVT    = $11           ; marker of an event GOSUB frame
 
@@ -285,7 +289,16 @@ irqhandler:
         jmp .iex
 +
 }
-        lda $d019
+        bit col_on              ; K325T collision engine: status
+        bpl +
+        bit hw_k325t
+        bpl +
+        jsr colirq
++       lda $d019               ; only the raster interrupt does the frame work
+        and #1
+        bne +
+        jmp .iex
++       lda $d019
         sta $d019               ; acknowledge
         ; TIME: +2 cs per PAL frame, NTSC: 2,2,1 (= 5/3)
         ldx #2
@@ -547,6 +560,79 @@ f_tleft:
         ldx acc+1
         jmp setw
 
+; ---------------- K325T collision engine (list mode v2) ----------------
+; COLIRQ (interrupt): a pass found a collision (status $FFD71C0 bit 0, or
+; bit 7 = its interrupt): acknowledge it ($03: clear, keep the interrupt
+; enabled) and make ON COLLISION's PROC pending (evpend bit 4). The PROC
+; then reads the results of the last completed pass (COLLIDE(n), table).
+colirq: ldx #3
+-       lda fptr,x
+        pha
+        dex
+        bpl -
+        jsr colptr
+        lda [fptr],z
+        and #$81
+        beq +
+        lda #$03
+        sta [fptr],z
+        lda #$10
+        tsb evpend
++       ldx #0
+-       pla
+        sta fptr,x
+        inx
+        cpx #4
+        bne -
+        rts
+colptr: lda #$c0                ; fptr = $FFD71C0, Z = 0
+        sta fptr
+        lda #$71
+        sta fptr+1
+        lda #$fd
+        sta fptr+2
+        lda #$0f
+        sta fptr+3
+        ldz #0
+        rts
+; COLHW: A -> $FFD71C0 on a K325T (fptr is used)
+colhw:  bit hw_k325t
+        bpl +
+        pha
+        jsr colptr
+        pla
+        sta [fptr],z
++       rts
+; COLOFF: ON COLLISION OFF (also at the prompt): clear and disable
+coloff: lda #0
+        sta col_on
+        lda #$10
+        trb evpend
+        lda #$01
+        jmp colhw
+
+; COLLIDE(n): the first partner of object n in the last pass, -1 none
+; (also -1 without the K325T engine)
+f_collide:
+        jsr expri
+        jsr braket
+        lda #$ff
+        bit hw_k325t
+        bpl +
+        jsr colptr
+        lda #$c1
+        sta fptr
+        lda acc
+        sta [fptr],z
+        lda #$c2
+        sta fptr
+        lda [fptr],z
++       cmp #$ff
+        bne +
+        jmp f_true              ; -1
++       ldx #0
+        jmp setw
+
 ; EVCHECK: called from XEQ between statements when evpend <> 0
 !zone evcheck
 evcheck:
@@ -560,7 +646,35 @@ evcheck:
         bne .go
         dex
         bpl -
+        lda #$10                ; ON COLLISION
+        bit evpend
+        bne .col
 .x      rts
+.col    sei
+        trb evpend
+        cli
+        bit col_on
+        bpl .x
+        pla                     ; as below, but into the handler text
+        pla
+        lda #$ff
+        sta inevt
+        lda #3
+        jsr alloc
+        ldy #1
+        lda #TEVT
+        sta (spz),y
+        iny
+        lda tp
+        sta (spz),y
+        iny
+        lda tp+1
+        sta (spz),y
+        lda #<COLTXT
+        sta tp
+        lda #>COLTXT
+        jsr settph
+        jmp xeq
 .go     sei
         trb evpend
         cli
@@ -644,6 +758,8 @@ farst:  jsr farptr
 ; extension keywords, in alphabetical order (tokens $11-$1F are free in program text; $11-$1B are
 ; only used as message fragments inside error texts)
 EXTWDS: !byte TAFTER : !text "AFTER"
+        !byte TCOLLIDE : !text "COLLIDE("
+        !byte TCOLLISION : !text "COLLISION"
         !byte TDI    : !text "DI "
         !byte TEI    : !text "EI "
         !byte TEVERY : !text "EVERY"
