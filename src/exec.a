@@ -95,7 +95,11 @@ run0:   jsr resetsp_jsr
         lda page+1
         jsr settph
 ; XEQ0: tp -> start of a program line (length byte)
-xeq0:   jsr newlin
+xeq0:   lda tp                  ; (REM / ELSE / DATA skip to its end)
+        sta linst
+        lda tp+1
+        sta linst+1
+        jsr newlin
         jsr nxt
         cmp #TELSE
         bne +
@@ -263,13 +267,47 @@ mistake:
         jmp error
 
 ; ---- simple statements ----
-rem:    ldy #0
--       +ldtpy
+rem:    lda tp+2                ; program text: the line's own length, if
+        beq .sc                 ; tp is inside the line XEQ0 entered last
+        sta pp+2                ; (a jump back into an earlier line: scan)
+        lda tp+3
+        sta pp+3
+        lda linst
+        sta pp
+        lda linst+1
+        sta pp+1
+        lda tp
+        cmp pp
+        lda tp+1
+        sbc pp+1
+        bcc .sc
+        lda [pp],z              ; length: pp = the CR + 1
+        clc
+        adc pp
+        sta pp
+        bcc +
+        inc pp+1
++       lda tp
+        cmp pp
+        lda tp+1
+        sbc pp+1
+        bcs .sc
+        lda pp
+        bne +
+        dec pp+1
++       dec
+        sta tp
+        lda pp+1
+        sta tp+1
+        jmp xeq
+.sc     ldz #0                  ; scan for the CR (Z as the index)
+-       lda [tp],z
         cmp #CR
         beq +
-        iny
+        inz
         bne -
-+       tya
++       tza
+        ldz #0
         clc
         adc tp
         sta tp
