@@ -31,6 +31,7 @@ xt1     = $1fe0         ; element type of b()
 xt2     = $1fe1         ; element type of c()
 xtsc    = $1fe2         ; type of the scalar
 xflag   = $1fe3         ; bit 7: the scalar is the LEFT operand
+xfstep  = $1fe9         ; FASTI: 4 if c() steps, 0 for a scalar
 ; entry: ablk/avt = destination, ptr2 = first source block (vtype = its
 ; type), tp at the operator after it
 !zone arrarith
@@ -283,7 +284,7 @@ arrsc:  stx xop
         jsr .xput
         lda xb2
         ora xb2+1
-        beq .loop
+        beq .loop0
         lda xb2
         sta ptr2
         lda xb2+1
@@ -292,6 +293,7 @@ arrsc:  stx xop
         jsr .same
         lda #X2
         jsr .xput
+.loop0  jsr fasti               ; integer + - (* scalar): a tight loop first
 .loop   lda xcnt
         ora xcnt+1
         bne +
@@ -1418,5 +1420,580 @@ citem:  lda [tp],z
         jmp xemit
 .rd     rts
 
+
+; FASTI: integer arrays only: a() = b() + - c(), b() + - n (n an integer).
+; Runs over the elements in XP / xcnt; returns with xcnt = 0 when done, or
+; earlier (an overflow: the generic loop computes that element and goes on,
+; with floating point and its error). Nothing to do: returns at once.
+!zone fasti
+fasti:  lda avt
+        cmp #4
+        bne .no
+        lda xt1
+        cmp #4
+        bne .no
+        bit xflag               ; scalar on the left: generic
+        bmi .no
+        lda xb2
+        ora xb2+1
+        beq .sc
+        lda xt2
+        cmp #4
+        bne .no
+        lda #4                  ; c[i]: fr steps with the others
+        ldx #X2
+        bra .ps
+.sc     lda xtsc                ; an integer scalar: fr -> xsc (bank 0)
+        bne .no
+        lda xsc+4
+        bne .no
+        lda #<xsc
+        sta XP+X2
+        lda #>xsc
+        sta XP+X2+1
+        lda #0
+        sta XP+X2+2
+        sta XP+X2+3
+        ldx #X2
+.ps     sta xfstep
+        ldy #0
+-       lda XP,x
+        sta fr,y
+        lda XP+X0,y
+        sta fptr,y
+        lda XP+X1,y
+        sta fq,y
+        inx
+        iny
+        cpy #4
+        bne -
+        lda xop
+        cmp #OP_ADD
+        beq .add
+        cmp #OP_SUB
+        lbeq .sub
+.no     rts
+.done   ldz #0                  ; back: element pointers for the generic loop
+        ldy #3
+-       lda fptr,y
+        sta XP+X0,y
+        lda fq,y
+        sta XP+X1,y
+        lda fr,y
+        sta XP+X2,y
+        dey
+        bpl -
+        rts
+.add    lda #$18                ; clc / adc [fr],z
+        ldx #$72
+        bra .as
+.sub    lda #$38                ; sec / sbc [fr],z
+        ldx #$f2
+.as     sta .cs
+        stx .o1
+        stx .o2
+        stx .o3
+        stx .o4
+        lda xfstep              ; a scalar: 64 copies in XSS, fr -> XSS
+        bne .ch
+        ldx #0
+-       txa
+        and #3
+        tay
+        lda xsc,y
+        sta XSS,x
+        inx
+        bne -
+        lda #<XSS
+        sta fr
+        lda #>XSS
+        sta fr+1
+.ch     ldz #0                  ; 64 elements per Z sweep
+.el     lda xcnt
+        ora xcnt+1
+        beq .zf
+        lda [fq],z
+.cs     clc
+.o1 = * + 1
+        adc [fr],z
+        sta arg
+        inz
+        lda [fq],z
+.o2 = * + 1
+        adc [fr],z
+        sta arg+1
+        inz
+        lda [fq],z
+.o3 = * + 1
+        adc [fr],z
+        sta arg+2
+        inz
+        lda [fq],z
+.o4 = * + 1
+        adc [fr],z
+        bvs .zo
+        sta [fptr],z
+        dez
+        lda arg+2
+        sta [fptr],z
+        dez
+        lda arg+1
+        sta [fptr],z
+        dez
+        lda arg
+        sta [fptr],z
+        inz
+        inz
+        inz
+        inz
+        lda xcnt
+        bne +
+        dec xcnt+1
++       dec xcnt
+        cpz #0
+        bne .el
+        ldx #fptr               ; 256 bytes on
+        jsr .i256
+        ldx #fq
+        jsr .i256
+        lda xfstep
+        beq .ch
+        ldx #fr
+        jsr .i256
+        bra .ch
+.zo     dez                     ; overflow: back to the element start
+        dez
+        dez
+.zf     ldx #fptr               ; pointers += Z for the generic loop
+        jsr .iz
+        ldx #fq
+        jsr .iz
+        ldx #fr
+        lda xfstep
+        beq +
+        jsr .iz
++       jmp .done
+.iz     tza
+        clc
+        adc 0,x
+        sta 0,x
+        bcc +
+        inc 1,x
+        bne +
+        inc 2,x
++       rts
+.i256   inc 1,x
+        bne +
+        inc 2,x
++       rts
+; SUM(a()) / SUMLEN(a$()) / DIM(a()[,n]) functions
+!zone arrfn2
+o_sum:  lda [tp],z
+        cmp #TLEN
+        beq .sumlen
+        jsr .open
+        lda vtype
+        bmi .sums
+        lda #0                  ; numeric sum
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+-       lda acnt
+        ora acnt+1
+        beq .done
+        jsr pushval
+        jsr aelset
+        jsr loadn
+        jsr movleft
+        jsr popacc
+        lda #0
+        sta tmp5
+        ldx #OP_ADD
+        jsr binop
+        jsr .adv
+        bra -
+.done   rts
+.sums   lda #0                  ; string concatenation
+        sta slen
+        lda #$80
+        sta etype
+-       lda acnt
+        ora acnt+1
+        beq .done
+        jsr movleft
+        jsr aelset
+        jsr loads
+        jsr sconcat
+        jsr .adv
+        bra -
+.sumlen inw tp
+        jsr .open
+        lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        sta accx
+        sta etype
+-       lda acnt
+        ora acnt+1
+        beq .done
+        jsr aelset              ; (string descriptor: byte 2 = length)
+        ldy #2
+        lda (vptr),y
+        clc
+        adc acc
+        sta acc
+        bcc +
+        inc acc+1
++       jsr .adv
+        bra -
+.open   jsr nxt                 ; "(name())"
+        cmp #'('
+        beq +
+        jmp syntax
++       inw tp
+        jsr arrref
+        beq +
+        jmp syntax
++       jsr braket
+        lda vtype
+        sta avt
+        jsr arrsize
+        jsr apael
+        lda tmpw
+        sta acnt
+        lda tmpw+1
+        sta acnt+1
+        rts
+.adv    jsr aelinc
+        lda acnt
+        bne +
+        dec acnt+1
++       dec acnt
+        rts
+
+; DIM(a()) = number of dimensions, DIM(a(),n) = upper bound of dimension n
+o_dimfn:
+        jsr nxt
+        cmp #'('
+        beq +
+        jmp syntax
++       inw tp
+        jsr arrref
+        beq +
+        jmp syntax
++       lda ptr2
+        ora ptr2+1
+        bne +
+        lda #14
+        jmp error
++       jsr nxt
+        cmp #','
+        beq .n
+        jsr braket
+        jsr blkap
+        lda [ap],z
+        ldx #0
+        jmp setw
+.n      inw tp
+        lda ptr2
+        pha
+        lda ptr2+1
+        pha
+        jsr expri
+        jsr braket
+        pla
+        sta ptr2+1
+        pla
+        sta ptr2
+        jsr blkap
+        lda acc                 ; 1-based dimension
+        beq .bad
+        cmp [ap],z
+        beq +
+        bcs .bad
++       asl
+        taz
+        dez
+        lda [ap],z
+        sec
+        sbc #1
+        tax
+        inz
+        lda [ap],z
+        sbc #0
+        ldz #0
+        tay
+        txa
+        phy
+        plx
+        jmp setw
+.bad    lda #15
+        jmp error
+
+; ^var : address of a variable
+; ---- RESTORE (from the resident stub) ----
+!zone restore
+o_restore:
+        jsr nxt
+        cmp #TERROR
+        bne +
+        inw tp
+        lda #<errtrp
+        jsr resframe
+        lda #9
+        jsr drop
+        jmp xeq
++       cmp #TDATA
+        bne +
+        inw tp
+        lda #<datptr
+        jsr resframe
+        lda #9
+        jsr drop
+        jmp xeq
++       cmp #TLOCAL
+        bne +
+        inw tp
+        jsr unwind
+        jmp xeq
++       cmp #'+'
+        bne +
+        inw tp                  ; RESTORE +n: n lines after the current one
+        jsr expri
+        lda curlin
+        sta ptr1
+        lda curlin+1
+        sta ptr1+1
+        jsr setlin
+        lda erl
+        sta lnum
+        lda erl+1
+        sta lnum+1
+        jsr findl
+-       lda acc
+        ora acc+1
+        beq ++
+        ldy #0
+        jsr lp1y
+        beq ++
+        clc
+        adc ptr1
+        sta ptr1
+        bcc +++
+        inc ptr1+1
++++     lda acc
+        bne ++++
+        dec acc+1
+++++    dec acc
+        bra -
+++      lda ptr1
+        sta datptr
+        lda ptr1+1
+        sta datptr+1
+        jsr dsrch
+        jmp xeq
++       jsr termq
+        beq .r0
+        jsr itemi
+        lda acc
+        sta lnum
+        lda acc+1
+        sta lnum+1
+        jsr findl
+        lda ptr1
+        sta datptr
+        lda ptr1+1
+        sta datptr+1
+        jsr dsrch
+        jmp xeq
+.r0     lda #0
+        sta datptr
+        sta datptr+1
+        jmp xeq
+; ---- whole-array assignment (from the resident ARRLET stub) ----
+; whole-array assignment: name() = ...   (tp at name; returns NZ if not an array ref)
+!zone arrlet
+o_arrlet:
+        lda vptr
+        sta avp
+        lda vptr+1
+        sta avp+1
+        lda vtype
+        sta avt
+        lda ptr2
+        sta ablk
+        lda ptr2+1
+        sta ablk+1
+        jsr nxt
+        ldx #$ff
+        cmp #'='
+        beq .eq
+        ldx #OP_ADD
+        cmp #'+'
+        beq .cmp
+        ldx #OP_SUB
+        cmp #'-'
+        beq .cmp
+        ldx #OP_MUL
+        cmp #'*'
+        beq .cmp
+        ldx #OP_FDIV
+        cmp #'/'
+        beq .cmp
+        jmp mistake
+.cmp    inw tp
+        lda [tp],z
+        cmp #'='
+        beq .eq
+        jmp mistake
+.eq     inw tp
+        stx aop
+        jsr nxt
+        jsr arrref              ; a() = b()  (copy)
+        lbne .expr
+        lda vtype
+        sta avt2
+        lda aop
+        cmp #$ff
+        lbne .expr2
+        jsr nxt                 ; a() = b() OP ... : whole-array arithmetic
+        cmp #'+'
+        beq .ar
+        cmp #'-'
+        beq .ar
+        cmp #'*'
+        beq .ar
+        cmp #'/'
+        beq .ar
+        cmp #'.'
+        bne .cpy
+.ar     jmp arrarith
+.cpy
+        lda ablk
+        ora ablk+1
+        bne +
+        ; destination not DIMmed: share? BASIC V copies into an existing array only
+        lda #14
+        jmp error
++       jsr arrsize             ; source
+        jsr apaelq
+        lda tmpw
+        pha
+        lda tmpw+1
+        pha
+        lda ablk
+        sta ptr2
+        lda ablk+1
+        sta ptr2+1
+        jsr arrsize             ; destination
+        pla
+        cmp tmpw+1
+        bne .badsz
+        pla
+        cmp tmpw
+        bne .badsz2
+        jsr apael
+        lda tmpw
+        sta acnt
+        lda tmpw+1
+        sta acnt+1
+-       lda acnt                ; element by element (strings are copied)
+        ora acnt+1
+        lbeq .done
+        jsr aelqset
+        jsr loadvar
+        jsr aelset
+        jsr storevar
+        jsr aelinc
+        jsr aelqinc
+        lda acnt
+        bne +
+        dec acnt+1
++       dec acnt
+        bra -
+.badsz2 pla
+.badsz  lda #15                 ; Bad subscript (size mismatch)
+        jmp error
+.expr2  jmp syntax
+.expr   ; a() = expr[,expr...]  or a() op= expr
+        lda ablk
+        sta ptr2
+        lda ablk+1
+        sta ptr2+1
+        jsr arrsize
+        jsr apael
+        lda tmpw
+        sta acnt
+        lda tmpw+1
+        sta acnt+1
+        lda #0
+        sta alist
+        lda aop                 ; "a() = n OP b()" / "a() = -b()": overlay 2
+        cmp #$ff
+        bne .e1
+        jmp arrpre              ; (comes back at arrle1 or arrle1x)
+arrle1:
+.e1     jsr expr
+arrle1x:
+        lda etype
+        eor avt
+        and #$80
+        beq +
+        lda #6
+        jmp error
++       jsr pushval             ; keep value
+        jsr nxt
+        cmp #','
+        bne .fill
+        ; initialisation list: store this value in the next element only
+        inw tp
+        lda #1
+        sta alist
+        jsr popacc
+        jsr .store1
+        lda acnt
+        ora acnt+1
+        beq .e1                 ; (extra values are ignored)
+        bra .e1
+.fill   jsr popacc
+        lda alist
+        bne .last
+-       lda acnt                ; fill (or op=) every element
+        ora acnt+1
+        beq .done
+        jsr pushval
+        jsr .store1
+        jsr popacc
+        bra -
+.last   jsr .store1             ; last element of an init list
+.done   jmp xeq
+; store acc/ACCS (with op) into the element at aelp, advance
+.store1 lda acnt
+        ora acnt+1
+        bne +
+        rts
++       jsr aelset
+        lda aop
+        cmp #$ff
+        beq .st
+        jsr pushval             ; element = element OP rhs
+        jsr loadvar
+        jsr movleft
+        jsr popacc
+        ldx aop
+        jsr binop
+        jsr aelset
+.st     jsr storevar
+        jsr aelinc              ; next element
+        lda acnt
+        bne +
+        dec acnt+1
++       dec acnt
+        rts
 ovl_xtra_end:
 }

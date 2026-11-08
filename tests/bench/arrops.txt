@@ -1,0 +1,15 @@
+10 REM whole-array operations on 255-element integer arrays: us per element (Xemu)
+20 DIM P%(254),V%(254),Q%(254):FOR I%=0 TO 254:P%(I%)=I%*65537:V%(I%)=I%:NEXT
+30 T%=TIME:FOR Z%=1 TO 100:NEXT:E%=TIME-T%
+40 T%=TIME:FOR Z%=1 TO 100:P%()=P%()+V%()
+45 NEXT:PRINT "P%()=P%()+V%()  ";(TIME-T%-E%)*100/255
+50 T%=TIME:FOR Z%=1 TO 100:Q%()=P%()
+55 NEXT:PRINT "Q%()=P%()        ";(TIME-T%-E%)*100/255
+60 T%=TIME:FOR Z%=1 TO 100:Q%()=P%()*3
+65 NEXT:PRINT "Q%()=P%()*3      ";(TIME-T%-E%)*100/255
+70 T%=TIME:FOR Z%=1 TO 100:Q%()=P%()+65536
+75 NEXT:PRINT "Q%()=P%()+65536  ";(TIME-T%-E%)*100/255
+80 T%=TIME:FOR Z%=1 TO 100:Q%()=0
+85 NEXT:PRINT "Q%()=0           ";(TIME-T%-E%)*100/255
+90 PRINT P%(10),Q%(10)
+RUN

@@ -3498,82 +3498,10 @@ signednum:                      ; parse a number at tp -> acc (0 if none)
 
 ; ---- READ / DATA / RESTORE ----
 !zone read
-restore:
-        cmp #TERROR
-        bne +
-        inw tp
-        lda #<errtrp
-        jsr resframe
-        lda #9
-        jsr drop
-        jmp xeq
-+       cmp #TDATA
-        bne +
-        inw tp
-        lda #<datptr
-        jsr resframe
-        lda #9
-        jsr drop
-        jmp xeq
-+       cmp #TLOCAL
-        bne +
-        inw tp
-        jsr unwind
-        jmp xeq
-+       cmp #'+'
-        bne +
-        inw tp                  ; RESTORE +n: n lines after the current one
-        jsr expri
-        lda curlin
-        sta ptr1
-        lda curlin+1
-        sta ptr1+1
-        jsr setlin
-        lda erl
-        sta lnum
-        lda erl+1
-        sta lnum+1
-        jsr findl
--       lda acc
-        ora acc+1
-        beq ++
-        ldy #0
-        jsr lp1y
-        beq ++
-        clc
-        adc ptr1
-        sta ptr1
-        bcc +++
-        inc ptr1+1
-+++     lda acc
-        bne ++++
-        dec acc+1
-++++    dec acc
-        bra -
-++      lda ptr1
-        sta datptr
-        lda ptr1+1
-        sta datptr+1
-        jsr dsrch
-        jmp xeq
-+       jsr termq
-        beq .r0
-        jsr itemi
-        lda acc
-        sta lnum
-        lda acc+1
-        sta lnum+1
-        jsr findl
-        lda ptr1
-        sta datptr
-        lda ptr1+1
-        sta datptr+1
-        jsr dsrch
-        jmp xeq
-.r0     lda #0
-        sta datptr
-        sta datptr+1
-        jmp xeq
+restore:                        ; (overlay 2; ends with XEQ)
+        jsr ovjmp
+        !byte 2
+        !word o_restore
 ; DSRCH: datptr -> line; find first line from there with DATA, point after token
 dsrch:  lda datptr
         sta ptr1
