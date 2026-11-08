@@ -4,7 +4,7 @@ Derived from BBC BASIC (Z80) v5
 MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
 >10 REM RETURN parameters
->20 A=1:B$="x":C%=5:DIM Q(3),Q$(2):Q(2)=7
+>20 A=1:B$="x":C%=5:DIM Q(3), Q$(2):Q(2)=7
 >30 PROCchg(A,B$,C%):PRINT A;" ";B$;" ";C%
 >40 PROCchg(Q(2),Q$(1),C%):PRINT Q(2);" ";Q$(1)
 >50 X=FNtwice(A):PRINT X;" ";A

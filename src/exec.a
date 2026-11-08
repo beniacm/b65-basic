@@ -1349,7 +1349,8 @@ swapaa: ldq saveacc             ; arg := var (saved), acc := limit (in arg)
 
 ; ---- DIM ----
 !zone dim
-dim:    jsr getname
+dim:    jsr nxt                 ; (spaces after a comma)
+        jsr getname
         bcc +
         jmp syntax
 +       jsr locate
