@@ -207,6 +207,17 @@ profsample:                     ; stack: SP+1,2 return, +3 Z +4 Y +5 X +6 A +7 P
         lda $dc0d
         and #1
         beq .pr
+        lda .lf                 ; next period 512 + (0..511) ticks: 16-bit LFSR
+        asl
+        rol .lf+1
+        bcc +
+        eor #$2d
++       sta .lf
+        sta $dc04
+        lda .lf+1
+        and #1
+        ora #2
+        sta $dc05
         tsx
         tsy
         sty .pa+2
@@ -254,6 +265,7 @@ profsample:                     ; stack: SP+1,2 return, +3 Z +4 Y +5 X +6 A +7 P
 .pr     rts
 .pl     !byte 0
 .ph     !byte 0
+.lf     !word $ace1
 }
 
 nmihandler:

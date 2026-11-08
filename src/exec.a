@@ -1283,7 +1283,83 @@ next:   jsr getsp
         iny
         lda (spz),y
         sta vtype
-        jsr loadn               ; var -> acc
+        ; fast path: integer variable, integer limit and step
+        cmp #4
+        lbne .slow
+        ldy #9
+        lda (spz),y
+        ldy #14
+        ora (spz),y
+        bne .slow
+        ldy #0                  ; acc = var + step (Y: var, Z: frame)
+        ldz #10
+        clc
+        lda (vptr),y
+        adc (spz),z
+        sta acc+0
+        iny
+        inz
+        lda (vptr),y
+        adc (spz),z
+        sta acc+1
+        iny
+        inz
+        lda (vptr),y
+        adc (spz),z
+        sta acc+2
+        iny
+        inz
+        lda (vptr),y
+        adc (spz),z
+        sta acc+3
+        ldz #0
+        bvs .slow               ; overflow: the general path decides
+-       lda acc,y
+        sta (vptr),y
+        dey
+        bpl -
+        ldy #13                 ; step sign
+        lda (spz),y
+        bmi .fneg
+        ldy #5                  ; past the limit if limit - var < 0
+        sec
+        lda (spz),y
+        sbc acc+0
+        iny
+        lda (spz),y
+        sbc acc+1
+        iny
+        lda (spz),y
+        sbc acc+2
+        iny
+        lda (spz),y
+        sbc acc+3
+        bra .fcmp
+.fneg   ldy #5                  ; past the limit if var - limit < 0
+        sec
+        lda acc+0
+        sbc (spz),y
+        iny
+        lda acc+1
+        sbc (spz),y
+        iny
+        lda acc+2
+        sbc (spz),y
+        iny
+        lda acc+3
+        sbc (spz),y
+.fcmp   bvc +
+        eor #$80
++       tax
+        bmi .done
+        ldy #15                 ; continue loop
+        lda (spz),y
+        sta tp
+        iny
+        lda (spz),y
+        jsr settph
+        jmp xeq
+.slow   jsr loadn               ; var -> acc
         ldy #10
         jsr getarg              ; step -> arg
         lda arg+3

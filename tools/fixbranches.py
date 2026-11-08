@@ -7,6 +7,8 @@ for it in range(20):
     errs = re.findall(r'File (\S+), line (\d+) \(Zone [^)]*\): Target out of range', r.stderr)
     if not errs:
         print(r.stderr, end='')
+        if os.environ.get('ACMEFLAGS') and os.path.exists('build/b65.prg'):
+            os.utime('build/b65.prg', (0, 0))   # special build: make rebuilds next time
         sys.exit(r.returncode)
     files = {}
     for f, l in errs:

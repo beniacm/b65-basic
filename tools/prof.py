@@ -39,5 +39,17 @@ print('samples', n)
 for name, c in sorted(tot.items(), key=lambda x: -x[1])[:top]:
     print('%6d %5.1f%%  %s' % (c, 100.0 * c / n, name))
 if '-pc' in sys.argv:
+    # optional ACME report (acme -r FILE) for the source of each bucket
+    src = {}
+    if '-lst' in sys.argv:
+        import re
+        cur = ''
+        for ln in open(sys.argv[sys.argv.index('-lst') + 1], errors='replace'):
+            if ln.startswith('; ******** Source:'):
+                cur = ln.split(':', 1)[1].strip().split('/')[-1]
+            m = re.match(r'\s*(\d+)\s+([0-9a-f]{4})\s+[0-9a-f]+\s+(.*)', ln)
+            if m:
+                a = int(m.group(2), 16) & ~3
+                src.setdefault(a, '%s:%s %s' % (cur, m.group(1), m.group(3).strip()[:60]))
     for pc, c in sorted(pcs.items(), key=lambda x: -x[1])[:top]:
-        print('$%04x %6d' % (pc, c))
+        print('$%04x %6d  %s' % (pc, c, src.get(pc, '')))
