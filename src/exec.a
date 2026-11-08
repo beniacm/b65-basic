@@ -928,10 +928,37 @@ format: cmp #TTAB
         rts
 
 ; ---- GOTO / GOSUB / RETURN ----
-goto:   jsr itemi
+goto:   jsr linetgt
         jsr termq
-        beq goto1
+        beq +
         jmp syntax
++       lda ptr1
+        sta tp
+        lda ptr1+1
+        jsr settph
+        jmp xeq0
+; LINETGT: ptr1 = the line given at tp (GOTO/GOSUB), tp after it; program
+; text asks the compiled-code overlay (cached line addresses) first
+linetgt:
+        lda tp+2
+        beq .lint
+        lda curovl
+        cmp #4
+        beq +
+        lda #4
+        jsr ovmap
++       jsr $e009               ; XCLINE
+        bcc .lr
+.lint   jsr itemi
+        lda acc
+        sta lnum
+        lda acc+1
+        sta lnum+1
+        jsr findl
+        beq .lr
+        lda #41                 ; No such line
+        jmp error
+.lr     rts
 goto1:  lda acc
         sta lnum
         lda acc+1
@@ -946,7 +973,7 @@ goto1:  lda acc
         jsr settph
         jmp xeq0
 
-gosub:  jsr itemi
+gosub:  jsr linetgt
         jsr termq
         beq +
         jmp syntax
@@ -961,7 +988,11 @@ gosub:  jsr itemi
         iny
         lda tp+1
         sta (spz),y
-        bra goto1
+        lda ptr1
+        sta tp
+        lda ptr1+1
+        jsr settph
+        jmp xeq0
 
 return: jsr getsp
         cmp #TGOSUB

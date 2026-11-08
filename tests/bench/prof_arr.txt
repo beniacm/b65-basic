@@ -1,0 +1,2 @@
+10 DIM X%(64):FOR I%=1 TO 20000:X%=X%(5):NEXT
+RUN

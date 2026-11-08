@@ -40,6 +40,83 @@ ovl_xc_img:
         jmp xcrun               ; $E000: expression
         jmp xclet               ; $E003: assignment statement
         jmp xcif                ; $E006: single-line IF ... THEN ... [ELSE ...]
+        jmp xcline              ; $E009: GOTO/GOSUB line -> line address
+
+; XCLINE: tp -> the argument of GOTO/GOSUB. Carry clear: ptr1 = the line,
+; tp after the argument (a TLINO line number, cached: kind 3). Carry set:
+; interpret it (computed target, or no such line: the interpreter reports).
+!zone xcline
+xcline: lda tp
+        eor tp+1
+        tax
+        lda XKHI,x
+        cmp tp+1
+        bne .m
+        lda XKLO,x
+        cmp tp
+        bne .m
+        lda XMOD,x
+        cmp #3
+        bne .m
+        lda XCHI,x
+        beq .no
+        sta ptr1+1
+        lda XCLO,x
+        sta ptr1
+        lda XELO,x
+        sta tp
+        lda XEHI,x
+        sta tp+1
+        clc
+        rts
+.no     sec
+        rts
+.m      stx xslot
+        lda tp
+        sta xtp0
+        lda tp+1
+        sta xtp0+1
+        lda #3
+        sta XMOD,x
+        lda [tp],z
+        cmp #TLINO
+        beq +
+        lda tp                  ; computed: never
+        sta XKLO,x
+        lda tp+1
+        sta XKHI,x
+        lda #0
+        sta XCHI,x
+        sec
+        rts
++       inw tp
+        jsr decode0             ; lnum, tp after the number
+        jsr findl
+        bne .nf
+        ldx xslot
+        lda xtp0
+        sta XKLO,x
+        lda xtp0+1
+        sta XKHI,x
+        lda ptr1
+        sta XCLO,x
+        lda ptr1+1
+        sta XCHI,x
+        lda tp
+        sta XELO,x
+        lda tp+1
+        sta XEHI,x
+        clc
+        rts
+.nf     ldx xslot               ; no such line: the interpreter reports it
+        lda #0
+        sta XKHI,x
+        lda xtp0
+        sta tp
+        lda xtp0+1
+        sta tp+1
+        sec
+        rts
 
 ; ---------------- run ----------------
 ; XCRUN: tp -> expression (program text). Carry clear: acc/accx = value,
