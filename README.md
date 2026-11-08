@@ -59,6 +59,15 @@ paths are untested. The K325T core, the list-mode documentation and the
 loader used by `tests/board.py` live in the harness repository
 https://github.com/beniacm/mega65-k325t-cm4.
 
+## Download
+
+Ready-made builds are on the [Releases page](https://github.com/beniacm/b65-basic/releases):
+`b65.d81` (the interpreter as `B65` plus the examples as text files) and `b65.prg` (the
+interpreter alone, load address `$2001`). On a MEGA65: copy the D81 to the SD card, mount it,
+`DLOAD "B65"`, `RUN`; then in B65 `LOAD "PARALLAX"`, `RUN`. In Xemu: `xmega65 -8 b65.d81`. On the
+K325T rig: `scripts/b65_run.sh` in the harness repository. Each release lists what was verified on
+hardware; a standard MEGA65 has not been tested yet.
+
 ## Build
 
 You need ACME 0.97 or later (`brew install acme`) and python3. Then run
