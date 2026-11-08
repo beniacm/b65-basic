@@ -22,14 +22,15 @@ XCLO    = XKLO + $200   ;   code address; high 0 = not compilable
 XCHI    = XKLO + $300
 XELO    = XKLO + $400   ;   text address after the expression
 XEHI    = XKLO + $500
-XS0     = XKLO + $600   ; value stack: 4 mantissa bytes + exponent (64 each)
-XS1     = XKLO + $640
-XS2     = XKLO + $680
-XS3     = XKLO + $6c0
-XS4     = XKLO + $700
-XB      = XKLO + $740   ; compile buffer (192)
-XMOD    = XKLO + $800   ;   kind of the slot (xmode: 0 expression, 1 LET, 2 IF)
-XCODE   = XKLO + $900   ; code cache ... $FFEF
+XMOD    = XKLO + $600   ;   kind of the slot (0 expression, 1 LET, 2 IF,
+                        ;   3 GOTO/GOSUB line, $40 | retmask PROC/FN DEF)
+XS0     = XKLO + $700   ; value stack: 4 mantissa bytes + exponent (32 each)
+XS1     = XKLO + $720
+XS2     = XKLO + $740
+XS3     = XKLO + $760
+XS4     = XKLO + $780
+XB      = XKLO + $7a0   ; compile buffer (160)
+XCODE   = XKLO + $840   ; code cache ... $FFEF
 XCEND   = $fff0
 ; bank-4 addresses for the resident XCFLUSH
 XKHI_F  = XKHI - $e000 + $48000
@@ -41,6 +42,61 @@ ovl_xc_img:
         jmp xclet               ; $E003: assignment statement
         jmp xcif                ; $E006: single-line IF ... THEN ... [ELSE ...]
         jmp xcline              ; $E009: GOTO/GOSUB line -> line address
+        jmp xcdef               ; $E00C: PROC/FN call site -> DEF (cached)
+        jmp xcdefput            ; $E00F: remember it
+
+; XCDEF: tp -> the name after TPROC/TFN. Carry clear: ptr1 = DEF text after
+; the name, tp after the name, retmask (slot kind $40 | retmask).
+!zone xcdef
+xcdef:  lda tp
+        eor tp+1
+        tax
+        lda XKHI,x
+        cmp tp+1
+        bne .no
+        lda XKLO,x
+        cmp tp
+        bne .no
+        lda XMOD,x
+        and #$c0
+        cmp #$40
+        bne .no
+        lda XMOD,x
+        and #$3f
+        sta retmask
+        lda XCLO,x
+        sta ptr1
+        lda XCHI,x
+        sta ptr1+1
+        lda XELO,x
+        sta tp
+        lda XEHI,x
+        sta tp+1
+        clc
+        rts
+.no     sec
+        rts
+; XCDEFPUT: defkey = the name's text address, ptr1, tp, retmask as found
+xcdefput:
+        lda defkey
+        eor defkey+1
+        tax
+        lda defkey
+        sta XKLO,x
+        lda defkey+1
+        sta XKHI,x
+        lda retmask
+        ora #$40
+        sta XMOD,x
+        lda ptr1
+        sta XCLO,x
+        lda ptr1+1
+        sta XCHI,x
+        lda tp
+        sta XELO,x
+        lda tp+1
+        sta XEHI,x
+        rts
 
 ; XCLINE: tp -> the argument of GOTO/GOSUB. Carry clear: ptr1 = the line,
 ; tp after the argument (a TLINO line number, cached: kind 3). Carry set:
@@ -276,6 +332,11 @@ xrd:    lda $ffff,y             ; operand byte
         dex
 }
 
+xspill: +spill
+        rts
+xpopr:  +pop
+        rts
+
 ; ---- handlers: one page, the opcode is the low byte of the address ----
         !align 255, 0
 xhand:
@@ -288,7 +349,7 @@ h_end:  ldx xslot
         sta etype
         clc
         rts
-h_k8:   +spill                  ; integer 0..255
+h_k8:   jsr xspill                  ; integer 0..255
 y_k8:   jsr xrd
         sta acc
         lda #0
@@ -330,7 +391,7 @@ h_neg:  jmp x_neg
 xhend:
 !if xhend - xhand > 256 { !error "xc handlers exceed a page" }
 
-x_k40:  +spill                  ; 5 bytes (integer: exponent 0)
+x_k40:  jsr xspill                  ; 5 bytes (integer: exponent 0)
 y_k40:
         jsr xrd
         sta acc
@@ -343,7 +404,7 @@ y_k40:
         jsr xrd
         sta accx
         jmp xnext
-x_vi:   +spill                  ; integer variable (4 bytes at a bank-0 address)
+x_vi:   jsr xspill                  ; integer variable (4 bytes at a bank-0 address)
 y_vi:
         jsr xrd
         sta .vi+1
@@ -359,7 +420,7 @@ y_vi:
         lda #0
         sta accx
         jmp xnext
-x_vf:   +spill                  ; variant variable (5 bytes)
+x_vf:   jsr xspill                  ; variant variable (5 bytes)
 y_vf:
         jsr xrd
         sta .vf+1
@@ -378,7 +439,7 @@ y_vf:
 ; integer overflow, which BINOP turns into floating point)
 x_gen:  jsr xrd
         sta xcop
-        +pop
+        jsr xpopr
 xgo:    stx xsx
         sty xsy
         lda #0
@@ -391,7 +452,7 @@ xgo:    stx xsx
         ldy xsy
         jmp xnext
 !macro intop .op {
-        +pop
+        jsr xpopr
         lda #.op
         sta xcop
         lda accx
@@ -710,7 +771,7 @@ x_st1:  lda #1                  ; ?addr=value
         bra +
 x_st4:  lda #4                  ; !addr=value
 +       sta xcop
-        +pop                    ; address -> arg
+        jsr xpopr                  ; address -> arg
         stx xsx
         sty xsy
         lda argx
@@ -956,7 +1017,7 @@ xemit:  ldx xbp
         sta XB,x
         inx
         stx xbp
-        cpx #192
+        cpx #160
         bcs xfail               ; too long for the buffer
         rts
 ; XEMITV: A = opcode, X = its no-spill variant (used for the first value)
@@ -974,7 +1035,7 @@ xemitl: ldy xfirst              ; variables: h_vi/h_vf -> l_vi/l_vf
         bra xemit
 xpush:  inc xdep                ; one more value on the stack
         lda xdep
-        cmp #60
+        cmp #30
         bcs xfail
         rts
 

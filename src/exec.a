@@ -937,6 +937,26 @@ goto:   jsr linetgt
         lda ptr1+1
         jsr settph
         jmp xeq0
+; XC4: call overlay 4 at $E000+X, mapping the caller's overlay back after
+; it (FN calls can come from overlay code); carry from the call
+xc4:    stx .xj+1
+        lda curovl
+        pha
+        cmp #4
+        beq +
+        lda #4
+        jsr ovmap
++       jsr .xj
+        pla
+        php
+        cmp #4
+        beq +
+        cmp #$ff
+        beq +
+        jsr ovmap
++       plp
+        rts
+.xj     jmp $e000
 ; LINETGT: ptr1 = the line given at tp (GOTO/GOSUB), tp after it; program
 ; text asks the compiled-code overlay (cached line addresses) first
 linetgt:
@@ -2277,19 +2297,32 @@ finddef:
 ; Must be JMPed to with the frame destination being the current stack top.
 !zone callsetup
 proc:   lda #TPROC
-        sta fnlev
-        jsr procname
-        lda #TPROC
-        jsr finddef
-        jmp callset
+        bra +
 fn_call:
         lda #TFN
-        sta fnlev
++       sta fnlev
+        lda tp+2                ; program text: the DEF of this call site
+        beq .nc                 ; may be cached (overlay 4)
+        ldx #$0c
+        jsr xc4
+        bcc callset2
+        lda tp
+        sta defkey
+        lda tp+1
+        sta defkey+1
         jsr procname
-        lda #TFN
+        lda fnlev
+        jsr finddef
+        jsr retscan             ; retmask: formals declared RETURN
+        ldx #$0f
+        jsr xc4
+        bra callset2
+.nc     jsr procname
+        lda fnlev
         jsr finddef
 callset:
         jsr retscan             ; retmask: formals declared RETURN
+callset2:
         lda retmask
         pha
         lda fnlev
