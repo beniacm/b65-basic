@@ -3,7 +3,7 @@ Derived from BBC BASIC (Z80) v5
 (C) Copyright R.T.Russell 2025
 MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
->5 REM Per frame (64 balls): 15 ms in Xemu without the vsync wait (about 230 us a ball: move, walls, table), plus about 0.9 ms per colliding pair: 50 fps
+>5 REM Per frame (64 balls): 13.5 ms in Xemu without the vsync wait (about 210 us a ball: move, walls, table), plus about 1.3 ms per colliding pair in PROChit (table walk, COLLIDE, confirm, swap): 50 fps with a few pairs
 >10 REM Bounce: N% balls that bounce off the walls and off each other (B65)
 >20 REM K325T core: the balls are RRB list mode v2 objects (shaded full-colour
 >30 REM glyphs from an own 256-colour palette, 640x400) and the core's
@@ -23,7 +23,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >115 REM G%=1: gravity. BASIC 65 twin: examples/basic65/bounce65.bas (32 balls).
 >120 BN%=0:RS%=1:N%=64:G%=0:SW%=0:BW%=6
 >130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:L%=160:K%=(?&6E1=&FF)
->140 DIM P%(N%),V%(N%)
+>140 DIM P%(N%),V%(N%),LB% 255,DT% 543:PROCtables
 >150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
 >160 PROCpalsave:CLS:PRINT "Bounce: ";N%;" balls":PROCpalette:PROCballs
 >170 REM start on a grid (no overlaps), random velocities -3..3 (not 0)
@@ -38,22 +38,33 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >240 REPEAT
 >250 WAIT:EI:IF SW% THEN PROCsoft
 >260 IF G% THEN IF (F% AND 3)=0 THEN FOR I%=0 TO N%-1:V%(I%)=V%(I%)+65536:NEXT
->270 DI:?HO%=1:FOR I%=0 TO N%-1:P%=P%(I%)+V%(I%)
+>270 DI:?HO%=1:TA%=TB%:FOR I%=0 TO N%-1:P%=P%(I%)+V%(I%)
 >280 IF (P% AND &FFFF)>632 OR P%>>>16>392 THEN PROCwall
->300 P%(I%)=P%:!(TB%+16*I%)=P% AND &3FF03FF:NEXT
+>300 P%(I%)=P%:!TA%=P% AND &3FF03FF:TA%=TA%+16:NEXT
 >320 ?HO%=0:IF K%=0 THEN PROCspr
 >330 F%=F%+1:UNTIL F%=BN%
 >340 T%=TIME-T%:IF RS% THEN PROCtext:PRINT BN%;" frames in ";T%;" cs, ";NP%;" pairs"
 >350 END
 >1000 REM ---- pairs ----
->1010 DEF PROChit:LOCAL J%,M%,I%,Q%:REM ON COLLISION (B65 acknowledged the engine)
->1020 FOR J%=0 TO (N%-1) DIV 8:M%=?(&FFD71A0+J%):I%=J%*8:REM collided objects
->1030 WHILE M%:IF M% AND 1 THEN Q%=COLLIDE(I%):IF Q%>I% THEN A%=I%:B%=Q%:PROCpair
->1040 M%=M%>>>1:I%=I%+1:ENDWHILE
->1050 NEXT:ENDPROC
->1060 DEF PROCpair:REM A%, B%: confirm (centre distance), swap, separate
->1070 U%=(P%(B%) AND &FFFF)-(P%(A%) AND &FFFF):W%=(P%(B%)>>>16)-(P%(A%)>>>16):IF U%*U%+W%*W%>64 THEN ENDPROC
->1080 NP%=NP%+1:U%=V%(A%):V%(A%)=V%(B%):V%(B%)=U%:REM then one step each (if inside)
+>1002 REM PROChit (ON COLLISION; B65 acknowledged the engine): CN% = number of
+>1004 REM collided objects, table byte CA% = objects CI%-8..CI%-1 (a bit each),
+>1006 REM zero bytes skipped, stop when CN% objects were seen; PROCbits: one
+>1008 REM COLLIDE per set bit (LB%?m = its lowest set bit). No REM or WHILE in
+>1009 REM the lines that run per frame (REM is skipped character by character).
+>1010 DEF PROChit
+>1020 CN%=?&FFD71C3:CA%=&FFD71A0:CI%=0
+>1030 REPEAT CM%=?CA%:CA%=CA%+1:CI%=CI%+8:IF CM% THEN PROCbits
+>1040 UNTIL CN%<=0 OR CI%>=N%:ENDPROC
+>1045 DEF PROCbits
+>1050 REPEAT CH%=CI%-8+LB%?CM%:CM%=CM% AND CM%-1:CN%=CN%-1:CQ%=COLLIDE(CH%):IF CQ%>CH% THEN A%=CH%:B%=CQ%:PROCpair
+>1055 UNTIL CM%=0:ENDPROC
+>1057 REM PROCpair: A%, B%: confirm (centre distance), swap, one step each
+>1058 REM (if inside). D% = dX+8 + 65536*(dY+8); DT%?(dX+8+32*(dY+8)) = 1 for
+>1059 REM dX*dX+dY*dY <= 64
+>1060 DEF PROCpair
+>1070 D%=P%(B%)-P%(A%)+&80008:IF D% AND &FFE0FFE0 THEN ENDPROC
+>1075 IF DT%?((D% AND 31)+(D%>>>11))=0 THEN ENDPROC
+>1080 NP%=NP%+1:U%=V%(A%):V%(A%)=V%(B%):V%(B%)=U%
 >1090 U%=P%(A%)+V%(A%):IF (U% AND &FFFF)<=632 AND U%>>>16<=392 THEN P%(A%)=U%
 >1100 U%=P%(B%)+V%(B%):IF (U% AND &FFFF)<=632 AND U%>>>16<=392 THEN P%(B%)=U%
 >1110 ENDPROC
@@ -66,6 +77,9 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1150 FOR I%=0 TO N%-2:FOR J%=I%+1 TO N%-1
 >1160 IF ABS((P%(J%) AND &FFFF)-(P%(I%) AND &FFFF))<8 AND ABS((P%(J%)>>>16)-(P%(I%)>>>16))<8 THEN A%=I%:B%=J%:PROCpair
 >1170 NEXT:NEXT:ENDPROC
+>1180 DEF PROCtables:LOCAL I%,J%,X%:REM LB%?m: lowest set bit of m; DT%: see 1058
+>1185 FOR I%=1 TO 255:J%=0:WHILE (I% AND 1<<J%)=0:J%=J%+1:ENDWHILE:LB%?I%=J%:NEXT
+>1190 FOR I%=0 TO 543:X%=(I% AND 31)-8:J%=I% DIV 32-8:DT%?I%=-(X%*X%+J%*J%<=64):NEXT:ENDPROC
 >1200 REM ---- set-up ----
 >1210 DEF PROCballs:LOCAL C%,R%,M%,X%,Y%,D%,V%
 >1220 REM six shaded balls (8x8 full colour, lit from the top left) at GA% =

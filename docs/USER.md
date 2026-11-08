@@ -128,7 +128,14 @@ K325T, `?&6E2`/`?&6E3` = chip RAM in KB, `?&6E4` = attic RAM in MB.
 **K325T RRB list mode** (only with the K325T core): the VIC-IV paints
 "objects" from a table that is moved like sprites; see
 `docs/rrb_list_mode.md` in the harness repository and the examples
-`rrblist_b65.bas` (v1) and `rrblist_b65v2.bas` (v2).
+`rrblist_b65.bas` (v1) and `rrblist_b65v2.bas` (v2). HOLD (`?&FFD71FC=1`)
+keeps the VIC-IV's last snapshot of the table while a program rewrites it,
+so a batch of moves appears at once; the snapshot is only taken at a frame
+start while HOLD is 0. So HOLD must be 0 at some frame start: release it
+and wait for the next frame (`WAIT`) before setting it again. A loop that
+takes longer than a frame and releases HOLD only briefly (for example
+just before `VSYNC` to a line in the middle of the picture) never gets a
+new snapshot and shows a frozen picture.
 
 **K325T collision engine** (list mode v2, K325T core only). Objects that
 share a bit in their collision group mask (object table `+7`) are compared
