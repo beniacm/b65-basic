@@ -18,8 +18,8 @@
 110 REM BN%>0: stop after BN% frames (tests); RS%=1: back to text, timing;
 115 REM G%=1: gravity. BASIC 65 twin: examples/basic65/bounce65.bas (32 balls).
 120 BN%=0:RS%=1:N%=64:G%=0:SW%=0:BW%=6
-130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:SG%=6:L%=16*SG%:K%=(?&6E1=&FF)
-135 IF K%=0 THEN S%=&50000:GA%=&58000:REM (no chip RAM at &60000-&8FFFF)
+130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:ZL%=&90000:ZH%=&A8000:SG%=6:L%=16*SG%:K%=(?&6E1=&FF)
+135 IF K%=0 THEN S%=&50000:GA%=&58000:ZL%=&8400000:ZH%=&8420000:REM (no chip RAM at &60000-&FFFFF: attic)
 140 DIM P%(N%),V%(N%),LB% 255,DT% 543,ZD%(3),ZA%(3),ZK%(7):PROCtables
 150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
 160 PROCpalsave:CLS:PRINT "Bounce: ";N%;" balls":PROCpalette:PROCballs
@@ -33,8 +33,8 @@
 226 REM once); without the K325T the table and HOLD go to scratch RAM
 230 F%=0:NP%=0:T%=TIME:IF K%=0 THEN TB%=&5E000:HO%=&5DFFF ELSE HO%=&FFD71FC
 240 REPEAT
-250 WAIT:X%=(ZA0%-(F%>>2)) MOD 640:!J0%=X%+K0%:!J1%=X%+K1%:X%=(ZA1%-(F%>>1)) MOD 640:!J2%=X%+K2%:!J3%=X%+K3%
-252 X%=(ZA2%-F%) MOD 640:!J4%=X%+K4%:!J5%=X%+K5%:X%=(ZA3%-2*F%) MOD 640:!J6%=X%+K6%:!J7%=X%+K7%
+250 WAIT:X%=(ZA0%-(F%>>2)) MOD 632:!J0%=X%+K0%:!J1%=X%+K1%:X%=(ZA1%-(F%>>1)) MOD 632:!J2%=X%+K2%:!J3%=X%+K3%
+252 X%=(ZA2%-F%) MOD 632:!J4%=X%+K4%:!J5%=X%+K5%:X%=(ZA3%-2*F%) MOD 632:!J6%=X%+K6%:!J7%=X%+K7%
 254 ?&D702=DL% DIV 65536:?&D704=0:?&D701=(DL% DIV 256) AND 255:?&D705=DL% AND 255:EI:IF SW% THEN PROCsoft
 260 IF G% THEN IF (F% AND 3)=0 THEN FOR I%=0 TO N%-1:V%(I%)=V%(I%)+65536:NEXT
 270 DI:?HO%=1:TA%=TB%:FOR I%=0 TO N%-1:P%=P%(I%)+V%(I%)
@@ -118,30 +118,31 @@
 1804 REM 0 (far, dim dot) .. 3 (near, bright). The GOTOX words of one plane are
 1806 REM every 16 bytes over the whole screen (rows are 16*SG% bytes), so per
 1808 REM frame one DMA job per plane and byte (X lo, X hi) rewrites all of them:
-1810 REM it copies with source step ZD(p) from the ramp tables ZL%/ZH% in attic
-1812 REM RAM (lo/hi byte of n MOD 640, n < 98304): star k of plane p is at X =
-1814 REM (ZA(p) - offset + k*ZD(p)) MOD 640 (a star leaving at the left comes
-1816 REM back at the right). Offsets F%/4, F%/2, F%, 2*F%; ZA(p) >= 2^30.
+1810 REM it copies with source step ZD(p) from the ramp tables ZL%/ZH% (lo/hi
+1812 REM byte of n MOD 632, n < 80896; K325T: chip RAM banks 9-11, else attic
+1814 REM RAM): star k of plane p is at X = (ZA(p) - offset + k*ZD(p)) MOD 632
+1816 REM (X <= 631: the glyph ends inside the 640-pixel row; a star leaving at
+1817 REM the left comes back at the right). Offsets F%/4, F%/2, F%, 2*F%.
 1818 REM GOTOX colour flags &90: transparent, so stars never cover each other.
 1820 DEF PROCplanes:LOCAL I%,Q%,J%,D%,A%
-1822 ZN%=50*SG%:ZL%=&8400000:ZH%=&8420000:DL%=&5F000:ZT%=&5F100
-1824 FOR I%=0 TO 639:?(ZL%+I%)=I% AND 255:?(ZH%+I%)=I% DIV 256:NEXT
-1826 I%=640:REPEAT PROCdma(0,I%,ZL%,ZL%+I%,1,1):PROCdma(0,I%,ZH%,ZH%+I%,1,1):I%=I%*2:UNTIL I%=81920
-1828 PROCdma(0,16384,ZL%,ZL%+I%,1,1):PROCdma(0,16384,ZH%,ZH%+I%,1,1)
+1822 ZN%=50*SG%:DL%=&5F000:ZT%=&5F100
+1824 FOR I%=0 TO 631:?(ZL%+I%)=I% AND 255:?(ZH%+I%)=I% DIV 256:NEXT
+1826 I%=632:REPEAT PROCdma(0,I%,ZL%,ZL%+I%,1,1):PROCdma(0,I%,ZH%,ZH%+I%,1,1):I%=I%*2:UNTIL I%>72000
 1830 PROCdma(3,50*L%,0,S%,1,1):PROCdma(3,50*L%,0,CR%,1,1):PROCdma(3,4*ZN%,&90,CR%,1,4)
 1832 FOR Q%=0 TO 3:I%=GA% DIV 64+6+Q%:PROCdma(3,ZN%,I% AND 255,S%+4*Q%+2,1,16):PROCdma(3,ZN%,I% DIV 256,S%+4*Q%+3,1,16):NEXT
 1834 RESTORE 1850:FOR I%=0 TO 255:?(GA%+64*6+I%)=0:NEXT:FOR Q%=0 TO 3:READ ZD%(Q%),ZA%(Q%),J%
 1836 FOR I%=1 TO J%:READ A%,D%:?(GA%+64*(6+Q%)+A%)=D%:NEXT:NEXT
-1838 FOR J%=0 TO 7:Q%=J% DIV 2:A%=DL%+22*J%:?A%=&80:?(A%+1)=&84:?(A%+2)=&81:?(A%+3)=0:?(A%+4)=&83:?(A%+5)=ZD%(Q%):?(A%+6)=&85:?(A%+7)=16
-1840 D%=S%+4*Q%+(J% AND 1):PROCjob(A%+8,4*(J%<7)*-1,ZN%,(J% AND 1)*&20000,D%):ZK%(J%)=(J% AND 1)*&20000+(D% AND 255)*&1000000:NEXT
+1838 FOR J%=0 TO 7:Q%=J% DIV 2:A%=DL%+22*J%:?A%=&80:?(A%+1)=ZL% DIV &100000:?(A%+2)=&81:?(A%+3)=0:?(A%+4)=&83:?(A%+5)=ZD%(Q%):?(A%+6)=&85:?(A%+7)=16
+1840 D%=S%+4*Q%+(J% AND 1):I%=ZL%:IF J% AND 1 THEN I%=ZH%
+1841 PROCjob(A%+8,4*(J%<7)*-1,ZN%,I%,D%):ZK%(J%)=(I% AND &FFFFF)+(D% AND 255)*&1000000:NEXT
 1842 J0%=DL%+13:J1%=J0%+22:J2%=J1%+22:J3%=J2%+22:J4%=J3%+22:J5%=J4%+22:J6%=J5%+22:J7%=J6%+22
 1844 K0%=ZK%(0):K1%=ZK%(1):K2%=ZK%(2):K3%=ZK%(3):K4%=ZK%(4):K5%=ZK%(5):K6%=ZK%(6):K7%=ZK%(7)
-1846 ZA0%=ZA%(0)+640*&200000:ZA1%=ZA%(1)+640*&200000:ZA2%=ZA%(2)+640*&200000:ZA3%=ZA%(3)+640*&200000:ENDPROC
+1846 ZA0%=ZA%(0)+632*&200000:ZA1%=ZA%(1)+632*&200000:ZA2%=ZA%(2)+632*&200000:ZA3%=ZA%(3)+632*&200000:ENDPROC
 1848 REM per plane: source step, start, pixels (offset in the glyph, colour)
-1850 DATA 211,0,1, 27,170
-1852 DATA 157,301,1, 27,175
-1854 DATA 233,612,4, 27,179,28,179,35,179,36,179
-1856 DATA 179,845,10, 19,178,20,178,26,178,27,183,28,183,29,178,34,178,35,183,36,183,37,178
+1850 DATA 251,0,1, 27,170
+1852 DATA 145,301,1, 27,175
+1854 DATA 171,612,4, 27,179,28,179,35,179,36,179
+1856 DATA 147,845,10, 19,178,20,178,26,178,27,183,28,183,29,178,34,178,35,183,36,183,37,178
 1860 DEF PROCjob(J%,C%,N%,S%,D%)
 1862 ?J%=&0B:?(J%+1)=0:?(J%+2)=C%:?(J%+3)=N% AND 255:?(J%+4)=N% DIV 256
 1864 !(J%+5)=S% AND &FFFFF:!(J%+8)=D% AND &FFFFF:?(J%+12)=0:?(J%+13)=0:ENDPROC

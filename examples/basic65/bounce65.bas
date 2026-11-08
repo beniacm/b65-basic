@@ -19,8 +19,8 @@
 110 rem bn>0: stop after bn frames (tests); rs=1: back to text, timing;
 115 rem g=1: gravity.
 120 bn=0:rs=1:n=32:g=0:sw=0:bw=6
-130 tb=$8c000:ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:sg=6:l=16*sg:k=(peek($d629)=98)
-135 if k=0 then s=$50000:ga=$58000:rem (no chip ram at $60000-$8ffff)
+130 tb=$8c000:ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:zl=$90000:zh=$a8000:sg=6:l=16*sg:k=(peek($d629)=98)
+135 if k=0 then s=$50000:ga=$58000:zl=$8400000:zh=$8420000:rem (no chip ram at $60000-$fffff: attic)
 140 dim x(n),y(n),dx(n),dy(n),zd(3),za(3)
 150 trap 2900
 155 v1=peek($d031):v5=peek($d05b):v7=peek($d07b):v0=peek($d054):v8=peek($d058):v9=peek($d059):va=peek($d05e)
@@ -38,8 +38,8 @@
 226 rem at a frame start with hold = 0 (a held batch would never be copied); a
 227 rem wpoke writes x and y at once, a ball torn for one frame is harmless
 230 f=0:np=0:t=ti
-250 vsync 251:x=mod(q0-int(f/4),640):wpoke j0,x:wpoke j1,x:x=mod(q1-int(f/2),640):wpoke j2,x:wpoke j3,x
-252 x=mod(q2-f,640):wpoke j4,x:wpoke j5,x:x=mod(q3-2*f,640):wpoke j6,x:wpoke j7,x
+250 vsync 251:x=mod(q0-int(f/4),632):wpoke j0,x+zb:wpoke j1,x+hb:x=mod(q1-int(f/2),632):wpoke j2,x+zb:wpoke j3,x+hb
+252 x=mod(q2-f,632):wpoke j4,x+zb:wpoke j5,x+hb:x=mod(q3-2*f,632):wpoke j6,x+zb:wpoke j7,x+hb
 254 poke $d702,int(dl/65536):poke $d704,0:poke $d701,mod(int(dl/256),256):poke $d705,mod(dl,256):if sw then gosub 1140
 255 if k then if peek($ffd71c0) and 1 then gosub 1010:poke $ffd71c0,1
 260 if g then if (f and 3)=0 then for i=0 to n-1:dy(i)=dy(i)+1:next i
@@ -98,27 +98,28 @@
 1804 rem ga/64+6+plane, full colour); plane p's gotox words are every 16 bytes
 1806 rem over the whole screen, so one dma job per plane and byte (x lo, x hi)
 1808 rem rewrites them per frame, copying with source step zd(p) from ramp
-1810 rem tables in attic ram (lo/hi byte of n mod 640): star k of plane p is
-1812 rem at x = (za(p) - offset + k*zd(p)) mod 640. offsets f/4, f/2, f, 2*f.
+1810 rem tables zl/zh (lo/hi byte of n mod 632; k325t: chip ram, else attic):
+1812 rem star k of plane p is at x = (za(p) - offset + k*zd(p)) mod 632 (the
+1813 rem glyph ends inside the row). offsets f/4, f/2, f, 2*f.
 1814 rem gotox colour flags $90: transparent, stars never cover each other.
-1820 zn=50*sg:zl=$8400000:zh=$8420000:dl=$5f000:zt=$5f100:sk=1:dk=1:c=0
-1824 for i=0 to 639:poke zl+i,mod(i,256):poke zh+i,int(i/256):next i
-1826 i=640
-1827 nn=i:sr=zl:de=zl+i:gosub 1880:sr=zh:de=zh+i:gosub 1880:i=i*2:if i<81920 then 1827
-1828 nn=16384:sr=zl:de=zl+i:gosub 1880:sr=zh:de=zh+i:gosub 1880
+1820 zn=50*sg:dl=$5f000:zt=$5f100:sk=1:dk=1:c=0:zb=zl-int(zl/65536)*65536:hb=zh-int(zh/65536)*65536
+1824 for i=0 to 631:poke zl+i,mod(i,256):poke zh+i,int(i/256):next i
+1826 i=632
+1827 nn=i:sr=zl:de=zl+i:gosub 1880:sr=zh:de=zh+i:gosub 1880:i=i*2:if i<72000 then 1827
 1830 c=3:sr=0:nn=50*l:de=s:gosub 1880:de=cr:gosub 1880:sr=$90:nn=4*zn:dk=4:gosub 1880:dk=16:nn=zn
 1832 for q=0 to 3:i=ga/64+6+q:sr=mod(i,256):de=s+4*q+2:gosub 1880:sr=int(i/256):de=s+4*q+3:gosub 1880:next q
 1834 restore 1850:for i=0 to 255:poke ga+384+i,0:next i
 1836 for q=0 to 3:read zd(q),za(q),j:for i=1 to j:read a,d:poke ga+64*(6+q)+a,d:next i,q
-1838 for j=0 to 7:q=int(j/2):a=dl+22*j:poke a,$80,$84,$81,0,$83,zd(q),$85,16
-1840 c=-4*(j<7):nn=zn:sr=(j and 1)*$20000:de=s+4*q+(j and 1):ja=a+8:gosub 1890:next j
+1838 for j=0 to 7:q=int(j/2):a=dl+22*j:poke a,$80,int(zl/2^20),$81,0,$83,zd(q),$85,16
+1840 c=-4*(j<7):nn=zn:sr=zl:if j and 1 then sr=zh
+1841 de=s+4*q+(j and 1):ja=a+8:gosub 1890:next j
 1842 j0=dl+13:j1=j0+22:j2=j1+22:j3=j2+22:j4=j3+22:j5=j4+22:j6=j5+22:j7=j6+22
-1846 q0=za(0)+640*2^21:q1=za(1)+640*2^21:q2=za(2)+640*2^21:q3=za(3)+640*2^21:return
+1846 q0=za(0)+632*2^21:q1=za(1)+632*2^21:q2=za(2)+632*2^21:q3=za(3)+632*2^21:return
 1848 rem per plane: source step, start, pixels (offset in the glyph, colour)
-1850 data 211,0,1, 27,170
-1852 data 157,301,1, 27,175
-1854 data 233,612,4, 27,179,28,179,35,179,36,179
-1856 data 179,845,10, 19,178,20,178,26,178,27,183,28,183,29,178,34,178,35,183,36,183,37,178
+1850 data 251,0,1, 27,170
+1852 data 145,301,1, 27,175
+1854 data 171,612,4, 27,179,28,179,35,179,36,179
+1856 data 147,845,10, 19,178,20,178,26,178,27,183,28,183,29,178,34,178,35,183,36,183,37,178
 1880 rem dma job c: nn bytes from sr (fill: value) to de, steps sk/dk
 1882 poke zt,$80,int(sr/2^20),$81,int(de/2^20),$83,sk,$85,dk:ja=zt+8:gosub 1890
 1884 poke $d702,int(zt/65536):poke $d704,0:poke $d701,mod(int(zt/256),256):poke $d705,mod(zt,256):return
