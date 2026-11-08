@@ -29,7 +29,8 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
 >160 PROCpalsave:CLS:PRINT "Bounce: ";N%;" balls":PROCpalette:PROCballs
 >170 REM start on a grid (no overlaps), random velocities -3..3 (not 0)
->180 Q=RND(-42):FOR I%=0 TO N%-1:P%(I%)=12+(I% MOD 16)*39+(20+(I% DIV 16)*90)*65536
+>175 GC%=16:GX%=39:GY%=90:IF N%>64 THEN GC%=24:GX%=26:GY%=36:REM (up to 264 balls)
+>180 Q=RND(-42):FOR I%=0 TO N%-1:P%(I%)=12+(I% MOD GC%)*GX%+(20+(I% DIV GC%)*GY%)*65536
 >190 REPEAT U%=RND(7)-4:UNTIL U%:REPEAT W%=RND(7)-4:UNTIL W%:V%(I%)=U%+W%*65536:NEXT
 >200 PROCscreen:IF K% THEN ON COLLISION PROChit ELSE PROCsprites
 >210 REM main loop: wait for the frame, let PROChit run (EI), then move every
