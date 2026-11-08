@@ -133,7 +133,19 @@ xeq1:   jsr nxt
         jsr nxt
         jmp (tmpw)
 .extras txa
-        cmp #TLINE
+        cmp #$80                ; characters: implied LET unless * = [
+        bcs .xt
+        cmp #$20
+        bcc .xt
+        cmp #'*'
+        beq .xt
+        cmp #'='
+        beq .xt
+        cmp #'['
+        beq .xt
+        dew tp
+        jmp let
+.xt     cmp #TLINE
         bne +
         jmp gs_line
 +       cmp #TEVERY
@@ -392,13 +404,18 @@ vdu:    jsr termq
 
 ; ---- LET ----
 !zone let
-let:    jsr arrlet              ; whole-array assignment?
+let:    lda [tp],z
+        cmp #'?'
+        lbeq .ind1
+        cmp #'!'
+        lbeq .ind4
+        jsr arrlet              ; whole-array assignment?
         jsr getvar
         bcc +
         jmp mistake
-+       beq +
++       beq .got
         jsr putvar
-+       lda farflag             ; far target: keep its address
+.got    lda farflag             ; far target: keep its address
         beq +
         ldx #3
 -       lda farad,x
@@ -509,6 +526,97 @@ let:    jsr arrlet              ; whole-array assignment?
         sta vptr
 .store  jsr storevar
         jmp xeq
+
+; ?addr=expr / !addr=expr: no FARBUF round trip; compound ops (?a+=1) go
+; on with the general path from the evaluated address
+.ind1   lda #0
+        bra .ind
+.ind4   lda #4
+.ind    pha                     ; vtype
+        inw tp
+        jsr itemi               ; address -> acc
+        jsr nxt
+        cmp #'='
+        beq .plain
+        pla
+        sta vtype
+        lda acc                 ; as GETVAR does for an indirection
+        sta vptr
+        lda acc+1
+        sta vptr+1
+        lda #0
+        sta farflag
+        lda acc+2
+        ora acc+3
+        beq +
+        ldx #3
+-       lda acc,x
+        sta farad,x
+        dex
+        bpl -
+        lda #$ff
+        sta farflag
+        lda #<FARBUF
+        sta vptr
+        lda #>FARBUF
+        sta vptr+1
+        jsr farld
++       jmp .got
+.plain  inw tp
+        ldq acc                 ; keep the address
+        pha
+        phx
+        phy
+        phz
+        ldz #0
+        jsr expr
+        lda etype
+        beq +
+        lda #6                  ; Type mismatch
+        jmp error
++       lda accx
+        beq +
+        jsr sfix
++       plz
+        ply
+        plx
+        pla
+        stq fptr
+        ldz #0
+        plx                     ; vtype: 0 = byte, 4 = word
+        lda fptr+2
+        ora fptr+3
+        bne .farst
+        ldy #0                  ; bank 0 (16-bit: I/O visible)
+        lda acc
+        sta (fptr),y
+        cpx #0
+        beq +
+        iny
+        lda acc+1
+        sta (fptr),y
+        iny
+        lda acc+2
+        sta (fptr),y
+        iny
+        lda acc+3
+        sta (fptr),y
++       jmp xeq
+.farst  lda acc                 ; 28-bit flat address
+        sta [fptr],z
+        cpx #0
+        beq +
+        inz
+        lda acc+1
+        sta [fptr],z
+        inz
+        lda acc+2
+        sta [fptr],z
+        inz
+        lda acc+3
+        sta [fptr],z
+        ldz #0
++       jmp xeq
 
 loadvar:
         lda vtype
