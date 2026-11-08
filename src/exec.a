@@ -2502,19 +2502,21 @@ callset2:
         dex
         bne -
         dec ptr2+1
-+       jsr popval              ; -> arg/argx or STRBUF/tmp6 ; tmp5 = type
++       pla                     ; type (PUSHVAL: acc..accx, then the type)
+        bmi .pstr
+        ldy #0                  ; a number: straight into the slot
+        sta (ptr2),y
+        ldy #5
+-       pla
+        sta (ptr2),y
+        dey
+        bne -
+        bra .p1
+.pstr   pha
+        jsr popval              ; -> STRBUF/tmp6 ; tmp5 = type
         ldy #0
         lda tmp5
         sta (ptr2),y
-        bmi .ps
-        ldx #0
--       lda arg,x
-        iny
-        sta (ptr2),y
-        inx
-        cpx #5
-        bne -
-        bra .p1
 .ps     lda tmp6
         iny
         sta (ptr2),y
@@ -2710,7 +2712,7 @@ callset2:
 ; fast binding: PFB = count, text after the formals, (vptr, vtype) each
 .fast   lda PFB
         cmp cnt
-        bne .badarg
+        lbne .badarg
 .fb     lda tmp2
         cmp cnt
         bcs .fd
@@ -2734,6 +2736,24 @@ callset2:
         ldy #0
         lda (ptr2),y
         sta etype
+        bne .fg
+        ldy #5                  ; integer value into an integer formal: copy
+        lda (ptr2),y
+        bne .fg
+        lda vtype
+        cmp #4
+        bne .fg
+        ldy #0
+        ldz #0
+-       iny
+        lda (ptr2),y
+        sta (vptr),z
+        inz
+        cpz #4
+        bne -
+        ldz #0
+        bra .fn
+.fg     ldy #0
         ldx #0
 -       iny
         lda (ptr2),y
@@ -2742,7 +2762,7 @@ callset2:
         cpx #5
         bne -
         jsr storen              ; (a string argument: Type mismatch)
-        inc tmp2
+.fn     inc tmp2
         bra .fb
 .fd     lda PFB+1
         sta tp

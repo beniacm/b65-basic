@@ -78,13 +78,21 @@ xcform: lda #5
         sta .src+1
         lda XCHI,x
         sta .src+2
-        ldx #0
+        ldx #0                  ; count, text (2), then 3 bytes a formal
+        jsr .src
+        sta xh
+        asl
+        adc xh
+        adc #3
+        sta xh
+-       jsr .src
+        cpx xh
+        bne -
+        clc
+        rts
 .src    lda $ffff,x
         sta PFB,x
         inx
-        cpx #21
-        bne .src
-        clc
         rts
 .no     sec
         rts
