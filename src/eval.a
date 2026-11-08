@@ -105,10 +105,26 @@ exprp:  pha                     ; minimum precedence
         pha
         bra .rec
 .pstr   jsr pushval
-.rec    lda tmp0                ; next minprec = prec+1 (left-assoc)
+.rec    lda tmp0
+        pha                     ; (prec again, for after the right operand)
+        jsr item                ; right operand
+        lda [tp],z              ; next operator binds tighter?
+        cmp #' '
+        bne +
+        jsr nxt
++       jsr getopa
+        beq .apply
+        sta tmp0
+        pla
+        pha
+        cmp tmp0
+        bcs .apply              ; no: apply this operator now (left-assoc)
+        pla                     ; yes: the right operand goes on at prec+1
         inc
-        jsr exprp
-        pla                     ; left operand -> arg/argx (or STRBUF/tmp6), tmp5 = type
+        jsr exprc
+        bra .pop
+.apply  pla
+.pop    pla                     ; left operand -> arg/argx (or STRBUF/tmp6), tmp5 = type
         sta tmp5
         bmi .ps
         pla
@@ -125,9 +141,12 @@ exprp:  pha                     ; minimum precedence
 .bin    pla                     ; prec
         plx                     ; op
         jsr binop
-        bra .loop
+        lbra .loop
 .done   pla
         rts
+; EXPRC: go on with acc as the first operand, A = minimum precedence
+exprc:  pha
+        lbra .loop
 
 ; push current value: numeric acc(4),accx,etype ; string bytes,len,etype
 !zone pushval
@@ -399,50 +418,52 @@ i_and:  ldq arg
 
 ; integer add/sub (arg OP acc); overflow promotes to floating point
 !zone iaddsub
-i_add:  clc
-        lda arg
-        adc acc
-        sta fp64
-        lda arg+1
-        adc acc+1
-        sta fp64+1
-        lda arg+2
-        adc acc+2
-        sta fp64+2
-        lda arg+3
-        adc acc+3
-        sta fp64+3
-        lda arg+3
+i_add:  lda arg+3
         eor acc+3
-        bmi .ok                 ; different signs never overflow
-        lda arg+3
-        eor fp64+3
-        bpl .ok
-        ldx #OP_ADD
-        jmp fpbinop
-.ok     ldq fp64
+        bmi .ads                ; different signs never overflow
+        ldq arg
+        clc
+        adcq acc
+        pha
+        tza                     ; result sign must equal the operands'
+        eor arg+3
+        bmi .ovfa
+        pla
         stq acc
         ldz #0
         rts
-i_sub:  sec
-        lda arg
-        sbc acc
-        sta fp64
-        lda arg+1
-        sbc acc+1
-        sta fp64+1
-        lda arg+2
-        sbc acc+2
-        sta fp64+2
-        lda arg+3
-        sbc acc+3
-        sta fp64+3
-        lda arg+3
+.ads    ldq arg
+        clc
+        adcq acc
+        stq acc
+        ldz #0
+        rts
+.ovfa   pla
+        ldz #0
+        ldx #OP_ADD
+        jmp fpbinop
+i_sub:  lda arg+3
         eor acc+3
-        bpl .ok                 ; same signs never overflow
-        lda arg+3
-        eor fp64+3
-        bpl .ok
+        bpl .sbs                ; same signs never overflow
+        ldq arg
+        sec
+        sbcq acc
+        pha
+        tza
+        eor arg+3
+        bmi .ovfs
+        pla
+        stq acc
+        ldz #0
+        rts
+.sbs    ldq arg
+        sec
+        sbcq acc
+        stq acc
+        ldz #0
+        rts
+.ovfs   pla
+        ldz #0
         ldx #OP_SUB
         jmp fpbinop
 
@@ -848,9 +869,22 @@ item:   lda [tp],z              ; (NXT inline)
         cmp #' '
         bne +
         jsr nxt
-+       cmp #TNUM
++       cmp #'@'                ; letters (variables) and tokens first
+        bcc .low
+        cmp #$80
+        lbcs .tok
+        cmp #'^'
+        lbne .static
+        inw tp
+        jmp f_addr
+.low    cmp #TNUM
         bne +
         jmp tnumget
++       cmp #'('
+        bne +
+        inw tp
+        jsr expr
+        jmp braket
 +       cmp #'0'
         bcc +
         cmp #'9'+1
@@ -862,11 +896,6 @@ item:   lda [tp],z              ; (NXT inline)
 +       cmp #'"'
         bne +
         jmp strlit
-+       cmp #'('
-        bne +
-        inw tp
-        jsr expr
-        jmp braket
 +       cmp #'-'
         bne +
         inw tp
@@ -898,21 +927,14 @@ item:   lda [tp],z              ; (NXT inline)
 +       cmp #'&'
         bne +
         jmp hexnum
-+       cmp #'^'
-        bne +
-        inw tp
-        jmp f_addr
 +       cmp #'%'
         bne +
         jmp binnum
-+       cmp #$80
-        lbcs .tok
-        cmp #$20
++       cmp #$20
         lbcc .tok
+        bra .var                ; ? ! $ | indirection
         ; static integer @%, A%..Z% (not followed by '(', '?', '!'): direct
-        cmp #'@'
-        bcc .var
-        cmp #'Z'+1
+.static cmp #'Z'+1
         bcs .var
         tax
         ldz #1
