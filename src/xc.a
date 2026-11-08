@@ -66,6 +66,7 @@ ovl_xc_img:
         jmp xcdefput            ; $E00F: remember it
         jmp xcform              ; $E012: DEF (defkey) -> its numeric formals in PFB
         jmp xcformput           ; $E015: remember PFB for defkey
+        jmp xcargs              ; $E018: a numeric argument list into PARBUF
 
 ; XCFORM: kind 5, keyed by the DEF text after the name: a block in the
 ; code cache: count, text after the formals, (vptr, vtype) per formal.
@@ -135,6 +136,138 @@ xcformput:
         inc XNEXT+1
 +       rts
 
+
+; XCARGS: tp -> '(' of a PROC/FN argument list (program text, no RETURN
+; formals). If the list is known to be plain numeric expressions (kind 6:
+; no strings, no FN, no whole arrays, no token with side effects; at most
+; 6), each is evaluated with EXPR straight into its PARBUF slot (number:
+; type 0, acc, accx): carry clear, cnt = count, tp after ')'. Otherwise
+; carry set, tp unchanged (the interpreter's loop).
+!zone xcargs
+xcargs: lda #6
+        jsr xfindt
+        bcc .hit
+        stx xslot               ; first time: scan the list
+        jsr .scan
+        ldx xslot
+        sta XCLO,x
+        lda #0
+        rol                     ; carry: never (0 = never, 1 = fine)
+        eor #1
+        sta XCHI,x
+        lda tp
+        sta XKLO,x
+        lda tp+1
+        sta XKHI,x
+        lda #6
+        sta XMOD,x
+.hit    lda XCHI,x
+        bne +
+        sec
+        rts
++       lda XCLO,x
+        sta xacnt
+        lda #0
+        sta xai
+.ar     inw tp                  ; past '(' or ','
+        jsr expr                ; (may use cnt and the XFIND workspace)
+        lda xai
+        asl
+        clc
+        adc #>PARBUF
+        sta ptr2+1
+        lda #0
+        sta ptr2
+        ldy #0
+        lda etype               ; (a number: the scan made sure)
+        sta (ptr2),y
+-       lda acc,y
+        iny
+        sta (ptr2),y
+        cpy #5
+        bne -
+        inc xai
+        lda xai
+        cmp xacnt
+        bne .ar
+        sta cnt
+        jsr nxt                 ; ')'
+        inw tp
+        clc
+        rts
+; .SCAN: A = number of arguments, carry clear if the list is plain
+.scan   ldz #1
+        ldx #1                  ; depth
+        ldy #1                  ; count
+.s      lda [tp],z
+        inz
+        beq .bad                ; (longer than 255 bytes)
+        cmp #TNUM
+        bne +
+        lda [tp],z              ; skip the encoded constant
+        and #7
+        clc
+        adc #3
+        sta xh
+        tza
+        clc
+        adc xh
+        taz
+        bcs .bad
+        bra .s
++       cmp #'('
+        bne +
+        lda [tp],z
+        cmp #')'                ; name(): a whole array
+        beq .bad
+        inx
+        bra .s
++       cmp #')'
+        bne +
+        dex
+        bne .s
+        tya
+        ldz #0
+        clc
+        rts
++       cmp #','
+        bne +
+        cpx #1
+        bne .s
+        iny
+        cpy #7
+        bcs .bad
+        bra .s
++       cmp #'"'
+        beq .bad
+        cmp #'$'
+        beq .bad
+        cmp #CR
+        beq .bad
+        cmp #' '
+        bcc .bad
+        cmp #$7f
+        bcc .s                  ; ordinary characters
+        cmp #TOR+1              ; AND DIV EOR MOD OR
+        bcc .s
+        cmp #TABS
+        beq .s
+        cmp #TINT
+        beq .s
+        cmp #TNOT
+        beq .s
+        cmp #TPI
+        beq .s
+        cmp #TSGN
+        beq .s
+        cmp #TTRUE
+        beq .s
+        cmp #TFALSE
+        beq .s
+.bad    ldz #0
+        lda #0
+        sec
+        rts
 ; XCDEF: tp -> the name after TPROC/TFN. Carry clear: ptr1 = DEF text after
 ; the name, tp after the name, retmask (slot kind $40 | retmask).
 !zone xcdef
@@ -1453,6 +1586,8 @@ xkey    !word 0
 xkind   !byte 0
 xrot    !byte 0
 xh      !byte 0
+xacnt   !byte 0
+xai     !byte 0
 xw      !byte 0
 xsx     !byte 0
 xsy     !byte 0

@@ -1998,7 +1998,14 @@ callset2:
         lda [tp],z
         cmp #'('
         lbne .noargs
-        inw tp
+        lda retmask             ; plain numeric arguments: straight into
+        bne .sl                 ; PARBUF by overlay 4 (XCARGS)
+        lda tp+2
+        beq .sl
+        ldx #$18
+        jsr xc4
+        lbcc .p2
+.sl     inw tp
 .a1     lda cnt
         cmp #6                  ; at most 6 parameters (PARBUF slots 0-5)
         bcc +
