@@ -1,0 +1,12 @@
+10 REM 32-bit reads: [zp],Z from attic RAM, chip RAM bank 5, bank 0 (8 per loop)
+20 DIM C% 200,R%(3):FOR K%=0 TO 3:RESTORE 200:FOR J%=0 TO K%:READ A%:NEXT
+30 P%=C%:[OPT 0:LDA #A% AND 255:STA &70:LDA #(A% DIV 256) AND 255:STA &71:LDA #(A% DIV 65536) AND 255:STA &72:LDA #A% DIV 16777216:STA &73
+40 LDY #0:LDZ #0:.o LDX #0:.i
+50 ]:IF K%<3 THEN [OPT 0:LDA [&70],Z:LDA [&70],Z:LDA [&70],Z:LDA [&70],Z:LDA [&70],Z:LDA [&70],Z:LDA [&70],Z:LDA [&70],Z:]
+60 IF K%=3 THEN [OPT 0:NOP:NOP:NOP:NOP:NOP:NOP:NOP:NOP:]
+70 [OPT 0:DEX:BNE i:DEY:BNE o:RTS:]
+80 T%=TIME:FOR J%=1 TO 4:CALL C%:NEXT:R%(K%)=TIME-T%:NEXT
+90 PRINT "4 x 65536 x 8 reads (cs): attic ";R%(0);", chip bank 5 ";R%(1);", bank 0 ";R%(2);", NOP ";R%(3)
+100 PRINT "cycles per read (x10) at 40.5 MHz: attic ";(R%(0)-R%(3))*4050000 DIV 2097152;", chip ";(R%(1)-R%(3))*4050000 DIV 2097152;", bank 0 ";(R%(2)-R%(3))*4050000 DIV 2097152
+200 DATA &8600000,&50000,&C000,&C000
+RUN
