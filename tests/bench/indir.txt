@@ -1,0 +1,8 @@
+10 REM indirection reads and COLLIDE: us per statement (Xemu)
+20 DIM B% 15:A%=B%:F%=&8C000:T%=TIME:FOR Z%=1 TO 5000:NEXT:E%=TIME-T%
+30 T%=TIME:FOR Z%=1 TO 5000:X%=?A%:NEXT:PRINT "X%=?A%       ";(TIME-T%-E%)*2
+40 T%=TIME:FOR Z%=1 TO 5000:X%=!A%:NEXT:PRINT "X%=!A%       ";(TIME-T%-E%)*2
+50 T%=TIME:FOR Z%=1 TO 5000:X%=A%?3:NEXT:PRINT "X%=A%?3      ";(TIME-T%-E%)*2
+60 T%=TIME:FOR Z%=1 TO 5000:X%=?F%:NEXT:PRINT "X%=?F% (far) ";(TIME-T%-E%)*2
+70 T%=TIME:FOR Z%=1 TO 5000:X%=COLLIDE(3):NEXT:PRINT "COLLIDE(3)   ";(TIME-T%-E%)*2
+RUN

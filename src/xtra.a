@@ -681,6 +681,7 @@ xcomp:  lda tp
         lda #0
         sta xdep
         sta xcnst
+        sta xdyop
         tsx
         stx xsps
         tsy
@@ -1229,9 +1230,34 @@ citem:  lda [tp],z
         lda #<h_neg
         jmp xemit
 .n3     cmp #'+'
-        bne .n4
+        bne .n5
         inw tp
         jmp citem
+.n5     cmp #TCOLLIDE           ; COLLIDE(n)
+        bne .n6
+        inw tp
+        lda #1
+        jsr cexp
+        lda [tp],z
+        cmp #' '
+        bne +
+        jsr nxt
++       cmp #')'
+        lbne xfail
+        inw tp
+        lda #<h_coll
+        jmp xemit
+.n6     ldx #<h_ld1             ; ?item / !item (address: an integer)
+        cmp #'?'
+        beq +
+        ldx #<h_ld4
+        cmp #'!'
+        bne .n4
++       phx
+        inw tp
+        jsr citem
+        pla
+        jmp xemit
 .n4     cmp #'@'                ; static integer @%, A%..Z%
         lbcc xfail
         cmp #'Z'+1
@@ -1246,10 +1272,12 @@ citem:  lda [tp],z
         cmp #'('
         beq .dynz
         cmp #'?'
-        beq .dynz
+        beq +
         cmp #'!'
-        beq .dynz
-        ldz #0
+        bne ++
++       sta xdyop
+++
++       ldz #0
         txa
         sec
         sbc #'@'
@@ -1301,10 +1329,11 @@ citem:  lda [tp],z
 +
         lda [tp],z
         cmp #'?'
-        lbeq xfail
+        beq +
         cmp #'!'
-        lbeq xfail
-        jsr locate
+        bne ++
++       sta xdyop               ; name?n / name!n: after the load
+++      jsr locate
         lbcs xfail
         lbne xfail2             ; not created yet
         lda vptr
@@ -1330,7 +1359,22 @@ citem:  lda [tp],z
         pla
         jsr xemit
         lda xcsy
+        jsr xemit
+        lda xdyop               ; dyadic indirection: base?offset (bank 0,
+        lbeq .r                  ; 16-bit sum, as GETVPOST)
+        ldx #<h_dld1
+        cmp #'?'
+        beq +
+        ldx #<h_dld4
++       phx
+        lda #0
+        sta xdyop
+        inw tp
+        jsr citem               ; the offset
+        pla
+        dec xdep
         jmp xemit
+.rd     rts
 
 ovl_xtra_end:
 }

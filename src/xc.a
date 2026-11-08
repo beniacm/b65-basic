@@ -48,6 +48,7 @@ xcsy    = $1bc4
 xccop   = $1bc5
 xcae    = $1bc6         ; 2
 xcnst   = $1bc8         ; $FF: CARR may fold a constant index (reads)
+xdyop   = $1bc9         ; '?' / '!' after a variable item (dyadic), else 0
 XCEND   = $fff0
 ; bank-4 addresses for the resident XCFLUSH
 XKHI_F  = XKHI - $e000 + $48000
@@ -621,9 +622,119 @@ h_st4:  jmp x_st4
 h_svi:  jmp x_svi
 h_svf:  jmp x_svf
 h_neg:  jmp x_neg
+h_ld1:  jmp x_ld1               ; ?addr / !addr (acc)
+h_ld4:  jmp x_ld4
+h_dld1: jmp x_dld1              ; base?offset / base!offset (bank 0)
+h_dld4: jmp x_dld4
+h_coll: jmp x_coll              ; COLLIDE(acc)
 xhend:
 !if xhend - xhand > 256 { !error "xc handlers exceed a page" }
 
+!zone xld
+; indirection reads (as GETVAR: a 16-bit address is bank 0 with I/O
+; visible, a larger one is a 28-bit flat address); a float address: bail
+x_dld1: lda #1                  ; base?offset: 16-bit sum, bank 0
+        bra +
+x_dld4: lda #4
++       sta xcop
+        lda accx
+        ora XS4,x
+        bne .bl
+        lda acc
+        clc
+        adc XS0,x
+        sta acc
+        lda acc+1
+        adc XS1,x
+        sta acc+1
+        dex
+        bra .nr
+x_ld1:  lda #1
+        bra +
+x_ld4:  lda #4
++       sta xcop
+        lda accx
+        bne .bl
+        lda acc+2
+        ora acc+3
+        lbne .far
+.nr     lda acc
+        sta .n1+1
+        lda acc+1
+        sta .n1+2
+        phx
+        ldx xcop
+        dex
+-
+.n1     lda $ffff,x
+        sta acc,x
+        dex
+        bpl -
+        plx
+        lda #0
+        sta accx
+        ldz xcop
+        cpz #4
+        beq .z
+        sta acc+1
+        sta acc+2
+        sta acc+3
+.z      ldz #0
+        jmp xnext
+.bl     jmp xbail
+.far    stx xsx
+        sty xsy
+        ldq acc
+        stq fptr
+        ldx xsx
+        ldy xsy
+        ldz #0
+        lda [fptr],z
+        sta acc
+        lda #0
+        sta accx
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        lda xcop
+        cmp #1
+        beq .z
+        inz
+        lda [fptr],z
+        sta acc+1
+        inz
+        lda [fptr],z
+        sta acc+2
+        inz
+        lda [fptr],z
+        sta acc+3
+        bra .z
+; COLLIDE(n) as F_COLLIDE: partner of object n (low byte), -1 none
+x_coll: lda accx
+        bne .bl
+        lda #$ff
+        bit hw_k325t
+        bpl +
+        jsr colptr
+        lda #$c1
+        sta fptr
+        lda acc
+        sta [fptr],z
+        lda #$c2
+        sta fptr
+        lda [fptr],z
++       sta acc
+        ldz #0
+        stz acc+1
+        stz acc+2
+        stz acc+3
+        cmp #$ff
+        bne .z
+        sta acc+1
+        sta acc+2
+        sta acc+3
+        bra .z
+!zone xk40
 x_k40:  jsr xspill                  ; 5 bytes (integer: exponent 0)
 y_k40:
         jsr xrd
@@ -916,7 +1027,7 @@ xael2:  lda xix                 ; index < size (Y = 4)
         iny
         lda xix+1
         sbc (fptr),y
-        bcs .bl
+        lbcs .bl
         lda #0                  ; offset = index * 4 (+ index: * 5)
         sta xae+2
         lda xix+1
