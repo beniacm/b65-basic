@@ -5,6 +5,7 @@ tools/packovl.py) and the BASIC 65 library OBJ65 (src/obj65.a; its
 integrator src/objfar.a is generated from src/obj.a first)."""
 import os, re, subprocess, sys
 FLAGS = os.environ.get('ACMEFLAGS', '').split()
+os.makedirs('build', exist_ok=True)       # (a fresh checkout has none)
 
 def fixloop(srcfile):
     """assemble until no branch is out of range; returns ACME's result"""

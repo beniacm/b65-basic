@@ -19,4 +19,6 @@ for t in tests/smoke/*.txt; do
     fi
     rm -f /tmp/b65_smoke_diff.$$
 done
+# the OBJFAR build (OBJ65's integrator in B65) from a clean checkout of HEAD
+[ "$1" = "--update" ] || sh tests/farcheck.sh || fail=1
 exit $fail
