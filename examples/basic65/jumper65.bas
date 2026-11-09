@@ -14,7 +14,7 @@
 130 k=0:if peek($d629)=98 then x=peek($ffd71f0):poke $ffd71f0,x or 1:k=(peek($ffd71f0) and 1)=1
 135 lv=0:if k then lv=peek($ffd71fd)
 140 if k and lv<3 then print "needs feature level 3 (the step-6 core)":end
-145 ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:tb=$8c000:l=80
+145 ga=$60000:oa=$89000:oc=$7800:s=$80000:cr=$ff84000:tb=$8c000:l=2
 150 if k=0 then ga=$54000:oa=$56000:tb=$58000:sl=1:rem (no k325t: logic only)
 155 if bn then sl=1:rem (tests: the same on every machine)
 160 trap 2900:bload "obj65":bload "obj65x",p($52000):bank 5:sys $2000:bank 128
@@ -86,10 +86,10 @@
 1230 poke $d054,peek($d054) or 4:return
 1300 data 7,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,0,1,1,0,0,1,1,0,0,0,1,1,1,1,0,0,0,1,1,0,0,1,1,0
 1310 data 5,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-1400 rem ---- screen: v400, 50 rows of $ffff (xctl bit 3), chr16, fcm above 255
+1400 rem ---- screen: v400, 50 rows of one transparent gotox (the objects follow it), chr16, fcm above 255
 1410 vj=peek($d05d):vh=peek($d020):vi=peek($d021):v1=peek($d031):v5=peek($d05b):v7=peek($d07b):v0=peek($d054):v8=peek($d058):v9=peek($d059):va=peek($d05e)
 1415 vb=peek($d060):vc=peek($d061):vd=peek($d062):ve=peek($d063):vf=peek($d064):vg=peek($d065)
-1420 for i=0 to 49:wpoke s+i*l,$ffff:next i
+1420 for i=0 to 49:wpoke s+i*l,0:wpoke cr+i*l,$90:next i:rem gotox 0, transparent ($90)
 1425 poke $d05d,peek($d05d) and 127:poke $d031,peek($d031) or 8:poke $d07b,49:poke $d05b,0:poke $d054,peek($d054) or 5
 1430 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 1435 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000

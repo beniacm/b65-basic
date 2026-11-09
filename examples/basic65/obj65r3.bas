@@ -7,7 +7,7 @@
 100 k=0:if peek($d629)=98 then x=peek($ffd71f0):poke $ffd71f0,x or 1:k=(peek($ffd71f0) and 1)=1
 110 if k then lv=peek($ffd71fd)
 120 if k=0 or lv<3 then print "needs the k325t core, feature level 3":end
-130 s=$80000:cr=$ff84000:ga=$60000:oa=$89000:oc=$7800:tb=$8c000:l=80
+130 s=$80000:cr=$ff84000:ga=$60000:oa=$89000:oc=$7800:tb=$8c000:l=2
 140 gosub 900
 200 rem the glyph: a filled circle in colour 7 (index 0 is transparent)
 210 for y=0 to 7:for x=0 to 7:v=0:if (2*x-7)*(2*x-7)+(2*y-7)*(2*y-7)<=60 then v=7
@@ -27,10 +27,10 @@
 360 vsync 251:next f
 370 gosub 950:print "recipe 3 done: 200 frames,";n;"objects"
 380 end
-900 rem ---- screen: save, then v400, 50 rows, chr16, fcm above 255, rows
+900 rem ---- screen: save, then v400, 50 rows of one gotox, chr16, fcm above 255
 910 vj=peek($d05d):vh=peek($d020):vi=peek($d021):v1=peek($d031):v5=peek($d05b):v7=peek($d07b):v0=peek($d054):v8=peek($d058):v9=peek($d059):va=peek($d05e)
 915 vb=peek($d060):vc=peek($d061):vd=peek($d062):ve=peek($d063):vf=peek($d064):vg=peek($d065)
-920 for i=0 to 49:wpoke s+i*l,$ffff:next i
+920 for i=0 to 49:wpoke s+i*l,0:wpoke cr+i*l,$90:next i:rem gotox 0, transparent ($90)
 925 poke $d05d,peek($d05d) and 127:poke $d031,peek($d031) or 8:poke $d07b,49:poke $d05b,0:poke $d054,peek($d054) or 5
 930 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 935 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000:return

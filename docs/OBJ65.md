@@ -57,19 +57,21 @@ Three things in chip RAM and a few registers:
   (list mode), 6 (the object table), 7 (fast tokens; always set it with
   4). Clearing them (`AND $27`) switches the objects off.
 
-The screen is CHR16 (16-bit tokens, `$D054` bit 0), V400 with 50 rows, a
-row of 40 tokens at `S + 80*row` (`$D058` = 80); the objects are appended
-where a row ends (its last token, or an early `$FFFF`).
+The screen is CHR16 (16-bit tokens, `$D054` bit 0), V400 with 50 rows.
+The recipes give each row a single token, a transparent GOTOX to x 0
+(screen word 0, colour bytes `$90,$00`), with a row length of one token
+(`$D058` = 2, `$D05E` = 1): with XCTL bit 6 the objects are appended
+after the row's tokens.
 
-**Give every row at least one token.** On the board a row that starts
-with `$FFFF` shows a static strip of old glyphs in its left 64 pixels,
-although XCTL bit 3 should clear unpainted pixels (under investigation on
-the VIC-IV side). Until that is settled, start each row with an opaque
-base glyph or a GOTOX token before the `$FFFF` (B65's demos fill their
-rows with tokens: jumper, swarm and swarm2 with blank glyphs, bounce's
-star rows with GOTOX). OBJ65R2-R4 and jumper65 still start their rows
-with `$FFFF` and show the strip; they will be changed once the cause is
-known. Moving
+**A row must not start with `$FFFF`.** A row whose first token is the end
+marker is a short row of 2 bytes (the RRB rule), so the next row starts
+2 bytes after that `$FFFF` and paints whatever bytes it finds there (on
+the board: a strip of glyph 0 in random colours). The end marker goes at
+the row's end (byte LINESTEP - 2), or the row is a single GOTOX as here.
+B65's demos fill their rows with tokens (jumper, swarm and swarm2 blank
+glyphs, bounce GOTOX tokens).
+
+Moving
 the object is one `WPOKE TB,X,Y` a frame (`VSYNC 251` waits for the
 bottom of the picture).
 
