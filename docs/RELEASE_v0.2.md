@@ -1,10 +1,9 @@
-# B65 BASIC v0.2-dev (release notes, draft)
+# B65 BASIC v0.2 (release notes)
 
-Draft: to be published together with the K325T step-6 core (list mode v3:
-32-byte object table entries). Before publishing (the version string is
-already v0.2-dev): rebuild `b65.prg` / `b65.d81` (`make dist`),
-run the smoke and card tests and SELFTEST on the board with the step-6
-bitstream, and fill in the board numbers marked TBD.
+B65 BASIC v0.2 goes together with the K325T step-6 core (mega65-core
+`0209a1c57`, harness `263bdda`: list mode v3, 32-byte object table
+entries, feature level 3). Verified on the K325T rig and in Xemu (see
+"Verified" below); a standard MEGA65 has not been tested yet.
 
 ## The flag day: 32-byte object entries
 
@@ -26,13 +25,21 @@ the step-6 bitstream go together:
 
 ## New since v0.1-dev.1
 
+On the K325T rig with the step-6 core: jumper 600 frames in 12.00 s,
+bounce (64 balls) 1500 frames in 30.00 s with 850 colliding pairs and
+parallax 600 frames in 12.00 s (the full 50 frames per second); swarm2
+(1000 bullets moved by the frame interrupt, 1001 objects in the
+hardware) 1500 frames in 30.50 s (49 frames per second) with no late
+pixels.
+
 ### Speed (5-6 times BASIC 65)
 
 v0.1-dev.1 ran at about BASIC 65's speed. Per statement on the board
-(40.5 MHz, loop removed), BASIC 65 / v0.1-dev.1 / v0.2-dev: POKE 135 /
-140 / 24 us, integer add and IF 142 / 160 / about 24 us per statement,
-a 4-byte `!` write 162 / 180 / 40 us, a MOD/AND expression 328 / 360 /
-62 us (board figures of 2026-11-08; the later changes TBD). How:
+(40.5 MHz, loop removed), BASIC 65 / v0.1-dev.1 / v0.2: POKE 135 / 140 /
+24 us, integer add and IF 142 / 160 / about 24 us per statement, a
+4-byte `!` write 162 / 180 / 40 us, a MOD/AND expression 328 / 360 / 62
+us (board figures of 2026-11-08; the PROC/FN and MOD/DIV work after them
+was measured in Xemu only). How:
 
 - Integer constants pre-encoded when a line is entered, integers without
   the floating point package, an integer FOR...NEXT path, DIV/MOD and `*`
@@ -79,7 +86,11 @@ its frame interrupt, so BASIC only starts and steers them:
 
 `ON COLLISION PROCname` / `OFF` and `COLLIDE(n)` (first partner of object
 n): the hardware compares the boxes of the objects once per frame, B65
-runs the PROC between statements.
+runs the PROC between statements. On feature level 3 B65 uses the v3
+register page (`$FFD7280`): COLLIDE(n) works for objects 0..1023 and the
+collided bits of all objects are at `$FFD7200`. The event usually comes
+a frame after the pass (USER.md: confirm a fast object's contact with
+HITPIX over the way it came, as jumper does).
 
 ### Diagnostics
 
@@ -100,6 +111,10 @@ runs the PROC between statements.
 - `WAIT` waits for the VIC-IV frame counter (`$D7FA`): no lost frames
   when the frame interrupt runs long.
 - PROC/FN names with a type suffix (`DEF FNs$(T$)`) fixed.
+- `*DELETE` uses B65's own FAT code: both FAT copies and the FSInfo free
+  count are updated and the long name entries of the file removed (the
+  hypervisor's delete updated only the first FAT; fsck reported "FATs
+  differ" and a wrong free count after SELFTEST's file test).
 - The PRG is packed (LZH): the boot code unpacks the interpreter into
   bank 0 and the overlays into bank 4 at start-up: 39 frames, 0.78 s at
   50 Hz, measured on the K325T board (`?&201B` after boot).
@@ -111,7 +126,7 @@ runs the PROC between statements.
 
 ## Compatibility
 
-- Tokenised programs SAVEd by v0.2-dev do not run in v0.1-dev.1
+- Tokenised programs SAVEd by v0.2 do not run in v0.1-dev.1
   (constants are pre-encoded); keep text copies to move programs between
   versions.
 - Variables, strings and the stack now share about 11 KB of bank 0
@@ -124,6 +139,16 @@ runs the PROC between statements.
 
 ## Verified
 
-TBD at release: smoke 32/32 in Xemu, the check scripts, card tests, and
-on the K325T rig with the step-6 bitstream: SELFTEST, bounce, swarm,
-swarm2, jumper, parallax. A standard MEGA65 has not been tested yet.
+- K325T rig, step-6 core (feature level 3): smoke 33/33, `tests/board_v3.txt`
+  (objects, motion, events, limits, HITPIX, the collision engine incl.
+  objects above 255) 20/20, SELFTEST 14/14 PASS, start-up 39 frames
+  (0.78 s), the demo timings above; the card stays consistent after the
+  run (both FAT copies the same).
+- Xemu: smoke 33/33, all check scripts, `tests/objcheck.py` and
+  `tests/hitcheck.py` (the motion and HITPIX against their Python
+  models), the card tests (`tests/cardtest.py`: 17 PASS, fsck clean).
+- A standard MEGA65 has not been tested yet. B65 is written to run on
+  one (the object statements and the motion work there, without drawing
+  the objects), but nobody has tried. If you have one, please type
+  `*INFO`, run SELFTEST and paste both into an issue at
+  https://github.com/beniacm/b65-basic/issues.
