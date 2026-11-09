@@ -169,11 +169,18 @@ and a box narrower than the glyph (for an 8-pixel ball width 6) helps.
 
 `ON COLLISION PROCname` enables the engine's interrupt; when a pass finds a
 collision, B65's interrupt handler acknowledges it at once (writes `3` to
-`&FFD71C0`: clear, interrupt stays on) and the PROC runs between statements
-like an EVERY/AFTER handler (one at a time, held back by `DI`). It reads
-the results of the last completed pass: `COLLIDE(n)` is the first
+the status register: clear, interrupt stays on) and the PROC runs between
+statements like an EVERY/AFTER handler (one at a time, held back by `DI`).
+It reads the results of the last completed pass: `COLLIDE(n)` is the first
 (lowest-numbered) partner of object n or -1 (also -1 without the engine),
-`?(&FFD71A0+n DIV 8) AND 1<<(n AND 7)` tells whether object n collided.
+`?(&FFD7200+n DIV 8) AND 1<<(n AND 7)` tells whether object n collided
+and `?&FFD7286+256*?&FFD7287` is the number of collided objects. From
+feature level 3 (the step-6 core) B65 uses the v3 page `&FFD7280-&FFD72FF`
+(status/acknowledge `&FFD7280`, 10-bit index `&FFD7282-3`, first partner
+`&FFD7284-5` with `&3FF` = none, a bit per object 0..1023 at `&FFD7200`):
+COLLIDE(n) works for n up to 1023. Earlier levels: `&FFD71C0` (status),
+`&FFD71C1`/`C2` (index, partner, objects 0..255), bits at `&FFD71A0`,
+count at `&FFD71C3`.
 `ON COLLISION OFF` (also RUN and the prompt) switches it off. Pairs: call
 the handler work once per pair (the lower object number). Without the
 K325T core `ON COLLISION` is accepted but never fires.

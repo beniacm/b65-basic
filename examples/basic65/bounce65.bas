@@ -6,9 +6,9 @@
 30 rem k325t core ($d629=$62): the balls are rrb list mode v2 objects (shaded
 40 rem full-colour glyphs from an own 256-colour palette, 640x400) and the
 50 rem core's collision engine compares all of them once per frame; this
-60 rem program polls it: status $ffd71c0 bit 0, table $ffd71a0 (a bit per
-70 rem object), partner of object i: poke $ffd71c1,i : peek($ffd71c2), then
-80 rem poke $ffd71c0,1 clears it. the engine tests boxes, inclusive edges
+60 rem program polls it: status $ffd7280 bit 0, table $ffd7200 (a bit per
+70 rem object), partner of object i: index $ffd7282-3, partner $ffd7284-5 ($3ff none), then
+80 rem poke $ffd7280,1 clears it. the engine tests boxes, inclusive edges
 85 rem (here 6x8: table +14 = 6 for an 8-pixel ball), so it fires a little
 86 rem early at the diagonals: every pair is confirmed with the centre
 87 rem distance (dx*dx+dy*dy <= 64, two radius-4 balls) before the two
@@ -45,7 +45,7 @@
 250 vsync 251:x=mod(q0-int(f/4),632):wpoke j0,x+zb:wpoke j1,x+hb:x=mod(q1-int(f/2),632):wpoke j2,x+zb:wpoke j3,x+hb
 252 x=mod(q2-f,632):wpoke j4,x+zb:wpoke j5,x+hb:x=mod(q3-2*f,632):wpoke j6,x+zb:wpoke j7,x+hb
 254 poke $d702,int(dl/65536):poke $d704,0:poke $d701,mod(int(dl/256),256):poke $d705,mod(dl,256):if sw then gosub 1140
-255 if k then if peek($ffd71c0) and 1 then gosub 1010:poke $ffd71c0,1
+255 if k then if peek($ffd7280) and 1 then gosub 1010:poke $ffd7280,1
 260 if g then if (f and 3)=0 then for i=0 to n-1:dy(i)=dy(i)+1:next i
 280 for i=0 to n-1:x=x(i)+dx(i):y=y(i)+dy(i):if x<0 or x>632 or y<0 or y>392 then gosub 1135
 300 x(i)=x:y(i)=y:if k then wpoke tb+32*i,x and 1023,y and 1023
@@ -55,10 +55,10 @@
 340 t=ti-t:if rs then gosub 1700:print bn;"frames in";t;"seconds,";np;"pairs"
 350 end
 1000 rem ---- pairs ----
-1010 for b=0 to int((n-1)/8):m=peek($ffd71a0+b):if m then gosub 1030
+1010 for b=0 to int((n-1)/8):m=peek($ffd7200+b):if m then gosub 1030
 1020 next b:return
 1030 for j=0 to 7:if (m and 2^j)=0 then 1045
-1035 i=b*8+j:poke $ffd71c1,i:q=peek($ffd71c2):if q<>255 and q>i then a=i:c=q:gosub 1060
+1035 i=b*8+j:poke $ffd7282,i:poke $ffd7283,0:q=peek($ffd7284)+256*(peek($ffd7285) and 3):if q<>1023 and q>i then a=i:c=q:gosub 1060
 1045 next j:return
 1060 u=x(c)-x(a):v=y(c)-y(a):if u*u+v*v>64 then return
 1070 np=np+1:u=dx(a):dx(a)=dx(c):dx(c)=u:u=dy(a):dy(a)=dy(c):dy(c)=u
@@ -146,7 +146,7 @@
 1660 poke $d010,0:for i=0 to 7:xx=24+int(x(i)/2):poke $d000+2*i,xx and 255,50+int(y(i)/2)
 1670 if xx>255 then poke $d010,peek($d010) or 2^i
 1680 next i:return
-1700 poke $d015,0:if k then poke $ffd71c0,1:poke $ffd71f0,peek($ffd71f0) and $26
+1700 poke $d015,0:if k then poke $ffd7280,1:poke $ffd71f0,peek($ffd71f0) and $26
 1710 poke $d031,v1:poke $d05b,v5:poke $d07b,v7:poke $d054,v0:poke $d058,v8,v9:poke $d05e,va
 1720 poke $d060,vb,vc,vd,ve,vf,vg:poke $d021,vh:gosub 2860:scnclr:return
 2700 rem own palette: ramps from 16 on (0-15 stay the standard colours)

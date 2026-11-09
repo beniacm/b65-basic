@@ -16,7 +16,7 @@ objbase !byte 0, 0, 0, 0        ; table base (32-bit)
 objcnt  !word 0                 ; objects in use (highest number + 1)
 objauto !byte 0                 ; $80: the frame IRQ runs the integrator
 objevon !byte 0                 ; $FF: ON OBJEVENT active
-objfeat !byte 0                 ; K325T feature level ($FFD71FD)
+objfeat !byte 0                 ; K325T feature level ($FFD71FD; read at start-up and by OBJECT)
 objlim  !fill 36, 0             ; 4 limit sets: x0, y0, x1, y1 (16-bit), action
 OEVTXT  = BUFFER+$80             ; ON OBJEVENT handler: TPROC name ':' TRETURN CR
                                 ; (bank 0 below PMIN: text there is read from bank 0, as COLTXT)
@@ -86,7 +86,7 @@ objregs:
         pha
         dex
         bpl -
-        jsr colptr
+        jsr colold
         ldz #$3d                ; feature level ($FFD71FD)
         lda [fptr],z
         sta objfeat

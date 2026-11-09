@@ -70,6 +70,10 @@ hwdetect:
         beq .rest
         lda #$ff
         sta hw_k325t
+        ldz #$0d                ; feature level ($FFD71FD)
+        lda [fptr],z
+        ldz #0
+        sta objfeat
         lda #<1024
         sta hw_chip
         lda #>1024
@@ -600,10 +604,16 @@ colirq: ldx #3
         cpx #4
         bne -
         rts
-colptr: lda #$c0                ; fptr = $FFD71C0, Z = 0
-        sta fptr
-        lda #$71
-        sta fptr+1
+colptr: lda objfeat              ; fptr = $FFD71C0, Z = 0; feature level 3:
+        cmp #3                  ; the v3 page $FFD7280 (status, index, partner)
+        bcs +
+colold: lda #$c0                ; (always $FFD71C0)
+        ldx #$71
+        bra ++
++       lda #$80
+        ldx #$72
+++      sta fptr
+        stx fptr+1
         lda #$fd
         sta fptr+2
         lda #$0f
@@ -631,22 +641,52 @@ coloff: lda #0
 f_collide:
         jsr expri
         jsr braket
-        lda #$ff
         bit hw_k325t
         bpl +
-        jsr colptr
-        lda #$c1
-        sta fptr
+        jsr colidx
+        cpx #$ff
+        beq +
+        jmp setw
++       jmp f_true              ; -1
+; COLIDX: object acc's first partner -> A/X ($FF/$FF: none); feature level
+; 3: the 10-bit index and partner of the v3 page, else $FFD71C1/C2
+colidx: jsr colptr
+        lda objfeat
+        cmp #3
+        bcc .c2
+        ldz #2
         lda acc
         sta [fptr],z
-        lda #$c2
-        sta fptr
+        inz
+        lda acc+1
+        and #3
+        sta [fptr],z
+        inz
         lda [fptr],z
-+       cmp #$ff
+        pha
+        inz
+        lda [fptr],z
+        and #3
+        tax
+        pla
+        ldz #0
+        cpx #3
         bne +
-        jmp f_true              ; -1
-+       ldx #0
-        jmp setw
+        cmp #$ff
+        bne +
+        ldx #$ff                ; $3FF: none
++       rts
+.c2     ldz #1
+        lda acc
+        sta [fptr],z
+        inz
+        lda [fptr],z
+        ldz #0
+        ldx #0
+        cmp #$ff
+        bne +
+        ldx #$ff
++       rts
 
 ; EVCHECK: called from XEQ between statements when evpend <> 0
 !zone evcheck

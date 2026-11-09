@@ -906,30 +906,23 @@ x_ld4:  lda #4
         lda [fptr],z
         sta acc+3
         bra .z
-; COLLIDE(n) as F_COLLIDE: partner of object n (low byte), -1 none
+; COLLIDE(n) as F_COLLIDE: partner of object n, -1 none
 x_coll: lda accx
         bne .bl
         lda #$ff
+        tax
         bit hw_k325t
         bpl +
-        jsr colptr
-        lda #$c1
-        sta fptr
-        lda acc
-        sta [fptr],z
-        lda #$c2
-        sta fptr
-        lda [fptr],z
+        jsr colidx
 +       sta acc
+        stx acc+1
         ldz #0
-        stz acc+1
         stz acc+2
         stz acc+3
-        cmp #$ff
+        cpx #$ff
         bne .z
-        sta acc+1
-        sta acc+2
-        sta acc+3
+        stx acc+2
+        stx acc+3
         bra .z
 !zone xk40
 x_k40:  jsr xspill                  ; 5 bytes (integer: exponent 0)

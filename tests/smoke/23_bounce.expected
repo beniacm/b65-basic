@@ -58,7 +58,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1008 REM COLLIDE per set bit (LB%?m = its lowest set bit). No REM or WHILE in
 >1009 REM the lines that run per frame (REM is skipped character by character).
 >1010 DEF PROChit
->1020 CN%=?&FFD71C3:CA%=&FFD71A0:CI%=0
+>1020 CN%=?&FFD7286+256*?&FFD7287:CA%=&FFD7200:CI%=0
 >1030 REPEAT CM%=?CA%:CA%=CA%+1:CI%=CI%+8:IF CM% THEN PROCbits
 >1040 UNTIL CN%<=0 OR CI%>=N%:ENDPROC
 >1045 DEF PROCbits

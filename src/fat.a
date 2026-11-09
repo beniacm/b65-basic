@@ -2407,7 +2407,7 @@ o_star: ldy #0
         jmp crlf
 +       jsr tell
         !text "level ",0
-        jsr colptr              ; feature level $FFD71FD
+        jsr colold              ; feature level $FFD71FD
         ldz #$3d
         lda [fptr],z
         ldz #0
