@@ -208,13 +208,14 @@ OBJSPRING's pull. OBJMOVE without a speed change computes the velocity
 once (mode 5, then cartesian: a straight polar bullet costs as much as a
 cartesian one) and rounds its turn to the nearest 1/2^k radian per frame,
 k = 1..7 (28.6, 14.3, 7.2, 3.6, 1.8, 0.9, 0.45 degrees): the velocity is
-then rotated with shifts only (Minsky: VX -= VY >> k, then VY += VX >> k);
+then rotated with rounded shifts only (Minsky: VX -= VY >> k, then VY += VX >> k);
 turns outside 0.32 .. 40 degrees per frame or a speed change keep the
 exact polar mode 2. OBJVX/OBJVY read back the (rotated) velocity. `action` (and table byte +17): bits 1..0 for X, bits
 3..2 for Y: 0 none, 1 wrap, 2 bounce, 3 kill; bit 5 halves the speed on a
 bounce. OBJEVENT(n) is TRUE once after object n was killed by its limits or
 its lifetime (and clears it); OBJEVENT(-1) is the lowest object with an
-event, -1 if none. RUN and the prompt remove all objects.
+event, -1 if none. RUN and the prompt remove all objects; OBJECT n clears
+the entries below n that are new to the count (no motion, draw mask 0).
 
 **HITPIX(a,b)** is TRUE if a pixel of object a that is not transparent lies
 on such a pixel of object b, FALSE if not: the confirmation of a box
