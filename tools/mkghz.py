@@ -171,15 +171,18 @@ def gen_pack():
     out = pal + wf + s1 + s2 + bytes(b1) + bytes(b2) + bytes(b3) + bytes(mp) + bytes(gl.g)
     return out
 
+LISTS = [(200, 290), (800, 895), (971, 1010), (1212, 1238)]   # act 2: the frame loop, the DMA list, RING, act 3's rings
 TEXTCH = 0x1740                     # char of ' ' in the overlay font (FCM, at $5D000)
 
 def text_pack():
-    """build/B65GHZS.BBC: act 2's overlay: lines (2 bytes), the font (96 FCM
-    glyphs, ASCII 32..127, pixel colour 250, shadow 251), then 40 tokens a line: blank
-    lines, 'BUT HAVE YOU SEEN IT IN BASIC?', blank lines, examples/ghz.bas
-    wrapped at 40 columns, blank lines, 'B65 BASIC. n LINES.' (n: the
-    program's lines) and '50 FRAMES PER SECOND.', blank lines; the scroll
-    stops with that caption on rows 11 and 13"""
+    """build/B65GHZS.BBC: acts 2 and 3: lines (2 bytes), the index of the
+    listing's last line (2 bytes), the font (96 FCM glyphs, ASCII 32..127,
+    pixel colour 250, shadow 251), then 40 tokens a line: the fixed caption
+    'BUT HAVE YOU SEEN IT IN BASIC?', 21 blank lines, '>LIST a-b' and the
+    lines of examples/ghz.bas in LISTS as B65's LIST shows them (wrapped at
+    40 columns), '>' and a cursor; then a page with 'B65 BASIC. n LINES.' (n:
+    the program's lines) and '50 FRAMES PER SECOND.' on rows 11 and 13; then
+    act 3's art"""
     font = []
     for ln in open(os.path.join(ROOT, 'src', 'font.a')):
         if '!byte' in ln:
@@ -192,18 +195,36 @@ def text_pack():
                             for x in range(8))
     src = open(os.path.join(ROOT, 'examples', 'ghz.bas')).read().splitlines()
     nlines = sum(1 for ln in src if ln[:1].isdigit())
-    lines = [''] * 13 + ['BUT HAVE YOU SEEN IT IN BASIC?'.center(40)] + [''] * 13
-    for ln in src:
-        while len(ln) > 40:
-            lines.append(ln[:40]); ln = '  ' + ln[40:]
-        lines.append(ln)
-    lines += [''] * 11 + [('B65 BASIC. %d LINES.' % nlines).center(40), '', '50 FRAMES PER SECOND.'.center(40)] + [''] * 13
+    def listing(a, b):                  # as B65's LIST shows it: number in 5 columns, a space,
+        out, asm = [], False            # assembler lines (from '[' to ']') 2 more spaces
+        for ln in src:
+            n, _, t = ln.partition(' ')
+            if not (a <= int(n) <= b):
+                continue
+            if t.startswith('['):
+                asm = True
+            text = '%5d %s%s' % (int(n), '  ' if asm and not t.startswith('[') else '', t)
+            if t.startswith(']'):
+                asm = False
+            while len(text) > 40:       # wrapped at 40 columns, as on the screen
+                out.append(text[:40]); text = text[40:]
+            out.append(text)
+        return out
+    # 0: the fixed caption (row 0), 1..21 blank (the window, rows 2..21, starts empty);
+    # then the LIST commands and their output, '>' + cursor (LE); then the closing page
+    lines = ['BUT HAVE YOU SEEN IT IN BASIC?'.center(40)] + [''] * 21
+    for a, b in LISTS:
+        lines.append('>LIST %d-%d' % (a, b))
+        lines += listing(a, b)
+    lines.append('>' + chr(127))
+    le = len(lines) - 1
+    lines += [''] * 11 + [('B65 BASIC. %d LINES.' % nlines).center(40), '', '50 FRAMES PER SECOND.'.center(40)] + [''] * 12
     toks = bytearray()
     for ln in lines:
         for ch in ln.ljust(40)[:40]:
             t = TEXTCH + (ord(ch) - 32 if 32 <= ord(ch) < 128 else 0)
             toks += bytes((t & 255, t >> 8))
-    return bytes((len(lines) & 255, len(lines) >> 8)) + bytes(glyphs) + bytes(toks) + act3_art()
+    return bytes((len(lines) & 255, len(lines) >> 8, le & 255, le >> 8)) + bytes(glyphs) + bytes(toks) + act3_art()
 
 def act3_art():
     """act 3's original art, after the text: palette entries 192..223 (R[32]

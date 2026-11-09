@@ -5,7 +5,8 @@ from INTRO2.D81, the Green Hill scroller by Maxice, frame for frame), "BUT
 HAVE YOU SEEN IT IN BASIC?" (its source scrolls over the running picture) and
 "NOW WITH THE K325T VIC-IV" (1000 rings, clouds and bushes as list-mode
 objects), then a closing card ("B65 BASIC FOR MEGA65 AND K325T",
-github.com/beniacm/b65-basic) and the late frames per act. About 2 min 20 s.
+github.com/beniacm/b65-basic) and the late frames per act. Each act about
+30 s, about 90 s in all.
 
 ## The art (none of it in the repository or the shipped files)
 
@@ -82,31 +83,38 @@ except two at the start (the first calls of the procedures): 1000 frames in
 2010 cs. (When BASIC still set the 52 job sources itself, 8% of the frames
 missed: the front layer's 26 sources every 4 frames, plus band reloads.)
 
-## Act 2: the source over the picture
+## Act 2: the listing
 
-After act 1 (A1% = 3000 frames, 60 s) the program's own source scrolls up
-over the running scene, white on transparent: `B65GHZS.BBC` (made by
-`tools/mkghz.py --text` from examples/ghz.bas, in dist/sd) holds the 8x8
-font as 96 full-colour glyphs (colour 250) and the listing as 40-column
-token lines ("...BUT IN BASIC?" first). Each screen row gets two more token
+After act 1 (A1% = 1500 frames, 30 s) the picture turns into a BASIC screen:
+a blue panel (rows 0..21: the text sets opaque, the screen colour `$D021`
+blue behind light blue text, as on a C64/MEGA65 screen) with the fixed top
+line "BUT HAVE YOU SEEN IT IN BASIC?", and below it (rows 2..21) a LIST of
+parts of this program as B65's LIST shows them: ">LIST 200-290" (the frame
+loop), ">LIST 800-895" (the DMA list), ">LIST 971-1010" (RING), ">LIST
+1212-1238" (act 3's ring routine), wrapped at 40 columns, scrolling up SV%
+pixels a frame (line 115: 1); the scene goes on in rows 22..25. The listing
+ends with the prompt and a cursor, stays 2 s, then the panel goes and "B65
+BASIC. n LINES." / "50 FRAMES PER SECOND." stand over the scene for 3 s.
+About 28 s.
+
+`B65GHZS.BBC` (made by `tools/mkghz.py --text` from examples/ghz.bas, in
+dist/sd) holds the 8x8 font as 96 full-colour glyphs (text colour 250, a
+shadow 251 right of and below each pixel; on the panel 251 is the panel's
+blue) and the text as 40-column token lines. Each screen row has two text
 sets after SCROLLTEST's 104 tokens: a GOTOX and 40 characters of line L
 moved up by S pixels, a GOTOX and 40 characters of line L+1 moved down by
-8 - S (the GOTOX Y offset: bits 15-13 up, bit 12 down), so the text moves
-SV% pixels a frame (line 115: 2; 1, 2, 4 or 8). Each set's GOTOX has a
-row mask (colour byte 0 bit 3, the mask in byte 1, written by the routine
-each frame): set 1 draws pixel rows 0..7-S, set 2 rows 8-S..7; without it
-the VIC-IV paints the neighbouring glyphs' rows in the rest of the row (on
-the board: doubled, smeared text; `MK%=0` switches the masks off). The
-text sets start at X 16, the first visible pixel, and the font has a black
-shadow (colour 251) right of and below each white pixel. The rows grow to 186
-tokens (line step 372). When the listing ends, "B65 BASIC. n LINES." and
-"50 FRAMES PER SECOND." stay for 3 s. The text
-tokens come from attic RAM ($8580000) with the same DMA list (52 more
-row copies, their source moved every 8 frames); the inline-assembler
-routine writes the GOTOX bytes of all rows (fine X and the text sets' Y
-offsets) each frame, since a DMA fill cannot step 372 bytes. Xemu does not
-draw GOTOX Y offsets, so `SM%=0` scrolls in 8-pixel steps (the tests);
-the smooth scroll needs the board.
+8 - S (GOTOX Y offset: bits 15-13 up, bit 12 down), each with a row mask
+(colour byte 0 bit 3, the mask in byte 1): set 1 draws pixel rows 0..7-S,
+set 2 rows 8-S..7 (without the masks the VIC-IV paints the neighbouring
+glyphs' rows there: the board showed it as flicker every 4 frames). The
+rows are 186 tokens (line step 372); the text sets start at X 16, the
+first visible pixel. The text comes from attic RAM ($8580000) through the
+frame's DMA list (52 row copies); the routine RING writes each row's GOTOX
+bytes and masks every frame (a DMA fill cannot step 372 bytes), ANDed
+with a per-row table (PF%: the panel's rows), and keeps the first V%+31
+rows fixed (no offset, the caption line's text: the routine FIX points
+their text jobs at it). Xemu does not draw GOTOX Y offsets or row masks,
+so `SM%=0` scrolls in 8-pixel steps for the tests.
 
 ## Act 3: the K325T VIC-IV
 
@@ -120,7 +128,8 @@ bit 0):
   (original art in B65GHZS.BBC, palette 192..195), on SCROLLTEST's paths
   (ring i: group i DIV 16 with the phase offsets of act 1, plus 37 and 53 per
   eight groups so groups 8 apart differ; rings 0..63 are exactly act 1's).
-  Their count ramps 64 -> 300 -> 1000 (the draw mask: rings beyond the count
+  Their count ramps 64 -> 300 (frames 150..268) -> 1000 (700..1050), held
+  with the caption until frame 1400 (28 s) (the draw mask: rings beyond the count
   and off the screen have mask 0, so they take no bucket entries). An 8x8
   ring touches at most 2 rows: 1000 rings need at most 2000 of the 2048
   bucket entries (SCROLLTEST's 16x24 rings would need 4);

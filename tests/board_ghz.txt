@@ -1,4 +1,4 @@
-REM GHZ act 1 on the board: INTRO2.D81 (the original art) or B65GHZG.BBC in the SD card root; 1500 frames in real time, then the time (50 fps: 3000 cs) and "act 1: 1500 frames, n late"
+REM GHZ act 1 on the board: INTRO2.D81 (the original art) or B65GHZG.BBC in the SD card root; its 1500 frames (30 s) in real time, then the time (50 fps: 3000 cs) and "act 1: 1500 frames, n late"
 #include examples/ghz.bas
-110 BN%=0:RN%=1500:VS%=0:A1%=3000:SM%=1:A2%=1:XT%=0
+110 BN%=0:RN%=1500:VS%=0:A1%=1500:SM%=1:A2%=1:XT%=0
 RUN

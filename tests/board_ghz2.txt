@@ -1,4 +1,4 @@
-REM GHZ act 2 on the board: act 1 for 200 frames, then the source scrolls (2 pixels a frame, GOTOX Y offsets) to its end; needs B65GHZS.BBC in the SD card root too. 3000 frames in real time, then the time (50 fps: 6000 cs) and the late frames per act
+REM GHZ act 2 on the board: act 1 for 200 frames, then act 2 (the fixed caption, the LIST panel scrolling 1 pixel a frame with row masks, the closing caption); needs B65GHZS.BBC in the SD card root too. 1600 frames in real time, then the time (50 fps: 3200 cs) and the late frames per act
 #include examples/ghz.bas
-110 BN%=0:RN%=3000:VS%=0:A1%=200:SM%=1:A2%=1:XT%=0
+110 BN%=0:RN%=1600:VS%=0:A1%=200:SM%=1:A2%=1:XT%=0
 RUN

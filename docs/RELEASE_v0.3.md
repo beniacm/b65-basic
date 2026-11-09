@@ -42,7 +42,7 @@ until then this file grows with every change.
 
 ## GHZ: SCROLLTEST in B65 (examples/ghz.bas, docs/GHZ.md)
 
-A three-act showpiece, about 3 minutes, all of it a B65 BASIC program with
+A three-act showpiece, 30 s an act, about 90 s, all of it a B65 BASIC program with
 small inline-assembler routines:
 
 - **Act 1** "YOU HAVE SEEN THIS ON MEGA65": Maxice's SCROLLTEST (the Green
@@ -52,11 +52,12 @@ small inline-assembler routines:
   (`tests/ghzmodel.py`) that reproduces a memory dump of the real demo after
   965 frames; B65 matches the model frame for frame in Xemu
   (`tests/ghzcheck.py`).
-- **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?": the program's own listing
-  scrolls up over the running scene, 2 pixels a frame (two text token sets
-  per row with GOTOX Y offsets and row masks; a black shadow under the
-  white text), closing with "B65 BASIC. n LINES." / "50 FRAMES PER
-  SECOND.".
+- **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?" (the fixed top line): the
+  scene turns into a BASIC screen, a blue panel with a LIST of the
+  program's frame loop, DMA list and ring routines scrolling under the
+  caption (two text token sets per row with GOTOX Y offsets and row masks,
+  1 pixel a frame), the scene going on below; then "B65 BASIC. n LINES." /
+  "50 FRAMES PER SECOND.".
 - **Act 3** "NOW WITH THE K325T VIC-IV" (K325T core, feature level 3 or
   more): the rings move into the list-mode object table and ramp
   64 -> 300 -> 1000, with 8 clouds behind and 12 bushes in front as objects

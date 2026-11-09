@@ -1,3 +1,3 @@
-REM GHZ as shipped (the recording): acts 1-3 and the closing card, about 2 minutes 20 s; at the end the late frames per act
+REM GHZ as shipped (the recording): acts 1-3 (30 s each) and the closing card, about 90 s; at the end the late frames per act
 #include examples/ghz.bas
 RUN

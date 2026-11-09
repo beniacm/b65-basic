@@ -46,7 +46,7 @@ class Act3:
     def frame(self, f3):             # f3: PROCa3's frame count (0: the PROCact3 frame)
         g = self.g
         if f3:
-            if 100 < f3 <= 218 or (f3 > 400 and self.n < 1000):
+            if 150 < f3 <= 268 or (f3 > 700 and self.n < 1000):
                 self.n += 2
             if f3 % 10 == 0:
                 self.anim = (self.anim + 1) & 3
@@ -108,9 +108,9 @@ def main():
     shot = sys.argv[sys.argv.index('--shot') + 1] if '--shot' in sys.argv else None
     a3 = int(sys.argv[sys.argv.index('--act3') + 1]) if '--act3' in sys.argv else None
     if '--act2' in sys.argv:        # act 2 from this frame (the overlay file goes on the card too)
-        src = src.replace('A1%=3000:SM%=1', 'A1%=' + sys.argv[sys.argv.index('--act2') + 1] + ':SM%=0')
+        src = src.replace('A1%=1500:SM%=1', 'A1%=' + sys.argv[sys.argv.index('--act2') + 1] + ':SM%=0')
     if a3 is not None:
-        src = src.replace('A1%=3000:SM%=1:A2%=1:XT%=0', 'A1%%=%d:SM%%=0:A2%%=0:XT%%=1' % a3)
+        src = src.replace('A1%=1500:SM%=1:A2%=1:XT%=0', 'A1%%=%d:SM%%=0:A2%%=0:XT%%=1' % a3)
     if shot:                        # keep the picture: no return to text, stay in a loop
         src = src.replace('T0%=TIME-T0%:PROCctr(AN%):PROCback:', 'T0%=TIME-T0%:REPEAT UNTIL FALSE:')
     with tempfile.TemporaryDirectory() as td:
