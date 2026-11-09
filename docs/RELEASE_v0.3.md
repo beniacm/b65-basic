@@ -52,6 +52,13 @@ until then this file grows with every change.
   The art is loaded from the SD card: your own pack (`B65GHZ.BBC`, made
   locally from SCROLLTEST) or the original generated `B65GHZG.BBC` shipped
   in dist/sd.
+- Act 2 (S2): "...BUT IN BASIC?" and then the program's own source scrolls
+  up over the running scene (two text token sets per row with GOTOX Y
+  offsets, one pixel a frame; the text from attic RAM through the same DMA
+  list).
+- Files: GHZ.BAS and its data files (B65GHZG.BBC, B65GHZS.BBC) go to the
+  SD card root: B65 reads data files from the SD card's root directory
+  only, not from a D81.
 
 ## B65
 

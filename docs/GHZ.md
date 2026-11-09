@@ -3,7 +3,7 @@
 The v0.3 showpiece, in three acts: "YOU HAVE SEEN THIS ON MEGA65" (SCROLLTEST
 from INTRO2.D81, the Green Hill scroller by Maxice, frame for frame), "...BUT IN
 BASIC?" (its source scrolls over the running picture) and "...AND WITH THE
-VIC-IV EXTENSIONS" (the K325T's list-mode objects). Act 1 is done (S1).
+VIC-IV EXTENSIONS" (the K325T's list-mode objects). Acts 1 (S1) and 2 (S2) are done.
 
 ## The data pack (never the original art in the repository)
 
@@ -66,13 +66,32 @@ Budget (Xemu, tests/ghzcheck.py, without the frame wait): 5.2 ms a frame
 before the rings start, about 6 ms with the 64 rings: 50 frames per second
 with two thirds of the frame free.
 
+## Act 2: the source over the picture
+
+After act 1 (A1% = 3000 frames, 60 s) the program's own source scrolls up
+over the running scene, white on transparent: `B65GHZS.BBC` (made by
+`tools/mkghz.py --text` from examples/ghz.bas, in dist/sd) holds the 8x8
+font as 96 full-colour glyphs (colour 250) and the listing as 40-column
+token lines ("...BUT IN BASIC?" first). Each screen row gets two more token
+sets after SCROLLTEST's 104 tokens: a GOTOX and 40 characters of line L
+moved up by S pixels, a GOTOX and 40 characters of line L+1 moved down by
+8 - S (the GOTOX Y offset: bits 15-13 up, bit 12 down), so the text moves
+one pixel a frame; the rows grow to 186 tokens (line step 372). The text
+tokens come from attic RAM ($8580000) with the same DMA list (52 more
+row copies, their source moved every 8 frames); the inline-assembler
+routine writes the GOTOX bytes of all rows (fine X and the text sets' Y
+offsets) each frame, since a DMA fill cannot step 372 bytes. Xemu does not
+draw GOTOX Y offsets, so `SM%=0` scrolls in 8-pixel steps (the tests);
+the smooth scroll needs the board.
+
 ## Tests
 
 - `tests/ghzcheck.py [frames] [--local]`: B65 runs N frames in Xemu (MEGA65
   ROM boot, a private card copy with the pack); the screen in the memory dump
   must equal the model's (all tokens' low bytes, GOTOX fine X, ring slots).
   Generated pack: 40, 300, 600 frames OK; local SCROLLTEST pack: 965 and 1000
-  frames OK. `--shot file.png` keeps the picture for a screenshot.
+  frames OK. `--shot file.png` keeps the picture for a screenshot; `--act2 N`
+  starts act 2 at frame N (with the overlay file, in 8-pixel steps).
 - Board: `tests/board.py run tests/board_ghz.txt` (needs the pack on the SD
   card): 1500 frames in real time, then "frames 1500 ... in N cs" (3000 at
   50 fps).

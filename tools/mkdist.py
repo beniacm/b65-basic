@@ -133,6 +133,8 @@ def main():
     shutil.copy(os.path.join(ROOT, 'build/b65.prg'), os.path.join(out, 'sd', 'B65.PRG'))
     subprocess.run([sys.executable, os.path.join(ROOT, 'tools/mkghz.py')], check=True, stdout=subprocess.DEVNULL)
     shutil.copy(os.path.join(ROOT, 'build/B65GHZG.BBC'), os.path.join(out, 'sd', 'B65GHZG.BBC'))   # ghz.bas's generated pack
+    subprocess.run([sys.executable, os.path.join(ROOT, 'tools/mkghz.py'), '--text'], check=True, stdout=subprocess.DEVNULL)
+    shutil.copy(os.path.join(ROOT, 'build/B65GHZS.BBC'), os.path.join(out, 'sd', 'B65GHZS.BBC'))   # its act-2 overlay
     for name in ('obj65', 'obj65x'):    # the BASIC 65 object library (docs/OBJ65.md)
         lib = open(os.path.join(ROOT, 'build', name + '.prg'), 'rb').read()
         disk.add(name.upper(), lib, 2)

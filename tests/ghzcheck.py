@@ -2,13 +2,14 @@
 """examples/ghz.bas (act 1) against tests/ghzmodel.py: B65 runs N frames in
 Xemu (MEGA65 ROM boot, a private card copy with the pack), the memory dump's
 screen (token low bytes, GOTOX fine X, ring slots) must equal the model's.
-usage: tests/ghzcheck.py [frames] [--local] [--shot file.png] [-v]   (--local: the local SCROLLTEST
+usage: tests/ghzcheck.py [frames] [--local] [--act2 frame] [--shot file.png] [-v]   (--local: the local SCROLLTEST
 pack local/ghz_assets/B65GHZ.BBC, else the generated build/B65GHZG.BBC)"""
 import os, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ghzmodel
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SC = 0x50000
+LS = 372                            # bytes a row (SCROLLTEST's 208, then act 2's text tokens)
 
 def unpack(p):
     b = lambda o, n: list(p[o:o + n])
@@ -23,6 +24,8 @@ def main():
     pack = open(pf, 'rb').read()
     src = open(os.path.join(ROOT, 'examples/ghz.bas')).read().replace('110 BN%=0', '110 BN%=' + str(frames))
     shot = sys.argv[sys.argv.index('--shot') + 1] if '--shot' in sys.argv else None
+    if '--act2' in sys.argv:        # act 2 from this frame (the overlay file goes on the card too)
+        src = src.replace('A1%=3000:SM%=1', 'A1%=' + sys.argv[sys.argv.index('--act2') + 1] + ':SM%=0')
     if shot:                        # keep the picture: no return to text, stay in a loop
         src = src.replace('T0%=TIME-T0%:PROCback:', 'T0%=TIME-T0%:REPEAT UNTIL FALSE:')
     with tempfile.TemporaryDirectory() as td:
@@ -30,6 +33,10 @@ def main():
         subprocess.run(['cp', '--sparse=always', os.path.expanduser('~/src/xemu-work/card.img'), card], check=True)
         env = dict(os.environ, MTOOLS_SKIP_CHECK='1')
         subprocess.run(['mcopy', '-o', '-i', card + '@@1M', pf, '::' + name], check=True, env=env)
+        if '--act2' in sys.argv:
+            subprocess.run([sys.executable, os.path.join(ROOT, 'tools/mkghz.py'), '--text'], check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(['mcopy', '-o', '-i', card + '@@1M', os.path.join(ROOT, 'build/B65GHZS.BBC'), '::B65GHZS.BBC'],
+                           check=True, env=env)
         pf2 = os.path.join(td, 'B65GHZT.BBC')        # the program as a text file (a short transcript)
         open(pf2, 'w').write(src.replace('\n', '\r'))
         subprocess.run(['mcopy', '-o', '-i', card + '@@1M', pf2, '::B65GHZT.BBC'], check=True, env=env)
@@ -53,11 +60,11 @@ def main():
         for f in range(frames + 6):
             if f:
                 h.frame()
-            d = sum(1 for r in range(26) for i in range(0, 88, 2) if m[SC + 208 * r + i] != h.row[r][i])
+            d = sum(1 for r in range(26) for i in range(0, 88, 2) if m[SC + LS * r + i] != h.row[r][i])
             print('model frame %d: %d tile/GOTOX bytes differ' % (f, d))
     bad = 0
     for row in range(26):
-        a = SC + 208 * row
+        a = SC + LS * row
         got = m[a:a + 208]
         want = g.row[row]
         idx = [0, 44] + list(range(2, 44, 2)) + list(range(46, 88, 2))

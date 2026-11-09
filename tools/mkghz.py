@@ -3,6 +3,8 @@
 
   tools/mkghz.py           build/B65GHZG.BBC: an ORIGINAL generated tileset,
                            band/map data, palette and sine tables (shipped)
+  tools/mkghz.py --text    build/B65GHZS.BBC: act 2's overlay (font + the
+                           source of examples/ghz.bas as 40-column token lines)
   tools/mkghz.py --local   local/ghz_assets/B65GHZ.BBC from the local asset
                            pack (SCROLLTEST's data: never committed or shipped)
 
@@ -167,7 +169,43 @@ def gen_pack():
     out = pal + wf + s1 + s2 + bytes(b1) + bytes(b2) + bytes(b3) + bytes(mp) + bytes(gl.g)
     return out
 
+TEXTCH = 0x1740                     # char of ' ' in the overlay font (FCM, at $5D000)
+
+def text_pack():
+    """build/B65GHZS.BBC: act 2's overlay: lines (2 bytes), the font (96 FCM
+    glyphs, ASCII 32..127, pixel colour 250), then 40 tokens a line: blank
+    lines, '...BUT IN BASIC?', blank lines, examples/ghz.bas wrapped at 40
+    columns, blank lines"""
+    font = []
+    for ln in open(os.path.join(ROOT, 'src', 'font.a')):
+        if '!byte' in ln:
+            font += [int(v.strip().lstrip('$'), 16) for v in ln.split('!byte')[1].split(';')[0].split(',')]
+    glyphs = bytearray()
+    for c in range(96):
+        for y in range(8):
+            row = font[c * 8 + y]
+            glyphs += bytes(250 if row >> (7 - x) & 1 else 0 for x in range(8))
+    lines = [''] * 13 + ['...BUT IN BASIC?'.center(40)] + [''] * 13
+    for ln in open(os.path.join(ROOT, 'examples', 'ghz.bas')):
+        ln = ln.rstrip('\n')
+        while len(ln) > 40:
+            lines.append(ln[:40]); ln = '  ' + ln[40:]
+        lines.append(ln)
+    lines += [''] * 30
+    toks = bytearray()
+    for ln in lines:
+        for ch in ln.ljust(40)[:40]:
+            t = TEXTCH + (ord(ch) - 32 if 32 <= ord(ch) < 128 else 0)
+            toks += bytes((t & 255, t >> 8))
+    return bytes((len(lines) & 255, len(lines) >> 8)) + bytes(glyphs) + bytes(toks)
+
 def main():
+    if '--text' in sys.argv:
+        t = text_pack()
+        out = os.path.join(ROOT, 'build', 'B65GHZS.BBC')
+        open(out, 'wb').write(t)
+        print('%s: %d bytes, %d lines' % (out, len(t), t[0] | t[1] << 8))
+        return
     if '--local' in sys.argv:
         p = local_pack()
         out = os.path.join(LOCAL, 'B65GHZ.BBC')
