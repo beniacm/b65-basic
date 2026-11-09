@@ -621,7 +621,10 @@ f_inkeys:
 inkeyw: jsr itemi
         bit testmode
         bpl .k
-        jsr osrdch              ; script supplies keys
+        ldz #0                  ; script supplies keys; at its end: no key (the
+        lda [tsp],z             ; program goes on, the script ends at the next
+        beq .none               ; line input, so its output is still recorded)
+        jsr osrdch
         clc
         rts
 .k      lda acc+3

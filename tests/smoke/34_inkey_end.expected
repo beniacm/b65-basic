@@ -1,0 +1,12 @@
+B65 BASIC v0.3-dev (45GS02) for MEGA65
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 REM INKEY at the end of the test script: no key, the program goes on (it used to end the session)
+>20 A%=INKEY(0):B$=INKEY$(0):FOR I%=1 TO 3:PRINT INKEY(5);:NEXT:PRINT " ";A%;" [";B$;"]"
+>30 PRINT "after"
+>RUN
+        -1        -1        -1 -1 []
+after
+>
