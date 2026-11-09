@@ -208,9 +208,8 @@ movleft2:
         sta objv+13
 +       jsr .arg
         bcs +
-        jsr expri               ; height in rows (1..64)
+        jsr expri               ; height in rows (1..63; 0 and 1: one row)
         lda acc
-        dec
         and #$3f
         sta objv+5
 +       jsr .arg

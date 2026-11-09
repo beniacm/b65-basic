@@ -200,7 +200,7 @@ also into `&FFD728A-B`). The program still switches list mode on (XCTL
     ON OBJEVENT PROCname / ON OBJEVENT OFF
 
 `tokens` is the 20-bit screen address of the object's token list, `colour`
-its colour RAM offset, `height` in character rows (1..64), `mask`, `group`
+its colour RAM offset, `height` in character rows (1..63, stored in +5 as it is: the VIC-IV reads 0 as 1), `mask`, `group`
 and `with` the draw mask and the collision masks. Omitted arguments of
 OBJVEL keep their value (a double jump is `OBJVEL n,,-9`); OBJVEL keeps an
 OBJSPRING's pull. OBJMOVE without a speed change computes the velocity
