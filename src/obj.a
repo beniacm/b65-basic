@@ -3,15 +3,14 @@
 ; Altered version of BBC BASIC (Z80) v5 by R.T. Russell (zlib licence) - see LICENSE
 ;
 ; The object table: 32-byte entries at objbase (K325T: chip RAM $E0000,
-; elsewhere attic $8200000, logic only), bytes 0..15 as the hardware reads
+; elsewhere chip RAM $58000, logic only), bytes 0..15 as the hardware reads
 ; them (v2 fields incl. +15 collides-with), bytes 16..31 the motion block
-; (docs/USER.md "Objects"). The event bits (one per object) follow at
-; objbase + $8000.
+; (docs/USER.md "Objects"). The event bits (one per object) are objevb.
 
 OBJMAX  = 1024
 OBJTAB_K = $0e0000              ; K325T: chip RAM (the VIC-IV reads it)
-OBJTAB_X = $08200000            ; elsewhere: attic RAM (no list mode)
-OBJEVT  = $8000                 ; event bits: objbase + OBJEVT
+OBJTAB_X = $058000              ; elsewhere: chip RAM $58000-$5FFFF (no list mode)
+SINTAB  = $04e800               ; quarter-wave sine, 1024 x 16 bits (BOOT)
 
 objbase !byte 0, 0, 0, 0        ; table base (32-bit)
 objcnt  !word 0                 ; objects in use (highest number + 1)
@@ -25,6 +24,7 @@ evtxt   !word 0                 ; (EVCHECK: the handler text)
 objt    !byte 0
 objp    !fill 4, 0
 objv    !fill 32, 0
+objevb  !fill OBJMAX/8, 0       ; event bits (object n: byte n/8, bit n AND 7)
 
 ; OBJRESET: no objects, integrator on, ON OBJEVENT off (start, RUN, prompt)
 !zone objreset
@@ -46,14 +46,10 @@ objreset:
 ++      sta objbase,x
         dex
         bpl -
-        lda #0                  ; no events
-        sta objn
-        sta objn+1
-        jsr objevbit
-        ldz #127
+        ldx #OBJMAX/8-1         ; no events
         lda #0
--       sta [fptr],z
-        dez
+-       sta objevb,x
+        dex
         bpl -
         ldz #0
         rts
@@ -126,7 +122,7 @@ objregs:
         bne -
 .x      rts
 
-; OBJEVBIT: objn -> fptr = its event byte (objbase + OBJEVT + n/8), A = mask
+; OBJEVBIT: objn -> X = its byte in objevb, A = its bit
 !zone objevbit
 objevbit:
         lda objn+1
@@ -137,28 +133,11 @@ objevbit:
         ror
         dex
         bne -
-        clc
-        adc objbase
-        sta fptr
-        lda tmpw+1
-        adc objbase+1
-        sta fptr+1
-        lda objbase+2
-        adc #0
-        sta fptr+2
-        lda objbase+3
-        sta fptr+3
-        lda fptr+1
-        clc
-        adc #>OBJEVT
-        sta fptr+1
-        bcc +
-        inc fptr+2
-+       lda objn
-        and #7
         tax
-        lda bitmask8,x
-        ldz #0
+        lda objn
+        and #7
+        tay
+        lda bitmask8,y
         rts
 bitmask8 !byte 1, 2, 4, 8, 16, 32, 64, 128
 
@@ -166,39 +145,849 @@ bitmask8 !byte 1, 2, 4, 8, 16, 32, 64, 128
 ; set if none
 !zone objevfirst
 objevfirst:
-        lda #0
-        sta objn
-        sta objn+1
-        jsr objevbit            ; fptr -> byte 0
-.l      ldz #0
-        lda [fptr],z
+        ldx #0
+-       lda objevb,x
         bne .f
-        inw fptr
-        lda objn
-        clc
-        adc #8
-        sta objn
-        bcc +
-        inc objn+1
-+       lda objn+1
-        cmp #>OBJMAX
-        bcc .l
+        inx
+        cpx #OBJMAX/8
+        bne -
         sec
         rts
-.f      ldx #0
+.f      ldy #0
 -       lsr
         bcs +
-        inx
+        iny
         bra -
-+       txa
++       stx tmpw
+        lda #0
+        sta tmpw+1
+        asl tmpw
+        rol tmpw+1
+        asl tmpw
+        rol tmpw+1
+        asl tmpw
+        rol tmpw+1
+        tya
+        ora tmpw
+        ldx tmpw+1
         clc
-        adc objn
-        ldx objn+1
-        bcc +
-        inx
-+       clc
         rts
 
-; OBJSTEP: one integrator step (S3)
+; ---------------- frame integrator (S3) ----------------
+; OBJSTEP: one step for objects 0 .. objcnt-1 (the frame IRQ, or OBJUPDATE).
+; Base page $1F while it runs (its own zero page at $1FEC-$1FFF; the IRQ
+; handler saves B and runs with B = 0). The table is mapped 8 KB at a time
+; at $E000 (MAP, as the overlays), the previous overlay is mapped back at
+; the end. K325T: HOLD around the writes.
+ZPB     = $1f
+oP      = $ec                   ; 2 entry in the window
+oQ      = $ee                   ; 4 far pointer (parent / anchor, sine table, HOLD)
+oN      = $f2                   ; 2 object number
+oL      = $f4                   ; 2 objects left
+oVX     = $f6                   ; 2 step X (8.8)
+oVY     = $f8                   ; 2 step Y
+oT      = $fa                   ; 4 temporaries
+oW      = $fe                   ; window
+oM      = $ff                   ; mode byte
+!zone objstep
 objstep:
+        php                     ; interrupts off: while the table is mapped at
+        sei                     ; $E000, $FFFA-$FFFF are object bytes, not vectors
+        tba
+        pha
+        lda #ZPB
+        tab
+        lda objcnt
+        sta oL
+        lda objcnt+1
+        sta oL+1
+        ora oL
+        lbeq .out
+        lda #0
+        sta oN
+        sta oN+1
+        sta oW
+        lda #1
+        jsr .hold
+.win    lda oW                  ; MAP $E000 -> objbase + oW * $2000
+        asl
+        asl
+        asl
+        asl
+        asl
+        clc
+        adc objbase+1
+        sta oT
+        lda objbase+2
+        adc #0
+        sta oT+1
+        lda oT
+        sec
+        sbc #$e0
+        tay
+        lda oT+1
+        sbc #0
+        and #$0f
+        ora #$80
+        taz
+        lda #0
+        tax
+        map
+        eom
+        ldz #0
+        lda #0
+        sta oP
+        lda #$e0
+        sta oP+1
+.ent    ldy #16
+        lda (oP),y
+        sta oM
+        and #$0f
+        beq .nx
+        jsr .one
+.nx     lda oP
+        clc
+        adc #32
+        sta oP
+        bcc +
+        inc oP+1
++       inw oN
+        lda oL
+        bne +
+        dec oL+1
++       dec oL
+        lda oL
+        ora oL+1
+        beq .done
+        lda oP+1
+        bne .ent
+        inc oW                  ; the next 8 KB
+        bra .win
+.done   lda #0
+        jsr .hold
+        lda curovl
+        jsr ovmap
+.out    pla
+        tab
+        plp
         rts
+.hold   bit hw_k325t            ; K325T: HOLD = A ($FFD71FC)
+        bpl +
+        pha
+        lda #$fc
+        sta oQ
+        lda #$71
+        sta oQ+1
+        lda #$fd
+        sta oQ+2
+        lda #$0f
+        sta oQ+3
+        pla
+        ldz #0
+        sta [oQ],z
++       rts
+
+; one object: oP -> its entry, oM = its mode byte
+.one    and #$0f
+        cmp #1
+        beq .cart
+        cmp #2
+        lbeq .polar
+        cmp #3
+        lbeq .orbit
+        rts
+; ---- cartesian: v += a (or the harmonic pull), position += v ----
+.cart   lda oM
+        and #$10
+        beq .acc
+        jsr .harm
+        bra .cv
+.acc    ldy #22                 ; ax, ay all 0: nothing to add
+        lda (oP),y
+        iny
+        ora (oP),y
+        iny
+        ora (oP),y
+        iny
+        ora (oP),y
+        beq .cv
+        ldy #22                 ; vx += ax
+        lda (oP),y
+        ldy #18
+        clc
+        adc (oP),y
+        sta (oP),y
+        ldy #23
+        lda (oP),y
+        ldy #19
+        adc (oP),y
+        sta (oP),y
+        ldy #24                 ; vy += ay
+        lda (oP),y
+        ldy #20
+        clc
+        adc (oP),y
+        sta (oP),y
+        ldy #25
+        lda (oP),y
+        ldy #21
+        adc (oP),y
+        sta (oP),y
+.cv     ldy #18
+        lda (oP),y
+        sta oVX
+        iny
+        lda (oP),y
+        sta oVX+1
+        iny
+        lda (oP),y
+        sta oVY
+        iny
+        lda (oP),y
+        sta oVY+1
+        jsr .pos
+        jmp .bnd
+; ---- polar: speed += dspeed, heading += turn, v from the sine table ----
+.polar  ldy #22                 ; speed += dspeed
+        lda (oP),y
+        ldy #18
+        clc
+        adc (oP),y
+        sta (oP),y
+        ldy #23
+        lda (oP),y
+        ldy #19
+        adc (oP),y
+        sta (oP),y
+        ldy #24                 ; heading += turn
+        lda (oP),y
+        ldy #20
+        clc
+        adc (oP),y
+        sta (oP),y
+        ldy #25
+        lda (oP),y
+        ldy #21
+        adc (oP),y
+        sta (oP),y
+        jsr .vang               ; oVX/oVY = speed * (cos, sin) heading
+        jsr .pos
+        jmp .bnd
+; .VANG: oVX = r * cos(a), oVY = r * sin(a); r = +18 (8.8), a = +20
+.vang   ldy #20
+        lda (oP),y
+        sta oT
+        iny
+        lda (oP),y
+        sta oT+1
+        clc                     ; cos(a) = sin(a + $4000)
+        adc #$40
+        sta oT+3
+        lda oT
+        sta oT+2
+        jsr .sin                ; oT+2/3 angle -> A/X = r * sin (8.8)
+        sta oVX
+        stx oVX+1
+        lda oT
+        sta oT+2
+        lda oT+1
+        sta oT+3
+        jsr .sin
+        sta oVY
+        stx oVY+1
+        rts
+; .SIN: A/X = r * sin(angle oT+2/3), r = +18 (signed 8.8); table: 1024
+; magnitudes for the quarter (index = angle bits 13..4), quadrant = bits 15..14
+.sin    lda oT+2                ; index = angle >> 4 AND 1023
+        sta oQ
+        lda oT+3
+        and #$3f
+        lsr
+        ror oQ
+        lsr
+        ror oQ
+        lsr
+        ror oQ
+        lsr
+        ror oQ                  ; oQ = index low, A = index bits 9..8
+        bit oT+3                ; quadrants 1 and 3: mirrored index
+        bvc +
+        eor #3
+        tax
+        lda oQ
+        eor #$ff
+        sta oQ
+        txa
++       asl oQ                  ; * 2 bytes
+        rol
+        clc
+        adc #>SINTAB
+        sta oQ+1
+        lda #^SINTAB
+        sta oQ+2
+        lda #0
+        sta oQ+3
+        ldz #0
+        lda [oQ],z
+        sta $d774
+        inz
+        lda [oQ],z
+        sta $d775
+        ldz #0
+        lda #0
+        sta $d776
+        sta $d777
+        sta $d772
+        sta $d773
+        lda oT+3                ; sign: quadrants 2 and 3, and r's
+        and #$80
+        sta oT+2
+        ldy #18
+        lda (oP),y
+        sta $d770
+        iny
+        lda (oP),y
+        bpl +
+        pha
+        lda oT+2
+        eor #$80
+        sta oT+2
+        lda #0                  ; |r|
+        sec
+        sbc $d770
+        sta $d770
+        pla
+        eor #$ff
+        adc #0
++       sta $d771
+-       bit $d70f               ; (multiplier busy)
+        bvs -
+        lda $d77a               ; product >> 16: 8.8
+        ldx $d77b
+        bit oT+2
+        bpl +
+        eor #$ff                ; negate A/X
+        clc
+        adc #1
+        pha
+        txa
+        eor #$ff
+        adc #0
+        tax
+        pla
++       rts
+; ---- orbit: angle += omega, position = parent + r (cos, sin) ----
+.orbit  ldy #24
+        lda (oP),y
+        ldy #20
+        clc
+        adc (oP),y
+        sta (oP),y
+        ldy #25
+        lda (oP),y
+        ldy #21
+        adc (oP),y
+        sta (oP),y
+        jsr .vang               ; oVX/oVY: the offset (8.8)
+        jsr .anch               ; oQ -> the parent's entry (far)
+        ldz #30                 ; x = parent's x (10.8) + offset
+        lda [oQ],z
+        clc
+        adc oVX
+        ldy #30
+        sta (oP),y
+        ldz #0
+        lda [oQ],z
+        adc oVX+1
+        ldy #0
+        sta (oP),y
+        lda #0
+        bit oVX+1
+        bpl +
+        lda #$ff
++       sta oT
+        ldz #1
+        lda [oQ],z
+        adc oT
+        and #3
+        sta oT
+        ldy #1
+        lda (oP),y
+        and #$fc
+        ora oT
+        sta (oP),y
+        ldz #31                 ; y = parent's y + offset
+        lda [oQ],z
+        clc
+        adc oVY
+        ldy #31
+        sta (oP),y
+        ldz #2
+        lda [oQ],z
+        adc oVY+1
+        ldy #2
+        sta (oP),y
+        lda #0
+        bit oVY+1
+        bpl +
+        lda #$ff
++       sta oT
+        ldz #3
+        lda [oQ],z
+        adc oT
+        and #3
+        sta oT
+        ldy #3
+        lda (oP),y
+        and #$fc
+        ora oT
+        sta (oP),y
+        ldz #0
+        jmp .bnd
+; .ANCH: oQ = objbase + (+28) * 32 (far)
+.anch   ldy #28
+        lda (oP),y
+        sta oQ
+        iny
+        lda (oP),y
+        and #3
+        ldx #5
+-       asl oQ
+        rol
+        dex
+        bne -
+        sta oQ+1
+        lda #0
+        rol
+        sta oQ+2
+        lda oQ
+        clc
+        adc objbase
+        sta oQ
+        lda oQ+1
+        adc objbase+1
+        sta oQ+1
+        lda oQ+2
+        adc objbase+2
+        sta oQ+2
+        lda objbase+3
+        sta oQ+3
+        rts
+; ---- harmonic: v += -k * (position - anchor) (k = +22, 8.8) ----
+.harm   jsr .anch
+        ldx #0                  ; X axis (fields +30, +0, +1), then Y
+        jsr .h1
+        ldx #1
+.h1     lda .hf,x               ; fraction offset
+        tay
+        taz
+        lda (oP),y
+        sec
+        sbc [oQ],z
+        sta $d770
+        lda .hl,x
+        tay
+        taz
+        lda (oP),y
+        sbc [oQ],z
+        sta $d771
+        iny
+        inz
+        lda (oP),y
+        sbc [oQ],z
+        and #3                  ; 10 integer bits: d mod 1024 px, signed
+        cmp #2
+        bcc +
+        ora #$fc
++       ldz #0
+        sta oT                  ; sign of d (bits 23..16)
+        bit oT
+        bpl +
+        lda #0                  ; |d|
+        sec
+        sbc $d770
+        sta $d770
+        lda #0
+        sbc $d771
+        sta $d771
+        lda #0
+        sbc oT
+        sta $d772
+        bra ++
++       sta $d772
+++      lda #0
+        sta $d773
+        sta $d776
+        sta $d777
+        ldy #22                 ; k
+        lda (oP),y
+        sta $d774
+        iny
+        lda (oP),y
+        sta $d775
+-       bit $d70f
+        bvs -
+        lda $d779               ; a = (k * |d|) >> 8 (8.8)
+        sta oT+2
+        lda $d77a
+        sta oT+3
+        bit oT                  ; v -= a for d > 0, v += a for d < 0
+        bmi +
+        lda #0
+        sec
+        sbc oT+2
+        sta oT+2
+        lda #0
+        sbc oT+3
+        sta oT+3
++       lda .hv,x               ; velocity field
+        tay
+        lda (oP),y
+        clc
+        adc oT+2
+        sta (oP),y
+        iny
+        lda (oP),y
+        adc oT+3
+        sta (oP),y
+        rts
+.hf     !byte 30, 31
+.hl     !byte 0, 2
+.hv     !byte 18, 20
+; ---- .POS: position += (oVX, oVY); 10 integer bits, flags kept ----
+.pos    ldy #30
+        lda (oP),y
+        clc
+        adc oVX
+        sta (oP),y
+        ldy #0
+        lda (oP),y
+        adc oVX+1
+        sta (oP),y
+        lda #0
+        bit oVX+1
+        bpl +
+        lda #$ff
++       sta oT
+        iny
+        lda (oP),y
+        sta oT+1
+        adc oT
+        and #3
+        sta oT
+        lda oT+1
+        and #$fc
+        ora oT
+        sta (oP),y
+        ldy #31
+        lda (oP),y
+        clc
+        adc oVY
+        sta (oP),y
+        ldy #2
+        lda (oP),y
+        adc oVY+1
+        sta (oP),y
+        lda #0
+        bit oVY+1
+        bpl +
+        lda #$ff
++       sta oT
+        iny
+        lda (oP),y
+        sta oT+1
+        adc oT
+        and #3
+        sta oT
+        lda oT+1
+        and #$fc
+        ora oT
+        sta (oP),y
+        rts
+; ---- limits (+17 action, mode bits 6..5 set), then the lifetime ----
+.bnd    ldy #17
+        lda (oP),y
+        and #$0f
+        lbeq .life
+        lda oM                  ; X = set * 9
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        and #3
+        sta oT
+        asl
+        asl
+        asl
+        adc oT
+        tax
+        ldy #0                  ; x (0..1023) -> oT/oT+1
+        lda (oP),y
+        sta oT
+        iny
+        lda (oP),y
+        and #3
+        sta oT+1
+        ldy #17
+        lda (oP),y
+        and #3
+        beq .by
+        sta oT+2                ; X action
+        lda oT                  ; x < x0?
+        cmp objlim,x
+        lda oT+1
+        sbc objlim+1,x
+        bvc +
+        eor #$80
++       bpl +
+        lda #0                  ; low side
+        jsr .act
+        lbcs .killed
+        bra .by
++       lda objlim+4,x          ; x1 < x?
+        cmp oT
+        lda objlim+5,x
+        sbc oT+1
+        bvc +
+        eor #$80
++       bpl .by
+        lda #1                  ; high side
+        jsr .act
+        bcs .killed
+.by     ldy #2                  ; y (signed 10 bits)
+        lda (oP),y
+        sta oT
+        iny
+        lda (oP),y
+        and #3
+        cmp #2
+        bcc +
+        ora #$fc
++       sta oT+1
+        ldy #17
+        lda (oP),y
+        lsr
+        lsr
+        and #3
+        beq .life
+        sta oT+2
+        lda oT
+        cmp objlim+2,x
+        lda oT+1
+        sbc objlim+3,x
+        bvc +
+        eor #$80
++       bpl +
+        lda #2
+        jsr .act
+        bcs .killed
+        bra .life
++       lda objlim+6,x
+        cmp oT
+        lda objlim+7,x
+        sbc oT+1
+        bvc +
+        eor #$80
++       bpl .life
+        lda #3
+        jsr .act
+        bcs .killed
+.life   ldy #26                 ; lifetime: count down, kill at 0
+        lda (oP),y
+        iny
+        ora (oP),y
+        beq .lx
+        dey
+        lda (oP),y
+        bne +
+        iny
+        lda (oP),y
+        dec
+        sta (oP),y
+        dey
++       lda (oP),y
+        dec
+        sta (oP),y
+        iny
+        ora (oP),y
+        bne .lx
+        ldy #17
+        lda (oP),y
+        and #$10
+        beq .lx
+        jmp .kill
+.killed
+.lx     rts
+; .ACT: A = side (0 x low, 1 x high, 2 y low, 3 y high), oT+2 = action,
+; oT/oT+1 = the coordinate, X = limit set offset. Carry set: killed.
+.act    sta oT+3
+        lda oT+2
+        cmp #3
+        bne +
+        jsr .kill
+        sec
+        rts
++       cmp #1
+        lbne .bounce
+        ; wrap: coordinate += / -= (c1 - c0 + 1)
+        lda oT+3
+        and #2                  ; X: limits +0/+4, Y: +2/+6
+        sta oT+2
+        txa
+        clc
+        adc oT+2
+        tay                     ; (objlim index of c0)
+        lda objlim+4,y          ; size = c1 - c0 + 1
+        sec
+        sbc objlim,y
+        sta oVX
+        lda objlim+5,y
+        sbc objlim+1,y
+        sta oVX+1
+        inw oVX
+        lda oT+3
+        lsr                     ; low side: add, high side: subtract
+        bcs +
+        lda oT
+        clc
+        adc oVX
+        sta oT
+        lda oT+1
+        adc oVX+1
+        sta oT+1
+        bra .wr
++       lda oT
+        sec
+        sbc oVX
+        sta oT
+        lda oT+1
+        sbc oVX+1
+        sta oT+1
+.wr     lda oT+3                ; write the coordinate back (10 bits)
+        and #2
+        tay
+        lda oT
+        sta (oP),y
+        iny
+        lda oT+1
+        and #3
+        sta oT
+        lda (oP),y
+        and #$fc
+        ora oT
+        sta (oP),y
+        clc
+        rts
+.bounce cmp #2
+        beq +
+        clc                     ; (0: none)
+        rts
++       lda oT+3                ; the coordinate := the limit
+        and #2
+        sta oT+2
+        lda oT+3
+        lsr
+        lda #0
+        bcc +
+        lda #4                  ; high side: c1
++       clc
+        adc oT+2
+        sta oVX
+        txa
+        clc
+        adc oVX
+        tay
+        lda objlim,y
+        sta oT
+        lda objlim+1,y
+        sta oT+1
+        jsr .wr
+        lda oM                  ; polar: reflect the heading
+        and #$0f
+        cmp #2
+        beq .bpol
+        lda oT+3                ; cartesian: v := -v (or -v/2)
+        and #2
+        clc
+        adc #18
+        tay
+        lda (oP),y
+        sta oVX
+        iny
+        lda (oP),y
+        sta oVX+1
+        ldy #17
+        lda (oP),y
+        and #$20
+        beq +
+        lda oVX+1
+        asl
+        ror oVX+1
+        ror oVX
++       lda oT+3
+        and #2
+        clc
+        adc #18
+        tay
+        lda #0
+        sec
+        sbc oVX
+        sta (oP),y
+        iny
+        lda #0
+        sbc oVX+1
+        sta (oP),y
+        clc
+        rts
+.bpol   ldy #20                 ; x side: heading := $8000 - heading,
+        lda oT+3                ; y side: heading := -heading
+        and #2
+        bne +
+        lda #0
+        sec
+        sbc (oP),y
+        sta (oP),y
+        iny
+        lda #$80
+        sbc (oP),y
+        sta (oP),y
+        clc
+        rts
++       lda #0
+        sec
+        sbc (oP),y
+        sta (oP),y
+        iny
+        lda #0
+        sbc (oP),y
+        sta (oP),y
+        clc
+        rts
+; .KILL: draw mask 0, motion off, event (bit oN; ON OBJEVENT pending)
+.kill   lda #0
+        ldy #4
+        sta (oP),y
+        ldy #16
+        sta (oP),y
+        lda oN+1
+        sta oT+1
+        lda oN
+        ldx #3
+-       lsr oT+1
+        ror
+        dex
+        bne -
+        tax
+        lda oN
+        and #7
+        tay
+        lda bitmask8,y
+        ora objevb,x
+        sta objevb,x
+        bit objevon
+        bpl +
+        lda #$20
+        tsb evpend
++       rts
+!zone obj_end

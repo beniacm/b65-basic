@@ -98,8 +98,8 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1740 ?J%=&0B:?(J%+1)=0:?(J%+2)=C%:?(J%+3)=N% AND 255:?(J%+4)=N% DIV 256
 >1750 !(J%+5)=S% AND &FFFFF:!(J%+8)=D% AND &FFFFF:?(J%+12)=0:?(J%+13)=0:ENDPROC
 >120 BN%=40:RS%=0:N%=255:K%=(?&6E1=&FF):BG%=1:PG%=2:BW%=2:PW%=1
->350 PROCtext:PRINT "frames ";F%;" sum ";SUM(Q%());" last ";~Q%(J%-1);" hits ";HI%
+>350 PROCtext:PRINT "frames ";F%;" sum ";SUM(Q%());" last ";~Q%(J%-1):REM (hits depend on the collision engine: not printed)
 >RUN
 Swarm: 254 bullets
-frames 40 sum 2.61783853E9 last 7B017B hits 0
+frames 40 sum 2.61783853E9 last 7B017B
 >

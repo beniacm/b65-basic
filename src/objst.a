@@ -526,16 +526,15 @@ o_objfn:
         jmp f_true              ; -1: none
 +       jmp setw
 .ev1    jsr .nacc
-        jsr objevbit            ; fptr -> the byte, A = mask
+        jsr objevbit            ; X = byte, A = bit
         sta objt
         sei
-        lda [fptr],z
-        and objt
+        and objevb,x
         beq +
         lda objt
         eor #$ff
-        and [fptr],z
-        sta [fptr],z
+        and objevb,x
+        sta objevb,x
         cli
         jmp f_true
 +       cli

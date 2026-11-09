@@ -73,7 +73,7 @@ HIMEM0  = $CF00         ; default HIMEM (stack grows down from here)
 TSTMAGIC = $00010000    ; "B65TEST:" magic, script follows
 TSTCOPY  = $08020000    ; attic copy of the script (Xemu)
 TRANSCR  = $0004a000    ; transcript of all output (Xemu testing only)
-TRANSEND = $f0          ; ... up to $4F000
+TRANSEND = $e8          ; ... up to $4E800 (then the sine table)
 
 ; ---------------- zero page ----------------
 acc     = $04   ; 4 bytes: integer / mantissa

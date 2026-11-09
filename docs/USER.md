@@ -177,10 +177,9 @@ the handler work once per pair (the lower object number). Without the
 K325T core `ON COLLISION` is accepted but never fires.
 
 **Objects (list mode v3, 32-byte table entries).** B65 owns the object table:
-`objbase` = `&E0000` (chip RAM) on the K325T, elsewhere `&8200000` (attic
+`objbase` = `&E0000` (chip RAM) on the K325T, elsewhere `&58000` (chip
 RAM: the statements and the motion run, nothing is shown). Entry n is at
-`objbase+32*n` (n = 0..1023); the event bits (one per object) follow at
-`objbase+&8000`. OBJECT also writes the table address and the object count
+`objbase+32*n` (n = 0..1023). OBJECT also writes the table address and the object count
 into the list-mode registers (`&FFD71F8-FB`; from feature level 3 the count
 also into `&FFD728A-B`). The program still switches list mode on (XCTL
 `&FFD71F0` bits 4, 6, 7; bit 3 if present).
@@ -229,6 +228,26 @@ Table entry (bytes 0..15 are read by the VIC-IV, 16..31 only by B65):
 The statements write an entry with interrupts off (SEI .. CLI), so the
 frame interrupt never sees half a field; a program or `CALL` routine that
 writes bytes 16..31 itself should do the same.
+
+**The motion** runs in B65's frame interrupt for every object with a mode
+(or once per `OBJUPDATE`, which also stops the interrupt's run until
+`OBJUPDATE ON`), with interrupts off, the table mapped 8 KB at a time at
+`$E000` (K325T: HOLD set around it). Per frame: cartesian v += a (or the
+OBJSPRING pull a = -k*d, d = position - anchor's, both axes), position
++= v; polar speed += change, heading += turn, v = speed*(cos, sin)
+heading; orbit angle += turn, position = parent's + r*(cos, sin) angle.
+Positions keep 10 integer bits (X 0..1023, Y -512..511, wrapping) and 8
+fraction bits (+30/+31); the flag bits of +1/+3 are kept. Then the
+limits (an axis outside the set: none, wrap by the set's size, bounce to
+the limit with the velocity or heading reflected, or kill) and the
+lifetime (count down; at 0 kill if +17 bit 4). A kill sets the draw mask
+and the mode to 0 and the object's event bit (ON OBJEVENT). The sine
+table (1024 quarter-wave magnitudes, 16 bits) is built at start-up in
+bank 4 at `$4E800`. `tests/objmodel.py` is a Python model of the step,
+`tests/objcheck.py` compares it with B65 byte for byte. Cost (Xemu, 1023
+objects, `tests/bench/objstep.txt`): static 1.6 ms, cartesian 10.4,
+with acceleration 12.8, plus limits 18, polar 29, orbit 32, spring 32 ms
+per frame (so far: fewer objects for 50 fps).
 
 ## Examples
 

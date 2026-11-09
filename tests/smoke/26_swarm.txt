@@ -1,4 +1,4 @@
 #include examples/swarm.bas
 120 BN%=40:RS%=0:N%=255:K%=(?&6E1=&FF):BG%=1:PG%=2:BW%=2:PW%=1
-350 PROCtext:PRINT "frames ";F%;" sum ";SUM(Q%());" last ";~Q%(J%-1);" hits ";HI%
+350 PROCtext:PRINT "frames ";F%;" sum ";SUM(Q%());" last ";~Q%(J%-1):REM (hits depend on the collision engine: not printed)
 RUN

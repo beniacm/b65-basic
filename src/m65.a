@@ -283,6 +283,10 @@ irqhandler:
         phx
         phy
         phz
+        tba                     ; base page 0 here (OBJSTEP runs with $1F)
+        pha
+        lda #0
+        tab
 !ifdef PROF {
         jsr profsample
         lda $d019
@@ -358,7 +362,12 @@ irqhandler:
 !ifndef PROF {                  ; (profile builds: no room for the mouse)
         jsr mousirq
 }
-.iex    plz
+        bit objauto             ; v3 objects: the frame integrator
+        bpl .iex
+        jsr objstep
+.iex    pla
+        tab
+        plz
         ply
         plx
         pla

@@ -32,6 +32,7 @@ blobs = [bytes(prg[mem(res_start):mem(code_end)])]
 for n in names:
     img = syms['ovl_%s_img' % n]
     blobs.append(bytes(prg[mem(img):mem(img) + syms['ovl_%s_end' % n] - 0xe000]))
+
 table, streams = lzh.pack(blobs)
 L = [table[k // 2] >> (4 * (1 - k % 2)) & 15 for k in range(256)]
 assert all(L.count(n) < 256 for n in range(1, 16))     # LZCNT is 8 bits
