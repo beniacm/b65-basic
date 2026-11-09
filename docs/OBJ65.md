@@ -58,8 +58,18 @@ Three things in chip RAM and a few registers:
   4). Clearing them (`AND $27`) switches the objects off.
 
 The screen is CHR16 (16-bit tokens, `$D054` bit 0), V400 with 50 rows, a
-row of 40 tokens at `S + 80*row` (`$D058` = 80); with XCTL bit 3 each row
-can just start with `$FFFF`, and the objects are appended there. Moving
+row of 40 tokens at `S + 80*row` (`$D058` = 80); the objects are appended
+where a row ends (its last token, or an early `$FFFF`).
+
+**Give every row at least one token.** On the board a row that starts
+with `$FFFF` shows a static strip of old glyphs in its left 64 pixels,
+although XCTL bit 3 should clear unpainted pixels (under investigation on
+the VIC-IV side). Until that is settled, start each row with an opaque
+base glyph or a GOTOX token before the `$FFFF` (B65's demos fill their
+rows with tokens: jumper, swarm and swarm2 with blank glyphs, bounce's
+star rows with GOTOX). OBJ65R2-R4 and jumper65 still start their rows
+with `$FFFF` and show the strip; they will be changed once the cause is
+known. Moving
 the object is one `WPOKE TB,X,Y` a frame (`VSYNC 251` waits for the
 bottom of the picture).
 
