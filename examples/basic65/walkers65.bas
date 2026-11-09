@@ -190,12 +190,12 @@
 3720 for ii=0 to 7:poke $5f880+4*ii,$c0,$17,255,255
 3730 ee=$5f800+16*ii:poke ee,0,0,0,0,0,1,$45,0:wpoke ee+8,$f880+4*ii:wpoke ee+10,$3c00+4*ii:poke ee+12,0,0,0,0
 3750 poke $ff83c00+4*ii,0,0:next ii
-3760 poke $ffd71f8,0,$f8,5,8:poke $ffd71f0,peek($ffd71f0) or $50:return
+3760 poke $ffd71f8,0,$f8,5,8:poke $ffd71f0,peek($ffd71f0) or $d0:return
 3800 rem dma job at tl: options mb, skip sk, $0b; cmd cm, count nb, source s, target d
 3810 s2=s-int(s/1048576)*1048576:d2=d-int(d/1048576)*1048576
 3820 poke tl,$80,int(s/1048576),$81,int(d/1048576),$85,sk,$0b,0,cm,mod(nb,256),int(nb/256)
 3830 poke tl+11,mod(s2,256),mod(int(s2/256),256),int(s2/65536),mod(d2,256),mod(int(d2/256),256),int(d2/65536),0,0,0
 3840 poke $d701,$38,5,0,0,0:return
-3900 if k then poke $ffd71f0,peek($ffd71f0) and $af
+3900 if k then poke $ffd71f0,peek($ffd71f0) and $2f
 3910 gosub 3650:poke $d054,v0:poke $d058,v1,v2:poke $d05e,v5:poke $d060,v6,v7,v8,v9,va,vb
 3920 poke $d068,vc,vd,ve:poke $d021,vf:poke $d031,vg:poke $d05d,v4:scnclr:return

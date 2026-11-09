@@ -74,7 +74,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >610 ?&D060=0:?&D061=0:?&D062=5:?&D064=CO% AND 255:?&D065=CO% DIV 256
 >620 ?&D020=0:?&D021=16:IF DB% THEN ?&D031=?&D031 OR 8:?&D05B=0:?&D07B=24:?&D051=&C0
 >625 SB%=?&D05C:?&D05C=SB%+16:REM wider side border: hides the fine-scroll gap at the left edge
->630 IF K% THEN ?&FFD71F0=?&FFD71F0 OR &50
+>630 IF K% THEN ?&FFD71F0=?&FFD71F0 OR &D0:REM list mode, objects, fast tokens (bit 7)
 >640 PROCspriteregs
 >760 REM main loop: positions, one DMA list, sprites, birds, wait for vsync
 >765 REM v2 X/Y must be 0..1023 (10-bit; Y signed): negative values are masked with AND 1023
@@ -101,7 +101,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1060 ?&D702=TL% DIV 65536:?&D704=0:?&D701=(TL% DIV 256) AND 255:?&D705=TL% AND 255:ENDPROC
 >1070 DEF PROCtext
 >1080 ?&D015=0:?&D06B=0:?&D051=&80:IF DB% THEN ?&D031=?&D031 AND &F7:?&D05B=D5%:?&D07B=D7%
->1085 ?&D05C=SB%:IF K% THEN ?&FFD71F0=?&FFD71F0 AND &AF
+>1085 ?&D05C=SB%:IF K% THEN ?&FFD71F0=?&FFD71F0 AND &2F
 >1090 PROCpalrest:MODE 0:ENDPROC
 >1100 DEF PROCtiles:LOCAL N%,R%,K%,X%,Y%,V%,M%,S%
 >1110 REM layer 3: per row the sky colours of its 8 lines; rock (lit, shade), snow

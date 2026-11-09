@@ -4,17 +4,19 @@ Derived from BBC BASIC (Z80) v5
 MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
 >10 REM HITPIX: full colour glyph 0 (left half), 1 (right half), mono glyph 3 (bit 7 only, rows 0..3)
->20 OBJUPDATE:?&D054=(?&D054 AND &F9) OR 4:G%=&54000:T%=&56000:C%=&55000:?&D068=0:?&D069=&50:?&D06A=5
+>15 B%=&58000:IF ?&6E1=&FF THEN B%=&E0000:REM the object table (K325T: chip RAM &E0000)
+>20 D5%=?&D054:C0%=?&D068:C1%=?&D069:C2%=?&D06A:OBJUPDATE:?&D054=(?&D054 AND &F9) OR 4:G%=&54000:T%=&56000:C%=&55000:?&D068=0:?&D069=&50:?&D06A=5
 >30 FOR I%=0 TO 63:?(G%+I%)=-(I% MOD 8<4)*7:?(G%+64+I%)=-(I% MOD 8>=4):NEXT:FOR I%=0 TO 7:?(C%+24+I%)=-(I%<4)*128:NEXT
 >40 !T%=&FFFF1500:!(T%+16)=&FFFF1501:!(T%+32)=&FFFF0003:FOR I%=0 TO 47:?(&FF87000+I%)=0:NEXT
 >50 OBJECT 1,100,100,T%,&7000:OBJECT 2,104,100,T%+16,&7010:OBJECT 3,100,100,T%+32,&7020
 >60 PRINT "apart halves ";HITPIX(1,2);HITPIX(2,1);" self ";HITPIX(1,1)
 >65 PRINT "moved        ";HITPIX(1,2,8,0);HITPIX(1,2,3,0);HITPIX(2,1,-8,0);HITPIX(1,2,8,9);HITPIX(1,2,8,-7)
 >70 OBJECT 2,100,100,T%+16,&7010:PRINT "same place   ";HITPIX(1,2):?&FF87010=&40:PRINT "glyph FLIPX  ";HITPIX(1,2):?&FF87010=0
->80 ?(&58000+64+6)=?(&58000+64+6) OR 16:PRINT "object FLIPX ";HITPIX(1,2);HITPIX(2,1)
->90 PRINT "mono         ";HITPIX(1,3);HITPIX(2,3);:OBJECT 3,100,104,T%+32,&7020:PRINT " 4 down ";HITPIX(1,3);:?(&58000+96+6)=?(&58000+96+6) OR 32:PRINT " FLIPY ";HITPIX(1,3)
+>80 ?(B%+64+6)=?(B%+64+6) OR 16:PRINT "object FLIPX ";HITPIX(1,2);HITPIX(2,1)
+>90 PRINT "mono         ";HITPIX(1,3);HITPIX(2,3);:OBJECT 3,100,104,T%+32,&7020:PRINT " 4 down ";HITPIX(1,3);:?(B%+96+6)=?(B%+96+6) OR 32:PRINT " FLIPY ";HITPIX(1,3)
 >100 OBJECT 3,100,100,T%+32,&7020,0,1,0:PRINT "mask 0       ";HITPIX(1,3):OBJECT 3,108,100,T%+32,&7020:PRINT "boxes touch  ";HITPIX(1,3)
->110 ?(&58000+32+14)=9:PRINT "width 9      ";HITPIX(1,3):?(&58000+32+14)=0
+>110 ?(B%+32+14)=9:PRINT "width 9      ";HITPIX(1,3):?(B%+32+14)=0
+>115 ?&D054=D5%:?&D068=C0%:?&D069=C1%:?&D06A=C2%:REM (the screen as before)
 >RUN
 apart halves 00 self -1
 moved        -10-10-1

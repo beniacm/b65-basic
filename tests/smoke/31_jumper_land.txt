@@ -1,6 +1,7 @@
 #include examples/jumper.bas
 110 REM landing test: the player falls onto platform 3 (340,230) seven pixels to the right, so only its column 0 (rows 2..4) is over the platform: the boxes overlap from y 223, the pixels from 226; it stands at 225 (row 4 on the platform), then walks right (frame 20) and falls off the edge
 120 BN%=30:RS%=0:NP%=6
+137 SL%=TRUE:REM landing by HITPIX each frame: the result must not depend on when the engine's event comes
 155 OBJUPDATE:REM (no objects yet: stops the frame interrupt)
 160 OBJECT 0,347,200,OA%,OC%,0,1,255,2,1:OBJVEL 0,0,0,0,0.35
 205 OBJUPDATE
