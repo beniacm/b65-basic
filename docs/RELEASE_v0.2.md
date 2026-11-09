@@ -137,6 +137,14 @@ HITPIX over the way it came, as jumper does).
 - OBJECT's height is the number of rows (1..63), as the VIC-IV reads
   table byte +5.
 
+## How this release was built
+
+From a clean checkout (`git worktree add /tmp/b65rel <commit>`, then in
+it `make dist`; ACME 0.97, Python 3), twice, with the same result:
+`dist/b65.d81` md5 `718f5d0414170fb8156544df812ab1eb`, `build/b65.prg`
+(= `dist/sd/B65.PRG`) md5 `b6ebd7dbc2e10a40699d22a52591a83f`. Built from
+2d58721; commits that change only `docs/` give the same files.
+
 ## Verified
 
 - K325T rig, step-6 core (feature level 3): smoke 33/33, `tests/board_v3.txt`
