@@ -101,7 +101,8 @@ runs the PROC between statements.
   when the frame interrupt runs long.
 - PROC/FN names with a type suffix (`DEF FNs$(T$)`) fixed.
 - The PRG is packed (LZH): the boot code unpacks the interpreter into
-  bank 0 and the overlays into bank 4 at start-up (about 0.8 s).
+  bank 0 and the overlays into bank 4 at start-up: 39 frames, 0.78 s at
+  50 Hz, measured on the K325T board (`?&201B` after boot).
 - New examples: `bounce.bas` (64 balls off each other, four parallax
   star planes), `swarm.bas` (255 objects), `swarm2.bas` (about 1000
   bullets moved by the frame interrupt), `jumper.bas` (gravity, double
