@@ -60,7 +60,9 @@ lines and CTRL-U. RUN/STOP is ESCAPE.
   without a number are appended). Channels: `OPENIN`, `OPENOUT`,
   `OPENUP`, `BGET#`, `BPUT#`, `PRINT#`, `INPUT#`/`READ#`, `GET$#`,
   `PTR#`, `EXT#`, `EOF#`, `CLOSE#` (files up to 960 KB, 4 open at a
-  time; they need attic RAM). `*CAT` lists the card, `*DELETE` deletes.
+  time; they need attic RAM). `*CAT` lists the card, `*DELETE` deletes (a
+  file found by its 8.3 or long name; its long name entries go too; both
+  FAT copies and the FSInfo free count are updated).
   Files are written by B65's own FAT32 code (root directory only).
 * **Memory:** programs live in their own 64 KB bank (`PAGE` = `&10800`,
   about 60 KB); variables and strings share about 11 KB with the stack;
@@ -185,6 +187,21 @@ count at `&FFD71C3`.
 the handler work once per pair (the lower object number). Without the
 K325T core `ON COLLISION` is accepted but never fires.
 
+Timing: the engine compares the positions of the snapshot taken at the
+top of a frame, the interrupt comes after that pass and the PROC runs at
+the next statement boundary (with `DI`/`EI` around the main loop: at the
+next `EI`). So the PROC usually sees the objects one frame further on
+than the pass did, more if the program steps them itself (OBJUPDATE in a
+loop without WAIT). A fast object that touches another for one frame
+only may have passed it already: confirm with HITPIX over the way it
+came (`examples/jumper.bas` searches the last two frames' fall with
+`HITPIX(0,Q%,0,-D%)`). The alternative is to test HITPIX yourself every
+frame (jumper's `SL%`): exact and the same on every machine, but it
+costs a HITPIX per candidate pair per frame (0.12 ms with the boxes
+apart, more when they overlap) where the engine costs nothing until it
+reports a pair. jumper uses `SL%` without the K325T and in its smoke
+tests.
+
 **Objects (list mode v3, 32-byte table entries).** B65 owns the object table:
 `objbase` = `&E0000` (chip RAM) on the K325T, elsewhere `&58000` (chip
 RAM: the statements and the motion run, nothing is shown). Entry n is at
@@ -308,7 +325,7 @@ without drawing the objects, or fall back to sprites/GOTOX.
 | `examples/basic65/parallax65.bas` | the same in BASIC 65 |
 | `examples/rrblist_b65.bas` | RRB list mode v1: bouncing balls (K325T only) |
 | `examples/rrblist_b65v2.bas` | RRB list mode v2: bouncing balls, V400 (K325T only) |
-| `examples/jumper.bas` | gravity, double jump and bounce (list mode v3 objects, step-6 core): the frame interrupt moves the player (OBJVEL with an acceleration, limits with bounce and half restitution), BASIC reads the stick (`OBJVEL 0,,-7` jumps, twice in the air); platforms by the collision engine, the landing confirmed with HITPIX (without the K325T core: HITPIX against every platform) |
+| `examples/jumper.bas` | gravity, double jump and bounce (list mode v3 objects, step-6 core): the frame interrupt moves the player (OBJVEL with an acceleration, limits with bounce and half restitution), BASIC reads the stick (`OBJVEL 0,,-7` jumps, twice in the air); platforms by the collision engine, the landing confirmed with HITPIX over the last two frames' fall; it stands while a platform pixel is under one of its own, else falls off (`SL%`: HITPIX against every platform each frame, without the K325T core and in the tests) |
 | `examples/selftest.bas` | one PASS/FAIL line per subsystem (with `*INFO` first): for bug reports, see the README |
 | `examples/swarm2.bas` | 1000 bullets moved by B65's frame interrupt (list mode v3 objects, step-6 core): BASIC only spawns 8 a frame (6 straight ones in the fast mode, 2 curving polar ones), OBJLIFE removes them; 50 fps in Xemu |
 | `examples/swarm.bas` | 254 bullets and a player (K325T list mode v2, 255 objects): three spawners (spiral, aimed stream, sprinkler), motion with whole-array operations (`P%()=P%()+V0%()`, `Q%()=P%() AND &3FF03FF`), the object table filled by 4 chained DMA jobs from the array in attic RAM; player with the mouse or a joystick in port 2, ON COLLISION counts hits (bullets and player in different collision groups). 4.7 ms a frame in Xemu: 50 fps |

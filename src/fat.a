@@ -51,6 +51,8 @@ ochan   = $1472         ; channel table offset
 ofd     = $1473         ; Hyppo file descriptor
 ocnt    = $1474         ; 2
 sdto    = $1476         ; 3 SD timeout counter
+dprev   = $1479         ; 4 LBA of the directory sector scanned before (DIRSCAN)
+dsdel   = $147d         ; $FF: DIRSCAN for FDELETE (read-only files match, directories do not)
 CMAX    = $0f           ; files up to $F0000 bytes (the name is kept at +$F0000)
 
 ovl_fat_img:
@@ -752,6 +754,7 @@ dirscan:
         ldx #3
 -       sta dmatch,x
         sta dfree,x
+        sta sdlba,x             ; (dprev of the first sector: 0)
         dex
         bpl -
         ldx #3
@@ -762,7 +765,9 @@ dirscan:
 .cl     lda #0
         sta dsec
 .sc     ldx #3
--       lda dclus,x
+-       lda sdlba,x             ; the sector before (long names of an entry
+        sta dprev,x             ; at the start of a sector begin there)
+        lda dclus,x
         sta fc,x
         dex
         bpl -
@@ -788,7 +793,7 @@ dirscan:
         ldx #16
 .e      ldy #0
         lda (ptr2),y
-        beq .end                ; end of directory: free here
+        lbeq .end                ; end of directory: free here
         cmp #$e5
         beq .fr
         ldy #11
@@ -805,7 +810,12 @@ dirscan:
         bpl -
         ldy #11                 ; a directory or read-only file: refuse
         lda (ptr2),y
-        and #$11
+        bit dsdel
+        bpl ++
+        and #$10                ; (FDELETE: a directory is not the file)
+        bne .nx
+        bra +
+++      and #$11
         beq +
         lda #$82
         sta $d680
@@ -873,6 +883,115 @@ dirscan:
         sbc #>DIRBUF
         tay
         pla
+        rts
+
+; ---------------- delete a file: fn83 (the 8.3 name of an entry) ----------------
+; FDELETE: its long name entries (attribute $0F, back to the one with
+; ordinal bit 6) and its entry get $E5, its clusters are freed (both FAT
+; copies, FSInfo free count), as the overwrite in WFILE frees them. Carry
+; clear: no such file (directories are not files).
+!zone fdelete
+fdelete:
+        jsr fatmount
+        lda #$ff
+        sta dsdel
+        jsr dirscan
+        lda #0
+        sta dsdel
+        lda dmatch
+        ora dmatch+1
+        ora dmatch+2
+        ora dmatch+3
+        bne +
+        clc
+        rts
++       ldx #3
+-       lda dmatch,x
+        sta sdlba,x
+        dex
+        bpl -
+        jsr sdread
+        lda dmoff
+        sta ftmp
+        lda dmoff+1
+        sta ftmp+1
+        jsr .ep
+        ldy #26                 ; first cluster
+        lda (ptr2),y
+        sta fc
+        iny
+        lda (ptr2),y
+        sta fc+1
+        ldy #20
+        lda (ptr2),y
+        sta fc+2
+        iny
+        lda (ptr2),y
+        sta fc+3
+        ldy #0
+        lda #$e5
+        sta (ptr2),y
+        lda #0
+        sta ftmp+2              ; (the sector before not read yet)
+.lb     lda ftmp                ; the entry before: a long name part?
+        ora ftmp+1
+        bne +
+        lda ftmp+2              ; at the start of the sector: the one before
+        bne .ld                 ; (only one: names are up to 64 characters)
+        lda dprev
+        ora dprev+1
+        ora dprev+2
+        ora dprev+3
+        beq .ld
+        jsr sdwrite
+        ldx #3
+-       lda dprev,x
+        sta sdlba,x
+        dex
+        bpl -
+        jsr sdread
+        inc ftmp+2
+        lda #<512
+        sta ftmp
+        lda #>512
+        sta ftmp+1
++       sec
+        lda ftmp
+        sbc #32
+        sta ftmp
+        lda ftmp+1
+        sbc #0
+        sta ftmp+1
+        jsr .ep
+        ldy #11
+        lda (ptr2),y
+        cmp #$0f
+        bne .ld
+        ldy #0
+        lda (ptr2),y
+        cmp #$e5
+        beq .ld
+        pha
+        lda #$e5
+        sta (ptr2),y
+        pla
+        and #$40                ; the first part of the name: done
+        beq .lb
+.ld     jsr sdwrite
+        jsr freechain
+        jsr fatflush
+        jsr fsupd
+        lda #$82
+        sta $d680
+        sec
+        rts
+.ep     lda ftmp                ; ptr2 -> entry ftmp in SECBUF
+        clc
+        adc #<SECBUF
+        sta ptr2
+        lda ftmp+1
+        adc #>SECBUF
+        sta ptr2+1
         rts
 
 ; ---------------- write a file: fn83, data at fsrc (28-bit), length flen ----------------
@@ -2508,14 +2627,15 @@ o_star: ldy #0
         jsr fexists
         bcs +
         jmp notfound
-+       jsr setname2
-        lda #$34
-        jsr hyppo
++       ldx #10                 ; its 8.3 name (FEXISTS also matches long names)
+-       lda DIRENT+65,x
+        sta fn83,x
+        dex
+        bpl -
+        jsr fdelete             ; B65's FAT code: both FATs and FSInfo
         bcs +
         jmp notfound
-+       lda #$26
-        jsr hyppo
-        rts
++       rts
 
 ; (TEST_INIT lives here: called once at start-up, after OVINIT)
 !zone testinit
