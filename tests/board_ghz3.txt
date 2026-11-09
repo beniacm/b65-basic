@@ -1,0 +1,4 @@
+REM GHZ act 3 on the board (K325T level >= 3; level 4: 4-pixel painting): act 1 for 200 frames, no act 2, then 1000 frames of act 3 (rings 64 -> 300 -> 1000 as objects, clouds, bushes, HUD with FPS and the longest line), the closing card, "act 3: 1001 frames, n late" (3 expected: the caption frames). Any other core: 400 frames, 64 rings
+#include examples/ghz.bas
+110 BN%=0:RN%=0:VS%=0:A1%=200:SM%=1:A2%=0:XT%=0
+RUN

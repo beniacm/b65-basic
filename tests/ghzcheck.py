@@ -2,7 +2,10 @@
 """examples/ghz.bas (act 1) against tests/ghzmodel.py: B65 runs N frames in
 Xemu (MEGA65 ROM boot, a private card copy with the art), the memory dump's
 screen (token low bytes, GOTOX fine X, ring slots) must equal the model's.
-usage: tests/ghzcheck.py [frames] [--local | --pack] [--act2 frame] [--shot file.png] [-v]
+usage: tests/ghzcheck.py [frames] [--local | --pack] [--act2 frame | --act3 frame] [--shot file.png] [-v]
+  --act3 F  act 1 until frame F, no act 2, then act 3 with its objects in a
+           scratch table in bank 1 ($17000): the ring, cloud and bush entries
+           must equal the model's (the ring slots are parked in act 3)
   default  the generated build/B65GHZG.BBC; INTRO2.D81 with one checked byte
            of SCROLLTEST changed (or none): the program must fall back
   --local  INTRO2.D81 (D81 below) on the card: ghz.bas reads SCROLLTEST from it
@@ -34,6 +37,61 @@ def tamper(src, dst):
     d[off(ft, fs) + 2 + 1600 % 254] ^= 0x55
     open(dst, 'wb').write(d)
 
+class Act3:
+    """act 3's object table (ghz.bas PROCact3/PROCa3 and the routine A3%):
+    objects 0..7 clouds, 8..1007 rings, 1008..1019 bushes"""
+    def __init__(self, g):
+        self.g, self.n, self.anim = g, 64, 0
+        self.x = [(56 * i + 20 * (i % 3)) << 8 for i in range(8)] + [(40 * i) << 8 for i in range(12)]
+    def frame(self, f3):             # f3: PROCa3's frame count (0: the PROCact3 frame)
+        g = self.g
+        if f3:
+            if 100 < f3 <= 218 or (f3 > 400 and self.n < 1000):
+                self.n += 2
+            if f3 % 10 == 0:
+                self.anim = (self.anim + 1) & 3
+            bush = g.speed * 384
+        else:
+            bush = 0
+        for i in range(20):          # X in 1/256 pixel, wrap below -64 by 448
+            v = self.x[i] - (64 if i < 8 else bush)
+            if v < -64 * 256:
+                v += 448 * 256
+            self.x[i] = v
+    def check(self, m, base):
+        g, bad = self.g, 0
+        s1, s2 = g.p['sine1'], g.p['sine2']
+        def want_ring(i):
+            grp, k = i >> 4, i & 15
+            o0, o1 = (37 * (grp >> 3)) & 255, (53 * (grp >> 3)) & 255
+            q0 = (g.ph[0] + o0 + 16 * k) & 255; q1 = (g.ph[1] + o1 + 16 * k) & 255
+            q2 = (g.c[0] + 32 * grp + 16 * k) & 255; q3 = (g.c[1] + 32 * grp + 16 * k) & 255
+            x = s1[q0] + s1[q2] + 4
+            y = (s2[q1] + s2[q3]) & 255
+            e = {0: x & 255, 1: x >> 8, 4: 0xFF if 8 <= y < 223 else 0, 8: 4 * ((grp + self.anim) & 3)}
+            if 8 <= y < 223:
+                yy = (y - 15) & 0x3FF
+                e[2], e[3] = yy & 255, yy >> 8
+            return e
+        for i in range(1000):
+            a = base + 32 * (8 + i)
+            want = want_ring(i) if i < self.n else {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 8: 0}
+            for o, v in want.items():
+                if m[a + o] != v:
+                    bad += 1
+                    if bad <= 8:
+                        print('ring %d +%d: b65 %02x model %02x' % (i, o, m[a + o], v))
+        for i in range(20):
+            a = base + 32 * (i if i < 8 else 1000 + i)
+            xi = (self.x[i] >> 8) & 0x3FF
+            got = m[a] | (m[a + 1] << 8)
+            if got != xi:
+                bad += 1
+                if bad <= 8:
+                    print('object %d X: b65 %d model %d' % (i, got, xi))
+        print('act 3: %d rings' % self.n)
+        return bad
+
 def unpack(p):
     b = lambda o, n: list(p[o:o + n])
     return dict(sine1=b(792, 256), sine2=b(1048, 256), b1=b(1304, 250), b2=b(1554, 147),
@@ -48,8 +106,11 @@ def main():
     gen = os.path.join(ROOT, 'build/B65GHZG.BBC')
     src = open(os.path.join(ROOT, 'examples/ghz.bas')).read().replace('110 BN%=0', '110 BN%=' + str(frames))
     shot = sys.argv[sys.argv.index('--shot') + 1] if '--shot' in sys.argv else None
+    a3 = int(sys.argv[sys.argv.index('--act3') + 1]) if '--act3' in sys.argv else None
     if '--act2' in sys.argv:        # act 2 from this frame (the overlay file goes on the card too)
         src = src.replace('A1%=3000:SM%=1', 'A1%=' + sys.argv[sys.argv.index('--act2') + 1] + ':SM%=0')
+    if a3 is not None:
+        src = src.replace('A1%=3000:SM%=1:A2%=1:XT%=0', 'A1%%=%d:SM%%=0:A2%%=0:XT%%=1' % a3)
     if shot:                        # keep the picture: no return to text, stay in a loop
         src = src.replace('T0%=TIME-T0%:PROCback:', 'T0%=TIME-T0%:REPEAT UNTIL FALSE:')
     with tempfile.TemporaryDirectory() as td:
@@ -64,7 +125,7 @@ def main():
             subprocess.run(['mcopy', '-o', '-i', card + '@@1M', os.path.join(td, 'INTRO2.D81'), '::INTRO2.D81'], check=True, env=env)
         else:
             subprocess.run(['mdel', '-i', card + '@@1M', '::INTRO2.D81'], env=env, stderr=subprocess.DEVNULL)
-        if '--act2' in sys.argv:
+        if '--act2' in sys.argv or a3 is not None:
             subprocess.run([sys.executable, os.path.join(ROOT, 'tools/mkghz.py'), '--text'], check=True, stdout=subprocess.DEVNULL)
             subprocess.run(['mcopy', '-o', '-i', card + '@@1M', os.path.join(ROOT, 'build/B65GHZS.BBC'), '::B65GHZS.BBC'],
                            check=True, env=env)
@@ -84,8 +145,11 @@ def main():
             print(out[-1500:]); return 2
         m = open(mem, 'rb').read()
     g = ghzmodel.GHZ(unpack(pack))
-    for _ in range(frames):
+    a3m = Act3(g) if a3 is not None else None
+    for f in range(frames):
         g.frame()
+        if a3m and f >= a3 + 1:
+            a3m.frame(f - a3 - 1)
     if '-v' in sys.argv:            # which model frame is nearest (debugging)
         h = ghzmodel.GHZ(unpack(pack))
         for f in range(frames + 6):
@@ -99,7 +163,7 @@ def main():
         got = m[a:a + 208]
         want = g.row[row]
         idx = [0, 44] + list(range(2, 44, 2)) + list(range(46, 88, 2))
-        for s in range(30):
+        for s in range(30 if a3m is None else 0):     # (act 3 parks the slots)
             o = 88 + 4 * s
             idx += [o + 1] if want[o + 1] == 2 else [o, o + 1, o + 2]
         for i in idx:
@@ -107,6 +171,8 @@ def main():
                 bad += 1
                 if bad <= 8:
                     print('row %d byte %d: b65 %02x model %02x' % (row, i, got[i], want[i]))
+    if a3m:
+        bad += a3m.check(m, 0x17000)
     tail = [l for l in out.splitlines() if l.startswith('frames')]
     art = [l for l in out.splitlines() if 'ART' in l and ' in ' in l]
     print(art[-1] if art else 'no art line')

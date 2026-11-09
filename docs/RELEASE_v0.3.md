@@ -55,10 +55,22 @@ until then this file grows with every change.
   under a second); without it, the original generated tileset
   `B65GHZG.BBC` from dist/sd ("GENERATED ART"). Nothing of the original art
   is in the repository or the release.
-- Act 2 (S2): "...BUT IN BASIC?" and then the program's own source scrolls
-  up over the running scene (two text token sets per row with GOTOX Y
-  offsets, one pixel a frame; the text from attic RAM through the same DMA
-  list).
+- Act 2 (S2): "BUT HAVE YOU SEEN IT IN BASIC?" and then the program's own
+  source scrolls up over the running scene (two text token sets per row
+  with GOTOX Y offsets, 2 pixels a frame; the text from attic RAM through
+  the same DMA list), closing with "B65 BASIC. n LINES." / "50 FRAMES PER
+  SECOND.".
+- Act 3 (S3): "NOW WITH THE K325T VIC-IV": on a K325T (level 3+) the rings
+  move into the list-mode object table and ramp 64 -> 300 -> 1000, with 8
+  clouds behind and 12 bushes in front (objects too: 10 layers), 4-pixel
+  painting at level 4, a HUD with RINGS, FPS, OBJECTS and the VIC-IV's
+  longest line ("1000 RINGS. 10 LAYERS. STILL BASIC."); the per-frame
+  object work is one inline-assembler routine. Other cores: a one-line
+  note, act 1's 64 rings. Then the closing card and the late frames per
+  act (all three acts at 50 fps in Xemu apart from start-up and caption
+  frames).
+- The DMA job sources and the list's start moved into the assembler routine
+  (BASIC set 52 sources by hand: 8% of the frames were late).
 - Files: GHZ.BAS and its data files (B65GHZG.BBC, B65GHZS.BBC) go to the
   SD card root, next to INTRO2.D81: B65 reads data files from the SD card's
   root directory only, not from a mounted D81.
@@ -70,6 +82,13 @@ until then this file grows with every change.
   the file) to memory at addr (28-bit; below &10000 bank 0), `PTR#` moves
   on; about 0.5 ms a KB instead of a BASIC `BGET#` loop
   (`tests/hw/03_chan.txt`).
+- The compiled-expression cache has 16 ways instead of 4: a loop with more
+  hot expressions than ways in one cache group (a matter of where its lines
+  lie in memory) recompiled them on every pass; GHZ's act 3 missed up to
+  226 of 400 frames in some layouts, none now. Benchmarks unchanged.
+- Test mode: INKEY/INKEY$ at the end of a test script return "no key" (the
+  program goes on) instead of ending the session (on the board a polling
+  program was abandoned after its first INKEY).
 
 ## Build and tests
 

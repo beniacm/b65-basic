@@ -1,5 +1,5 @@
-1 REM Core: any MEGA65 core. The art: SCROLLTEST from your own INTRO2.D81 in the SD card root (read at run time), else B65GHZG.BBC (generated tiles, in dist/sd). B65GHZS.BBC: act 2.
-5 REM GHZ, act 1: Maxice's SCROLLTEST scroller (INTRO2.D81) frame for frame in B65: seven parallax bands, a front layer whose speed ramps, 64 rings on sine paths, a cycling waterfall
+1 REM Core: any MEGA65 core. The art: SCROLLTEST from your own INTRO2.D81 in the SD card root (read at run time), else B65GHZG.BBC (generated tiles, in dist/sd). B65GHZS.BBC: acts 2 and 3.
+5 REM GHZ, act 1: Maxice's SCROLLTEST scroller (INTRO2.D81) frame for frame in B65: seven parallax bands, a front layer whose speed ramps, 64 rings, a waterfall. Act 2: this listing. Act 3 (K325T): 1000 rings, clouds, bushes as objects
 10 REM The VIC-IV draws 26 rows of 104 16-bit tokens (V400, 208 bytes a row):
 20 REM GOTOX + 21 band tiles + GOTOX + 21 front tiles + 30 ring slots (GOTOX
 30 REM with a Y offset + a ring glyph). Tiles are NCM (16 x 8 pixels, 4 bits).
@@ -11,40 +11,56 @@
 90 REM bytes, moves 64 rings on two summed sine tables per axis and puts each
 95 REM into the slots of 3 rows (as SCROLLTEST does). The data: docs/GHZ.md.
 100 REM BN%>0: BN% frames without the intro and the frame wait (tests); RN%>0: stop after RN% frames.
-110 BN%=0:RN%=0:VS%=0:A1%=3000:SM%=1:REM A1%: the frames of act 1; SM%=0: the text in 8-pixel steps (Xemu draws no GOTOX Y offsets)
-115 DN$="INTRO2.D81":PN$="SCROLLTEST":REM the D81 in the SD card root and the program on it that has the art
-120 SC%=&50000:LS%=372:CO%=&800:CR%=&FF80000+CO%:TM%=&52600:GA%=&55800:TA%=&5A600:DL%=&5C000:FT%=&5D000:TT%=&8580000:PS%=&5F000
-130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25)
+110 BN%=0:RN%=0:VS%=0:A1%=3000:SM%=1:A2%=1:XT%=0:REM A1%: the frames of act 1; SM%=0: the text in 8-pixel steps (Xemu draws no GOTOX Y offsets); A2%=0: no act 2; XT%=1: act 3's objects in a scratch table (tests)
+115 DN$="INTRO2.D81":PN$="SCROLLTEST":SV%=2:REM the D81 in the SD card root and the program on it that has the art; SV%: act 2 scrolls 1, 2, 4 or 8 pixels a frame
+120 SC%=&50000:LS%=372:CO%=&800:CR%=&FF80000+CO%:TM%=&52600:GA%=&55800:TA%=&5A600:DL%=&5C000:FT%=&5D000:TT%=&8580000:PS%=&5F000:OG%=&5E800:OP%=&5F400:OL%=&5F500:JS%=&5F600:C3%=&3000:HU%=&85A0000
+130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25),FR%(3),LA%(3)
 140 ON ERROR E$=REPORT$:E%=ERL:PROCback:PRINT E$;" at line ";E%:END
 150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(26,11);"YOU HAVE SEEN THIS ON MEGA65":PRINT TAB(23,13);"SCROLLTEST BY MAXICE, INTRO DISK 2"
 155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,16);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
 160 PROCtables:PROCscreen:PROCdma:PROCasm:PROCvic
 165 IF BN%=0 THEN REPEAT UNTIL INKEY(0)<0:REM keys pending from before do not end the demo
-170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:TL%=0:TS%=0:T0%=TIME
+170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:LQ%=?&D7FA:Q%=LQ%:T0%=TIME
 200 REPEAT
 210 FOR B%=0 TO 6:C%(B%)=C%(B%)-ST%(B%):IF C%(B%)<0 THEN PROCband(B%)
 220 ?(V%+10+B%)=C%(B%)>>SH%(B%):NEXT
 230 W1%=W1%+1:IF W1%=8 THEN W1%=0:W2%=(W2%+1) AND 3:PROCwf
 240 FX%=FX%-SP%:IF FX%<0 THEN FX%=FX%+16:PROCfront
-250 ?(V%+7)=FX%:?(V%+6)=SP%:IF AC%=2 THEN PROCscroll ELSE IF F%=A1% AND NL% THEN PROCact2
+250 ?(V%+7)=FX%:?(V%+6)=SP%:IF AC%>1 OR F%=A1% THEN PROCstep
 270 CALL RING%:REM the job sources, the DMA list, the GOTOX bytes, the rings
-280 F%=F%+1:IF BN%=0 THEN WAIT
+275 IF AC%=4 THEN IF K3%+XT% THEN CALL A3%:REM act 3: 1000 rings, clouds and bushes in the object table
+280 F%=F%+1:FR%(AN%)=FR%(AN%)+1:IF BN%=0 THEN WAIT:Q%=?&D7FA:IF F%-AS%>10 THEN LA%(AN%)=LA%(AN%)+((Q%-LQ%-1) AND 255)
+282 LQ%=Q%
 285 IF BN%=0 THEN IF F%=RN% OR INKEY(0)>=0 THEN EX%=1
 290 UNTIL F%=BN% OR EX%
-300 T0%=TIME-T0%:PROCback:IF BN%+RN% THEN PRINT "frames ";F%;" speed ";SP%;" front ";FC%;",";FX%;" in ";T0%;" cs"
+300 T0%=TIME-T0%:PROCback:IF BN%+RN%=0 THEN PROCcard
+305 IF BN%+RN% THEN PRINT "frames ";F%;" speed ";SP%;" front ";FC%;",";FX%;" in ";T0%;" cs"
+308 FOR I%=1 TO 3:IF FR%(I%) THEN PRINT "act ";I%;": ";FR%(I%);" frames, ";LA%(I%);" late"
+309 NEXT
 310 END
+320 DEF PROCcard:CLS:PRINT TAB(25,11);"B65 BASIC FOR MEGA65 AND K325T":PRINT TAB(26,13);"github.com/beniacm/b65-basic":T%=TIME:REPEAT UNTIL TIME-T%>=400:PRINT:ENDPROC
+330 REM ---- the acts: 1 (until frame A1%), 2 (the listing; AC% 2 scrolling, 3 the closing caption), 3 (AC% 4)
+332 DEF PROCstep
+334 IF AC%=1 THEN PROCa1:ENDPROC
+338 IF AC%=2 THEN PROCscroll:H2%=0:ENDPROC
+340 IF AC%=3 THEN H2%=H2%+1:IF H2%>=150 THEN PROCact3:ENDPROC
+342 IF AC%=4 THEN PROCa3
+344 ENDPROC
+346 DEF PROCa1:IF NL%=0 THEN EX%=1:ENDPROC:REM (no B65GHZS.BBC: act 1 only)
+347 AN%=2:AS%=F%:AC%=3:H2%=150:IF A2% THEN PROCact2
+348 ENDPROC
 400 DEF PROCband(B%)
 410 IF RL%(B%) THEN C%(B%)=RL%(B%) ELSE C%(B%)=C%(B%)+AD%(B%)
 420 K%(B%)=K%(B%)+1:IF K%(B%)>=W%(B%) THEN K%(B%)=0
 430 ?(V%+17+B%)=2*K%(B%):ENDPROC:REM (RING moves the rows' job sources)
 440 REM ---- act 2: the source scrolls up over the picture (two token sets a row: line L moved up by S pixels, line L+1 down by 8-S)
 442 DEF PROCact2:AC%=2:TL%=0:TS%=0:?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:PROCtext:ENDPROC
-444 DEF PROCscroll:TS%=TS%+1:IF TS%=8 THEN TS%=0:TL%=TL%+1:PROCtext
+444 DEF PROCscroll:TS%=TS%+SV%:IF TS%>=8 THEN TS%=0:TL%=TL%+1:PROCtext
 445 IF TL%>=NL%-27 THEN AC%=3:?(V%+8)=0:?(V%+9)=2:ENDPROC:REM (the closing caption stays on rows 11 and 13)
 446 IF SM%=0 THEN ?(V%+8)=0:?(V%+9)=2:ENDPROC
 447 IF TS% THEN ?(V%+8)=TS%<<5:?(V%+9)=((8-TS%)<<5) OR &10 ELSE ?(V%+8)=0:?(V%+9)=2:REM (Y offset: bits 15-13 up, bit 12: down)
 448 ENDPROC
-449 DEF PROCtext:LOCAL T%:T%=&80000+80*TL%:?(V%+25)=T% AND 255:?(V%+26)=(T%>>8) AND 255:?(V%+27)=T%>>16:ENDPROC
+449 DEF PROCtext:PROCtb(&80000+80*TL%):ENDPROC
 450 DEF PROCfront
 460 FC%=FC%+1:IF FC%=&7C THEN FC%=0:S%=(SP%+1) AND 15:IF S% THEN SP%=S%
 470 ?(V%+24)=2*FC%:ENDPROC
@@ -55,8 +71,8 @@
 520 OK%=0:AR$="GENERATED ART":F%=OPENIN DN$:IF F% THEN PROCd81(F%):CLOSE#F%
 530 IF OK% THEN AR$="ORIGINAL ART FROM "+DN$ ELSE F%=OPENIN "B65GHZG":IF F%=0 THEN ERROR 214,"B65GHZG.BBC not on the SD card (see docs/GHZ.md)"
 540 IF OK%=0 THEN BGET#F%,TA%,3796:BGET#F%,GA%,19904:CLOSE#F%
-560 NL%=0:F%=OPENIN "B65GHZS":IF F%=0 THEN ENDPROC:REM (no overlay: no act 2)
-570 NL%=BGET#F%:NL%=NL%+256*BGET#F%:BGET#F%,FT%,6144:BGET#F%,TT%,80*NL%:CLOSE#F%:ENDPROC
+560 NL%=0:F%=OPENIN "B65GHZS":IF F%=0 THEN ENDPROC:REM (no overlay: no acts 2 and 3)
+570 NL%=BGET#F%:NL%=NL%+256*BGET#F%:BGET#F%,FT%,6144:BGET#F%,TT%,80*NL%:BGET#F%,OP%,96:BGET#F%,OG%,2048:CLOSE#F%:ENDPROC
 580 REM D81: the directory from track 40 sector 3 (8 entries of 32 bytes a sector), the file's sectors (254 bytes each) land as loaded at $2001 (bank 5: $52001, so glyph n is at GA%)
 582 DEF PROCd81(F%):LOCAL T%,S%,E%,A%,N%,L%,I%,N$,P$:P$=PN$+STRING$(16-LEN PN$,CHR$&A0):T%=40:S%=3:A%=0
 584 REPEAT PTR#F%=((T%-1)*40+S%)*256:BGET#F%,DB%,256:FOR E%=0 TO 224 STEP 32:N$="":FOR I%=5 TO 20:N$=N$+CHR$(DB%?(E%+I%)):NEXT
@@ -115,8 +131,13 @@
 955 RM%=PH%+28:?(V%+8)=2:?(V%+9)=2:FOR I%=0 TO 25:B%=0:WHILE I%>R1%(B%):B%=B%+1:ENDWHILE:?(RM%+I%)=B%:NEXT
 956 REM job sources: band row = BB(row) + 2 x column (V%+17+band), front row = FB(row) + 2 x column (V%+24), text rows from V%+25..27 (80 bytes a line)
 957 BB%=RM%+26:FB%=BB%+78:FOR I%=0 TO 25:FOR O%=0 TO 2:?(BB%+26*O%+I%)=(BL%(I%)>>(8*O%)) AND 255:?(FB%+26*O%+I%)=(FL%(I%)>>(8*O%)) AND 255:NEXT:NEXT
-958 FOR I%=17 TO 24:?(V%+I%)=0:NEXT:?(V%+25)=0:?(V%+26)=0:?(V%+27)=8
-960 DIM RING% 700:FOR I%=0 TO 2 STEP 2:P%=RING%
+958 FOR I%=17 TO 24:?(V%+I%)=0:NEXT:?(V%+25)=0:?(V%+26)=0:?(V%+27)=8:?(V%+30)=0
+959 K3%=0:IF ?&6E1=&FF THEN IF ?&FFD71FD>=3 THEN K3%=1
+960 NO%=1020:RT%=&17000:IF K3% THEN RT%=&E0000:REM the object table (K325T: B65's own table address; tests: scratch in bank 1 above the program)
+961 IF K3%=0 AND XT% AND TOP>RT% THEN ERROR 215,"Program too long for the test table"
+962 DIM OV% 130:FOR I%=0 TO 3:?(OV%+70+I%)=((RT%+256)>>(8*I%)) AND 255:?(OV%+74+I%)=((RT%+32*1008)>>(8*I%)) AND 255:?(OV%+78+I%)=(RT%>>(8*I%)) AND 255:NEXT
+963 ?OV%=64:?(OV%+1)=0:?(OV%+2)=0
+965 DIM RING% 700,A3% 600:FOR I%=0 TO 2 STEP 2:P%=RING%
 970 [OPT I%
 971 .ring LDA #(DL%>>16):STA &C2:LDA #0:STA &C3:LDA #((DL%+13) AND 255):STA &C0:LDA #(((DL%+13)>>8) AND 255):STA &C1:LDY #0
 972 .s1 LDX RM%,Y:LDA BB%,Y:CLC:ADC V%+17,X:LDZ #0:STA [&C0],Z:LDA BB%+26,Y:ADC #0:INZ:STA [&C0],Z:LDA BB%+52,Y:ADC #0:INZ:STA [&C0],Z:JSR nx:INY:CPY #26:BNE s1:LDY #0
@@ -138,7 +159,7 @@
 1070 LDA &B4:CLC:ADC #16:STA &B4:LDA &B2:CLC:ADC #&20:STA &B2:LDA &B3:CLC:ADC #&20:STA &B3
 1080 LDA &B7:CLC:ADC #3:CMP #&96:BNE g3:LDA #&84
 1090 .g3 STA &B7:DEC &B5:LBNE g1
-1100 LDA V%+6:CMP #4:LBEQ pd:LDX #27:LDA #0
+1100 LDA V%+30:LBNE pd:LDA V%+6:CMP #4:LBEQ pd:LDX #27:LDA #0
 1110 .c0 STA CN%,X:DEX:BPL c0
 1120 LDX #64
 1130 .p1 LDA TY%,X:AND #7:EOR #7:ASL A:ASL A:ASL A:ASL A:ASL A:STA &B8
@@ -154,7 +175,37 @@
 1204 .tx LDY #26
 1205 .t1 LDZ #0:LDA &B0:STA [&C0],Z:INZ:LDA &B1:STA [&C0],Z:INZ:LDA &B2:STA [&C0],Z:JSR nx:LDA &B0:CLC:ADC #80:STA &B0:BCC t2:INC &B1:BNE t2:INC &B2
 1206 .t2 DEY:BNE t1:RTS
-1210 ]:NEXT:ENDPROC
+1208 ]:P%=A3%
+1210 [OPT I%
+1212 .a3 LDA OV%+70:STA &B0:LDA OV%+71:STA &B1:LDA OV%+72:STA &B2:LDA OV%+73:STA &B3:LDA OV%:STA &BB:LDA OV%+1:STA &BC:ORA &BB:LBEQ a3e
+1214 LDA #0:STA &B5:STA &B7:STA &B8:LDA V%+2:STA &B9:LDA V%+3:STA &BA
+1216 .a3g LDA V%:CLC:ADC &B7:STA &BD:LDA V%+1:CLC:ADC &B8:STA &BE:LDA &B9:STA &BF:LDA &BA:STA &C0
+1218 LDA &B5:CLC:ADC OV%+2:AND #3:ASL A:ASL A:STA &C1:LDX #16
+1220 .a3k LDY &BD:LDA S1%,Y:LDY &BF:CLC:ADC S1%,Y:STA &C2:LDA #0:ROL A:STA &C3:LDA &C2:CLC:ADC #4:LDZ #0:STA [&B0],Z:LDA &C3:ADC #0:INZ:STA [&B0],Z
+1222 LDY &BE:LDA S2%,Y:LDY &C0:CLC:ADC S2%,Y:CMP #8:BCC a3h:CMP #223:BCS a3h:SEC:SBC #15:LDZ #2:STA [&B0],Z:LDA #0:SBC #0:AND #3:INZ:STA [&B0],Z:LDA #&FF:BRA a3v
+1224 .a3h LDA #0
+1226 .a3v LDZ #4:STA [&B0],Z:LDA &C1:LDZ #8:STA [&B0],Z:LDZ #0
+1228 LDA &BD:CLC:ADC #16:STA &BD:LDA &BE:CLC:ADC #16:STA &BE:LDA &BF:CLC:ADC #16:STA &BF:LDA &C0:CLC:ADC #16:STA &C0
+1230 LDA &B0:CLC:ADC #32:STA &B0:BCC a3n:INC &B1:BNE a3n:INC &B2
+1232 .a3n LDA &BB:BNE a3d:DEC &BC
+1234 .a3d DEC &BB:LDA &BB:ORA &BC:BEQ a3e:DEX:LBNE a3k
+1236 LDA &B9:CLC:ADC #32:STA &B9:LDA &BA:CLC:ADC #32:STA &BA:INC &B5:LDA &B5:AND #7:BNE a3x:LDA &B7:CLC:ADC #37:STA &B7:LDA &B8:CLC:ADC #53:STA &B8
+1238 .a3x JMP a3g
+1240 .a3e LDA OV%+78:STA &B0:LDA OV%+79:STA &B1:LDA OV%+80:STA &B2:LDA OV%+81:STA &B3:LDA OV%+5:STA &C4:LDA OV%+6:STA &C5:LDX #8:LDY #0:JSR mv
+1242 LDA OV%+74:STA &B0:LDA OV%+75:STA &B1:LDA OV%+76:STA &B2:LDA OV%+77:STA &B3:LDA OV%+3:STA &C4:LDA OV%+4:STA &C5:LDX #12:LDY #24:JSR mv:RTS
+1244 .mv LDA OV%+8,Y:SEC:SBC &C4:STA OV%+8,Y:LDA OV%+9,Y:SBC &C5:STA OV%+9,Y:LDA OV%+10,Y:SBC #0:STA OV%+10,Y:BPL mv2
+1246 LDA OV%+9,Y:CMP #&C0:BCS mv2:CLC:ADC #&C0:STA OV%+9,Y:LDA OV%+10,Y:ADC #1:STA OV%+10,Y
+1248 .mv2 LDZ #0:LDA OV%+9,Y:STA [&B0],Z:INZ:LDA OV%+10,Y:AND #3:STA [&B0],Z:LDZ #0
+1250 LDA &B0:CLC:ADC #32:STA &B0:BCC mv3:INC &B1:BNE mv3:INC &B2
+1252 .mv3 INY:INY:INY:DEX:BNE mv:RTS
+1254 .ai LDA OV%+70:STA &B0:LDA OV%+71:STA &B1:LDA OV%+72:STA &B2:LDA OV%+73:STA &B3:LDA #&E8:STA &BB:LDA #3:STA &BC
+1256 .ai1 LDY #0:LDZ #0
+1258 .ai2 LDA OV%+86,Y:STA [&B0],Z:INY:INZ:CPY #32:BNE ai2:LDZ #0:LDA &B0:CLC:ADC #32:STA &B0:BCC ai3:INC &B1:BNE ai3:INC &B2
+1260 .ai3 LDA &BB:BNE ai4:DEC &BC
+1262 .ai4 DEC &BB:LDA &BB:ORA &BC:BNE ai1:RTS
+1263 .pu LDA OV%+120:STA &B0:LDA OV%+121:STA &B1:LDA OV%+122:STA &B2:LDA OV%+123:STA &B3:LDY #0:LDZ #0
+1264 .pu1 LDA DB%,Y:CLC:ADC #&20:STA [&B0],Z:INZ:INZ:INY:CPY #40:BNE pu1:LDZ #0:RTS
+1265 ]:NEXT:AI%=ai:PU%=pu:ENDPROC
 1300 REM ---- the VIC-IV as SCROLLTEST sets it (V400, 26 rows of 104 tokens, CHR16 + FCLRHI), our palette
 1310 DEF PROCvic:LOCAL I%:VS%=1
 1320 RESTORE 1390:FOR I%=0 TO 20:READ VR%:?(PS%+768+I%)=?VR%:NEXT
@@ -165,6 +216,52 @@
 1370 ?&D016=0:?&D011=&10:?&D04C=&30:?&D020=0:?&D021=0:ENDPROC
 1390 DATA &D031,&D051,&D054,&D058,&D059,&D05B,&D05D,&D05E,&D060,&D061,&D062,&D063,&D064,&D065,&D07B,&D016,&D011,&D04C,&D020,&D021,&D070
 1400 DEF PROCback:LOCAL I%:IF VS%=0 THEN ENDPROC
+1405 IF K3% AND AC%=4 THEN ?&FFD71F0=?&FFD71F0 AND &27:PROCxctl2(0):?&FFD71FB=0:?&FFD728A=0:?&FFD728B=0
 1410 RESTORE 1390:FOR I%=0 TO 20:READ VR%:?VR%=?(PS%+768+I%):NEXT
 1420 FOR I%=0 TO 255:?(&D100+I%)=?(PS%+I%):?(&D200+I%)=?(PS%+256+I%):?(&D300+I%)=?(PS%+512+I%):NEXT
 1430 MODE 0:ENDPROC
+1490 DEF PROCtb(T%):?(V%+25)=T% AND 255:?(V%+26)=(T%>>8) AND 255:?(V%+27)=T%>>16:ENDPROC
+1500 REM ---- act 3: "NOW WITH THE K325T VIC-IV": rings 64 -> 300 -> 1000 as list-mode objects (8x8 full-colour rings on SCROLLTEST's sine paths,
+1502 REM written each frame by the routine A3%), 8 clouds behind and 12 bushes in front (objects too), 4-pixel painting; a HUD row; any other core: 64 rings (plain RRB)
+1510 DEF PROCact3:LOCAL I%,A%
+1512 AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA
+1514 PROCfill(HU%,26*80,&40,&17):PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
+1516 ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
+1518 PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
+1520 IF K3%+XT%=0 THEN ENDPROC
+1522 ?(V%+30)=1:PROCobjs:IF K3%=0 THEN ENDPROC
+1524 ?&FFD71F8=RT% AND 255:?&FFD71F9=(RT%>>8) AND 255:?&FFD71FA=(RT%>>16) AND 15:?&FFD71FB=NO% AND 255:?&FFD728A=NO% AND 255:?&FFD728B=NO%>>8
+1526 ?&FFD71F0=?&FFD71F0 OR &D0:PROCxctl2(1):ENDPROC
+1530 DEF PROCa3:F3%=F3%+1
+1532 IF K3%+XT% THEN IF F3%>100 AND F3%<=218 OR F3%>400 AND N3%<1000 THEN N3%=N3%+2:?OV%=N3% AND 255:?(OV%+1)=N3%>>8
+1534 IF F3%=150 THEN PROCput(11,""):PROCput(13,"")
+1536 IF K3% AND N3%=1000 AND H3%=0 THEN H3%=F3%:PROCput(12,"1000 RINGS. 10 LAYERS. STILL BASIC.")
+1538 IF F3% MOD 10=0 THEN ?(OV%+2)=(?(OV%+2)+1) AND 3
+1540 S%=SP%*384:?(OV%+3)=S% AND 255:?(OV%+4)=S%>>8
+1542 IF F3% MOD 25=0 THEN PROChud
+1544 IF F3%>=1000+600*(K3%+XT%=0) THEN EX%=1
+1546 ENDPROC
+1550 DEF PROChud:LOCAL E%,L%,M%,S$
+1552 E%=(?&D7FA-QH%) AND 255:QH%=?&D7FA:IF E%=0 THEN E%=25
+1554 S$="RINGS "+STR$(N3%)+"   FPS "+STR$(INT(50*25/E%+.5)):IF BN% THEN S$="RINGS "+STR$(N3%)
+1556 IF K3% THEN ?&FFD71E0=25:REPEAT L%=?&FFD71E1+256*?&FFD71E2:M%=?&FFD71E1+256*?&FFD71E2:UNTIL L%=M%:?&FFD71E3=0:S$=S$+"   OBJECTS "+STR$(N3%+20)+"   LINE "+STR$(L%)
+1558 PROCput(0,S$):ENDPROC
+1560 DEF PROCput(R%,S$):LOCAL A%:A%=HU%+80*R%:S$=STRING$((40-LEN(S$)) DIV 2," ")+S$:$DB%=LEFT$(S$+STRING$(40," "),40)
+1562 !(OV%+120)=A%:CALL PU%:ENDPROC:REM (PU%: the 40 characters at DB% as text tokens to the HUD page)
+1570 DEF PROCfill(A%,N%,B%,C%):PROCjob(JS%,3,N% DIV 2,B%,A% AND &FFFFF,2):?(JS%+3)=A%>>20:?(JS%+10)=3
+1572 PROCjob(JS%+22,3,N% DIV 2,C%,(A%+1) AND &FFFFF,2):?(JS%+25)=A%>>20:?(JS%+32)=3:?(JS%+10)=7:PROCrun(JS%):ENDPROC
+1574 DEF PROCrun(J%):?&D702=J% DIV 65536:?&D704=0:?&D701=(J% DIV 256) AND 255:?&D705=J% AND 255:ENDPROC
+1580 REM objects: 0..7 clouds (64x16, rows 0..5), 8..1007 rings (8x8; X, Y, mask and token list from A3% each frame), 1008..1019 bushes (48x16, rows 22..25)
+1582 DEF PROCobjs:LOCAL I%,A%,X%,Y%,S%,W%,O%,X3%
+1584 FOR I%=0 TO 3:!(OL%+4*I%)=&FFFF0000+&17A0+I%:NEXT:A%=OL%+16:FOR I%=0 TO 1:FOR X%=0 TO 7:PROCw(A%+20*I%+2*X%,&17A4+8*I%+X%):NEXT:PROCw(A%+20*I%+16,&FFFF):NEXT
+1586 A%=OL%+56:FOR I%=0 TO 1:FOR X%=0 TO 5:PROCw(A%+16*I%+2*X%,&17B4+6*I%+X%):NEXT:PROCw(A%+16*I%+12,&FFFF):NEXT
+1588 FOR I%=0 TO 63 STEP 4:!(&FF80000+C3%+I%)=0:NEXT
+1590 FOR I%=0 TO 31:?(OV%+86+I%)=0:NEXT:?(OV%+86+5)=1:?(OV%+86+6)=&40+(OL%>>16):?(OV%+86+9)=(OL%>>8) AND 255:?(OV%+86+10)=C3% AND 255:?(OV%+86+11)=C3%>>8
+1592 CALL AI%:REM rings: the template written to 1000 entries
+1594 FOR I%=0 TO 19:IF I%<8 THEN A%=RT%+32*I%:X%=56*I%+20*(I% MOD 3):Y%=4+(I%*13) MOD 30:S%=OL%+16:W%=20 ELSE A%=RT%+32*(1000+I%):X%=40*(I%-8):Y%=176+8*(I% MOD 3):S%=OL%+56:W%=16
+1596 FOR X3%=0 TO 31 STEP 4:!(A%+X3%)=0:NEXT:PROCw(A%,X% AND &3FF):PROCw(A%+2,Y%):?(A%+4)=&FF:?(A%+5)=2:?(A%+6)=&40+(S%>>16):PROCw(A%+8,S% AND &FFFF):PROCw(A%+10,C3%):PROCw(A%+12,W%)
+1598 O%=OV%+8+3*I%:?O%=0:PROCw(O%+1,X%):NEXT:?(OV%+5)=64:?(OV%+6)=0:?(OV%+3)=0:?(OV%+4)=0:ENDPROC
+1600 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V%>>8) AND 255:ENDPROC
+9000 DEF PROCxctl2(B%):REM XCTL2 bit 0 (4-pixel painting, with XCTL bits 4 and 7) from feature level 4
+9010 IF ?&FFD71FD>=4 THEN ?&FFD71F1=(?&FFD71F1 AND &FE) OR B%
+9020 ENDPROC

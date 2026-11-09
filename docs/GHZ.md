@@ -1,9 +1,11 @@
 # GHZ: Maxice's SCROLLTEST in B65 (examples/ghz.bas)
 
 The v0.3 showpiece, in three acts: "YOU HAVE SEEN THIS ON MEGA65" (SCROLLTEST
-from INTRO2.D81, the Green Hill scroller by Maxice, frame for frame), "...BUT IN
-BASIC?" (its source scrolls over the running picture) and "...AND WITH THE
-VIC-IV EXTENSIONS" (the K325T's list-mode objects). Acts 1 (S1) and 2 (S2) are done.
+from INTRO2.D81, the Green Hill scroller by Maxice, frame for frame), "BUT
+HAVE YOU SEEN IT IN BASIC?" (its source scrolls over the running picture) and
+"NOW WITH THE K325T VIC-IV" (1000 rings, clouds and bushes as list-mode
+objects), then a closing card ("B65 BASIC FOR MEGA65 AND K325T",
+github.com/beniacm/b65-basic) and the late frames per act. About 2 min 20 s.
 
 ## The art (none of it in the repository or the shipped files)
 
@@ -90,13 +92,56 @@ token lines ("...BUT IN BASIC?" first). Each screen row gets two more token
 sets after SCROLLTEST's 104 tokens: a GOTOX and 40 characters of line L
 moved up by S pixels, a GOTOX and 40 characters of line L+1 moved down by
 8 - S (the GOTOX Y offset: bits 15-13 up, bit 12 down), so the text moves
-one pixel a frame; the rows grow to 186 tokens (line step 372). The text
+SV% pixels a frame (line 115: 2; 1, 2, 4 or 8); the rows grow to 186
+tokens (line step 372). When the listing ends, "B65 BASIC. n LINES." and
+"50 FRAMES PER SECOND." stay for 3 s. The text
 tokens come from attic RAM ($8580000) with the same DMA list (52 more
 row copies, their source moved every 8 frames); the inline-assembler
 routine writes the GOTOX bytes of all rows (fine X and the text sets' Y
 offsets) each frame, since a DMA fill cannot step 372 bytes. Xemu does not
 draw GOTOX Y offsets, so `SM%=0` scrolls in 8-pixel steps (the tests);
 the smooth scroll needs the board.
+
+## Act 3: the K325T VIC-IV
+
+"NOW WITH THE K325T VIC-IV": on a K325T core of feature level 3 or more
+(`?&FFD71FD`), act 3 moves the rings into the list-mode object table
+(B65's table address `&E0000`, 1020 objects, 32-byte v3 entries written by
+the program itself, XCTL bits 4, 6, 7; level 4: 4-pixel painting, XCTL2
+bit 0):
+
+- objects 8..1007: rings, an 8x8 full-colour ring turning in four frames
+  (original art in B65GHZS.BBC, palette 192..195), on SCROLLTEST's paths
+  (ring i: group i DIV 16 with the phase offsets of act 1, plus 37 and 53 per
+  eight groups so groups 8 apart differ; rings 0..63 are exactly act 1's).
+  Their count ramps 64 -> 300 -> 1000 (the draw mask: rings beyond the count
+  and off the screen have mask 0, so they take no bucket entries). An 8x8
+  ring touches at most 2 rows: 1000 rings need at most 2000 of the 2048
+  bucket entries (SCROLLTEST's 16x24 rings would need 4);
+- objects 0..7: clouds (64x16) drifting at 1/4 pixel a frame in the sky
+  rows, behind the rings; objects 1008..1019: bushes (48x16) in front,
+  1.5 times the front layer's speed. So 10 layers: 7 bands, the front, the
+  clouds, the bushes. "1000 RINGS. 10 LAYERS. STILL BASIC." at 1000;
+- the routine `A3%` (inline assembler, after RING each frame) writes every
+  ring's X, Y, mask and token list (one of four, for the turn) and moves the
+  clouds and bushes (X in 1/256 pixel, wrapping at -64 to 383); BASIC only
+  ramps the count, turns the animation and updates the HUD;
+- the HUD (row 0, through act 2's text sets, from a page in attic RAM):
+  RINGS, FPS (from `$D7FA`), OBJECTS and LINE (the VIC-IV's counter 25,
+  the longest painting of the last half second, in pixel cycles; read
+  through `$FFD71E0-E3`).
+
+Any other core (and Xemu): the caption and "THIS CORE: 64 RINGS, PLAIN RRB",
+act 1's 64 rings in their RRB slots, the HUD with RINGS and FPS, 400 frames.
+`XT%=1` runs the K325T path's routine on a scratch table in bank 1
+(`&17000`, above the program) for the tests.
+
+Budget (Xemu, the routine on the scratch table): 1000 rings about 8 ms a
+frame; in real time act 3 misses only its caption frames (3 in 1000). The
+whole demo as shipped (Xemu): act 1 3000 frames 4 late (start-up), act 2
+0 late, act 3 0 late. Finding on the way: B65's expression cache (4 ways)
+thrashed in some program layouts (up to 226 late frames in 400); it has 16
+ways now (see RELEASE_v0.3.md).
 
 ## Tests
 
@@ -108,8 +153,14 @@ the smooth scroll needs the board.
   D81 whose SCROLLTEST has one checked byte changed, so the program must fall
   back (600 frames OK). `--shot file.png` keeps the picture for a screenshot;
   `--act2 N` starts act 2 at frame N (with the overlay file, in 8-pixel
-  steps).
+  steps); `--act3 N`: act 1 until frame N, no act 2, act 3 on the scratch
+  table, whose ring, cloud and bush entries must equal the model's (1000
+  frames: 1000 rings OK).
 - Board: `tests/board.py run tests/board_ghz.txt`: 1500 frames of act 1 in
   real time, then "frames 1500 ... in N cs" (3000 at 50 fps);
   `tests/board_ghz2.txt`: act 2 from frame 200 to the end of the source
-  (3600 frames, 7200 cs at 50 fps; the smooth scroll).
+  (3000 frames, 6000 cs at 50 fps; the smooth scroll);
+  `tests/board_ghz3.txt`: act 3 after 200 frames of act 1 (the objects, 4 px
+  painting, the HUD; "act 3: 1001 frames, n late"); `tests/board_ghzall.txt`:
+  the demo as shipped (the recording). Each run ends with "act n: frames, late"
+  per act (late frames counted from each act's 11th frame, through `$D7FA`).

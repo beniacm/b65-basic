@@ -202,7 +202,57 @@ def text_pack():
         for ch in ln.ljust(40)[:40]:
             t = TEXTCH + (ord(ch) - 32 if 32 <= ord(ch) < 128 else 0)
             toks += bytes((t & 255, t >> 8))
-    return bytes((len(lines) & 255, len(lines) >> 8)) + bytes(glyphs) + bytes(toks)
+    return bytes((len(lines) & 255, len(lines) >> 8)) + bytes(glyphs) + bytes(toks) + act3_art()
+
+def act3_art():
+    """act 3's original art, after the text: palette entries 192..223 (R[32]
+    G[32] B[32], VIC-IV nibble order), then 32 full-colour 8x8 glyphs (64
+    bytes each, pixel = palette index, 0 transparent): 0..3 a small ring
+    turning (8x8), 4..19 a cloud (8 x 2 glyphs, 64x16), 20..31 a bush (6 x 2
+    glyphs, 48x16)"""
+    pal = [(0, 0, 0)] * 32
+    pal[0:4] = [(120, 70, 0), (230, 160, 20), (255, 220, 70), (255, 255, 200)]      # 192..195 ring
+    pal[8:11] = [(255, 255, 255), (215, 230, 250), (170, 190, 225)]                  # 200..202 cloud
+    pal[16:21] = [(10, 70, 20), (30, 120, 30), (60, 170, 40), (120, 210, 70), (70, 45, 20)]   # 208..212 bush
+    out = bytearray(nib(c[0]) for c in pal) + bytearray(nib(c[1]) for c in pal) + bytearray(nib(c[2]) for c in pal)
+    def fcm(w, h, f):                   # an image of w x h pixels -> glyphs, row by row of glyphs
+        g = []
+        for gy in range(h // 8):
+            for gx in range(w // 8):
+                g.append(bytes(f(gx * 8 + x, gy * 8 + y) for y in range(8) for x in range(8)))
+        return g
+    glyphs = []
+    for fr, rx in enumerate((3.6, 2.7, 1.6, 0.6)):       # the ring seen from 0, 40, 65, 85 degrees
+        def ring(x, y, rx=rx):
+            dx, dy = (x - 3.5) / max(rx, 0.5), (y - 3.5) / 3.6
+            d = math.hypot(dx, dy)
+            if rx < 1:
+                return 194 if abs(x - 3.5) < 1 and abs(y - 3.5) < 3.6 else 0
+            if 0.62 <= d <= 1.08:
+                return 195 if dy < -0.3 and dx < 0 else 194 if dy < 0 else 193 if dy < 0.5 else 192
+            return 0
+        glyphs += fcm(8, 8, ring)
+    puffs = [(14, 10, 8), (26, 7, 9), (38, 8, 8), (50, 10, 7), (32, 11, 7)]
+    def cloud(x, y):
+        best = 0
+        for cx, cy, r in puffs:
+            d = math.hypot(x - cx, (y - cy) * 1.3)
+            if d <= r:
+                best = max(best, 1 if y > cy + 2 else 2)
+        if best == 0 or y > 15:
+            return 0
+        return 202 if y >= 13 else 201 if best == 1 else 200
+    glyphs += fcm(64, 16, cloud)
+    def bush(x, y):
+        for cx, cy, r in ((10, 9, 8), (24, 6, 9), (38, 9, 8)):
+            d = math.hypot(x - cx, (y - cy) * 1.1)
+            if d <= r:
+                lit = (x - cx) + (y - cy) * 1.5
+                return 211 if lit < -7 else 210 if lit < -2 else 209 if lit < 4 else 208
+        return 0
+    glyphs += fcm(48, 16, bush)
+    assert len(glyphs) == 32
+    return bytes(out) + b''.join(glyphs)
 
 def main():
     if '--text' in sys.argv:
