@@ -257,7 +257,7 @@ objects, `tests/bench/objstep.txt`, ms per frame / cycles per object):
 static 1.2 / 47, fast 4.0 / 158, fast with wrap limits 9.6 / 380,
 cartesian 8.4 / 332, with acceleration 10.8 / 428, plus limits 16.4 / 649,
 with wrap limits: polar straight (mode 5) 14.4 / 570, polar curving
-(k = 5) 24.8 / 982, exact polar 24.8 / 982, orbit 28.8 / 1140, spring
+(k = 5) 23.6 / 931, exact polar 24.8 / 982, orbit 28.8 / 1140, spring
 32 / 1267 (for 50 fps: a few
 hundred moving objects, more in the fast mode without limits).
 

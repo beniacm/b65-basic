@@ -460,9 +460,7 @@ objstep:
         lda (oP),y
         sta oT+1
         ldx oT+2
--       lda oT+1
-        asl
-        ror oT+1
+-       asr oT+1
         ror oT
         dex
         bne -
