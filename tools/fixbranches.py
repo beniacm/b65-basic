@@ -8,6 +8,11 @@ for it in range(20):
     if not errs:
         print(r.stderr, end='')
         if r.returncode == 0:
+            for k in range(1, 5):           # the other overlay images (src/b65.a)
+                q = subprocess.run(['acme'] + os.environ.get('ACMEFLAGS', '').split() + ['-DOVL=%d' % k, 'src/b65.a'],
+                                   capture_output=True, text=True)
+                if q.returncode:
+                    print(q.stderr, end=''); sys.exit(q.returncode)
             p = subprocess.run([sys.executable, 'tools/packovl.py'])
             if p.returncode:
                 sys.exit(p.returncode)

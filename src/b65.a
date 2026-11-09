@@ -2,8 +2,21 @@
 ; An altered (45GS02) version of BBC BASIC (Z80) v5 by R.T. Russell.
 ; See LICENSE and docs/DESIGN.md.
 !cpu m65
-!to "build/b65.prg", cbm
-!sl "build/b65.sym"
+; tools/fixbranches.py assembles this file five times, OVL = 0..4: the run
+; for OVL = k puts overlay k's image at ovlreal (after the code), the others
+; at ovlreal + $2000 on top of each other (only the bytes of overlay k are
+; used: the images do not fit into 64 KB side by side); run 0 also writes
+; the symbols, tools/packovl.py takes the code and overlay k from run k
+!ifndef OVL { OVL = 0 }
+!if OVL = 0 { !to "build/b65.prg", cbm
+        !sl "build/b65.sym" }
+!if OVL = 1 { !to "build/b65_1.prg", cbm }
+!if OVL = 2 { !to "build/b65_2.prg", cbm }
+!if OVL = 3 { !to "build/b65_3.prg", cbm }
+!if OVL = 4 { !to "build/b65_4.prg", cbm }
+!macro ovlimg .k {
+        !if OVL = .k { * = ovlreal, overlay } else { * = ovlreal + $2000, overlay }
+}
 !src "src/zp.a"
 !src "src/boot.a"
 !src "src/main.a"
@@ -30,15 +43,22 @@ sintab0 = (code_end + 255) & $ff00    ; 2 KB: the objects' sine table (BOOT)
 prog_start = sintab0 + $800
 !if prog_start > $a800 { !error "interpreter too large" }
 ; ---- overlay images: copied to bank 4 at start-up, then free for programs ----
+ovlreal = code_end
++ovlimg 0
 !src "src/asm.a"
 !if ovl_asm_end-$e000 > $1ffa { !error "overlay 0 too large" }
++ovlimg 1
 !src "src/gfx.a"
 !if ovl_gfx_end-$e000 > $1ffa { !error "overlay 1 too large" }
++ovlimg 2
 !src "src/xtra.a"
 !if ovl_xtra_end-$e000 > $1ffa { !error "overlay 2 too large" }
++ovlimg 3
 !src "src/fat.a"
 !if ovl_fat_end-$e000 > $1ffa { !error "overlay 3 too large" }
++ovlimg 4
 !src "src/xc.a"
+* = ovlreal + $4000, overlay
 ovl_images_end:
 ; (tools/packovl.py packs the interpreter and the overlay images after
 ; assembly into one blob after boot_end and checks that the PRG ends below

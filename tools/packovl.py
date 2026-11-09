@@ -2,7 +2,7 @@
 """Pack build/b65.prg with LZH (tools/lzh.py).
 
 ACME assembles src/boot.a ($2001 .. res_start), the resident interpreter
-(res_start .. code_end) and the overlay images (code_end .. ovl_images_end,
+(res_start .. code_end) and the overlay images (at ovlreal,
 see src/b65.a). This tool keeps the boot code and replaces the rest with
 one blob: the shared literal code-length table, the interpreter stream and
 one stream per overlay; it sets restab, ovltab and blen in the boot code and
@@ -29,9 +29,12 @@ if syms.get('XCODE', 0) > 0xf800:
     sys.exit('packovl: overlay 4 code too large (XCODE $%04x > $f800)' % syms['XCODE'])
 names = ['asm', 'gfx', 'xtra', 'fat', 'xc']
 blobs = [bytes(prg[mem(res_start):mem(code_end)])]
-for n in names:
-    img = syms['ovl_%s_img' % n]
-    blobs.append(bytes(prg[mem(img):mem(img) + syms['ovl_%s_end' % n] - 0xe000]))
+# overlay k's image is at ovlreal in run k of src/b65.a (build/b65_k.prg)
+img = syms['ovlreal']
+for k, n in enumerate(names):
+    pk = prg if k == 0 else open(os.path.join(ROOT, 'build/b65_%d.prg' % k), 'rb').read()
+    assert pk[mem(res_start):mem(code_end)] == blobs[0], 'run %d: other code' % k
+    blobs.append(bytes(pk[mem(img):mem(img) + syms['ovl_%s_end' % n] - 0xe000]))
 
 table, streams = lzh.pack(blobs)
 L = [table[k // 2] >> (4 * (1 - k % 2)) & 15 for k in range(256)]
@@ -61,4 +64,4 @@ if addr > limit:
 open(PRG, 'wb').write(out)
 print('packovl: interpreter %d -> %d, overlays %d -> %d bytes, PRG ends at $%04x ($%x free)' % (
     code_end - res_start, offs[1] - offs[0],
-    syms['ovl_images_end'] - code_end, len(blob) - offs[1], addr, limit - addr))
+    sum(len(b) for b in blobs[1:]), len(blob) - offs[1], addr, limit - addr))
