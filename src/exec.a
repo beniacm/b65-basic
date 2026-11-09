@@ -2663,6 +2663,51 @@ unwind: pla
         sta tmpw2
         pla
         sta tmpw2+1
+        tsx                     ; integer LOCAL frames: restored with spz
+        stx spz                 ; walking up, the stack pointer set once
+        tsy                     ; after them
+        sty spz+1
+.qf     ldy #1
+        lda (spz),y
+        cmp #TLOCAL
+        bne .qe
+        ldy #4
+        lda (spz),y
+        cmp #4
+        bne .qe
+        dey
+        lda (spz),y
+        sta vptr+1
+        dey
+        lda (spz),y
+        sta vptr
+        ldy #5
+        ldz #0
+        lda (spz),y
+        sta (vptr),z
+        iny
+        inz
+        lda (spz),y
+        sta (vptr),z
+        iny
+        inz
+        lda (spz),y
+        sta (vptr),z
+        iny
+        inz
+        lda (spz),y
+        sta (vptr),z
+        ldz #0
+        lda spz
+        clc
+        adc #9
+        sta spz
+        bcc .qf
+        inc spz+1
+        bra .qf
+.qe     ldx spz
+        ldy spz+1
+        +setsp
 .l      tsx
         stx spz
         tsy
