@@ -94,7 +94,7 @@
 1520 poke $d05d,peek($d05d) and 127:poke $d031,peek($d031) or 8:poke $d07b,49:poke $d05b,0:poke $d054,peek($d054) or 5
 1530 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 1540 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000
-1550 if k then poke $ffd71f8,0,$c0,8,n:poke $ffd71f0,peek($ffd71f0) or $d1
+1550 if k then poke $ffd71f8,0,$c0,8,n:poke $ffd71f0,peek($ffd71f0) or $d1:xb=1:gosub 9000
 1560 return
 1600 rem no list mode: balls 0-7 as sprites (8x8 circle, scaled to 320x200)
 1620 for y=0 to 20:poke $5fc00+3*y,0,0,0:next y
@@ -146,7 +146,7 @@
 1660 poke $d010,0:for i=0 to 7:xx=24+int(x(i)/2):poke $d000+2*i,xx and 255,50+int(y(i)/2)
 1670 if xx>255 then poke $d010,peek($d010) or 2^i
 1680 next i:return
-1700 poke $d015,0:if k then poke $ffd7280,1:poke $ffd71f0,peek($ffd71f0) and $26
+1700 poke $d015,0:if k then poke $ffd7280,1:xb=0:gosub 9000:poke $ffd71f0,peek($ffd71f0) and $26
 1710 poke $d031,v1:poke $d05b,v5:poke $d07b,v7:poke $d054,v0:poke $d058,v8,v9:poke $d05e,va
 1720 poke $d060,vb,vc,vd,ve,vf,vg:poke $d021,vh:gosub 2860:scnclr:return
 2700 rem own palette: ramps from 16 on (0-15 stay the standard colours)
@@ -166,3 +166,6 @@
 2840 for ii=16 to 255:poke $5f400+ii,peek($d100+ii):poke $5f500+ii,peek($d200+ii):poke $5f600+ii,peek($d300+ii):next ii:return
 2860 for ii=16 to 255:poke $d100+ii,peek($5f400+ii):poke $d200+ii,peek($5f500+ii):poke $d300+ii,peek($5f600+ii):next ii:return
 2900 gosub 1700:print err$(er);" in";el:end
+9000 rem xctl2 bit 0 (4-pixel painting, with xctl bits 4 and 7) from feature level 4: xb = 1 / 0
+9010 if peek($ffd71fd)>=4 then poke $ffd71f1,(peek($ffd71f1) and 254) or xb
+9020 return

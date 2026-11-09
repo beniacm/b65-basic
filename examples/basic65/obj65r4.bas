@@ -20,7 +20,7 @@
 260 for i=0 to 3:o=i:if i=3 then o=300
 270 a=tb+32*o:wpoke a,100+60*i,200:poke a+4,255,1,8,2:wpoke a+8,$9000,oc:poke a+15,1:next i
 280 poke tb+7,1:poke tb+15,2:wpoke tb,40,200
-290 poke $ffd71f8,0,$c0,8,mod(n,256):poke $ffd728a,mod(n,256),int(n/256):poke $ffd71f0,peek($ffd71f0) or $d9
+290 poke $ffd71f8,0,$c0,8,mod(n,256):poke $ffd728a,mod(n,256),int(n/256):poke $ffd71f0,peek($ffd71f0) or $d9:xb=1:gosub 9000
 300 poke $ffd7280,1:hf=-1
 310 for f=0 to 299:vsync 251:wpoke tb,40+f,200
 320 if (peek($ffd7280) and 1)=0 then 360
@@ -40,6 +40,9 @@
 930 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 935 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000:return
 950 rem ---- back to text: list mode off (xctl bits 3, 4, 6, 7), the vic as it was
-960 poke $ffd71f0,peek($ffd71f0) and $27
+960 xb=0:gosub 9000:poke $ffd71f0,peek($ffd71f0) and $27
 970 poke $d031,v1:poke $d05b,v5:poke $d07b,v7:poke $d054,v0:poke $d058,v8,v9:poke $d05e,va
 980 poke $d060,vb,vc,vd,ve,vf,vg:poke $d020,vh:poke $d021,vi:poke $d05d,vj:scnclr:return
+9000 rem xctl2 bit 0 (4-pixel painting, with xctl bits 4 and 7) from feature level 4: xb = 1 / 0
+9010 if peek($ffd71fd)>=4 then poke $ffd71f1,(peek($ffd71f1) and 254) or xb
+9020 return

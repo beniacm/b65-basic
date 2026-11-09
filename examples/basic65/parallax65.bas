@@ -73,7 +73,7 @@
 610 poke $d060,0,0,5:wpoke $d064,co
 620 poke $d020,0:poke $d021,16:if db then poke $d031,peek($d031) or 8:poke $d05b,0:poke $d07b,24:poke $d051,$c0
 625 poke $d05c,peek($d05c)+16:rem wider side border: hides the fine-scroll gap at the left edge
-630 if k then poke $ffd71f0,peek($ffd71f0) or $d0
+630 if k then poke $ffd71f0,peek($ffd71f0) or $d0:xb=1:gosub 9000
 640 gosub 1600
 760 rem main loop: positions, one dma list, sprites, birds, wait for vsync
 765 rem v2 x/y must be 0..1023 (10-bit; y signed): negative values are masked with and 1023
@@ -94,7 +94,7 @@
 1020 rem dma job at j: options $0b,0; cmd cm, count nb, source s, target d
 1030 s2=s-int(s/1048576)*1048576:d2=d-int(d/1048576)*1048576
 1040 poke j,$0b,0,cm,mod(nb,256),int(nb/256),mod(s2,256),mod(int(s2/256),256),int(s2/65536),mod(d2,256),mod(int(d2/256),256),int(d2/65536),0,0,0:return
-1070 poke $d015,0:poke $d06b,0:poke $d051,$80:poke $d05b,d5:poke $d07b,d7:if k then poke $ffd71f0,peek($ffd71f0) and $2f
+1070 poke $d015,0:poke $d06b,0:poke $d051,$80:poke $d05b,d5:poke $d07b,d7:if k then xb=0:gosub 9000:poke $ffd71f0,peek($ffd71f0) and $2f
 1080 poke $d05d,v4 or 128:poke $d031,vc:poke $d016,vd:poke $d05d,v4
 1085 poke $d054,v0:poke $d058,v1,v2:poke $d05c,v3:poke $d05e,v5:poke $d060,v6,v7,v8,v9,va,vb:poke $d021,ve
 1090 gosub 2860:scnclr:return
@@ -176,3 +176,6 @@
 2840 for ii=16 to 255:poke $5f400+ii,peek($d100+ii):poke $5f500+ii,peek($d200+ii):poke $5f600+ii,peek($d300+ii):next ii:return
 2860 for ii=16 to 255:poke $d100+ii,peek($5f400+ii):poke $d200+ii,peek($5f500+ii):poke $d300+ii,peek($5f600+ii):next ii:return
 2900 gosub 1070:print err$(er);" in";el:end
+9000 rem xctl2 bit 0 (4-pixel painting, with xctl bits 4 and 7) from feature level 4: xb = 1 / 0
+9010 if peek($ffd71fd)>=4 then poke $ffd71f1,(peek($ffd71f1) and 254) or xb
+9020 return

@@ -23,6 +23,23 @@ until then this file grows with every change.
 - Screen rows: a row must not start with `$FFFF` (it advances only 2
   bytes); the recipes and jumper65 use one transparent GOTOX per row.
 
+## Step-7 core: 4-pixel painting (XCTL2)
+
+- Every demo that switches list mode on with the fast token path (XCTL
+  bits 4 and 7) also sets XCTL2 (`$FFD71F1`) bit 0, 4-pixel painting, when
+  the feature level (`$FFD71FD`) is 4 or more, and clears it before it
+  clears XCTL: jumper, swarm, swarm2, bounce, parallax, walkers
+  (`PROCxctl2`), and for BASIC 65 OBJ65R2-R4, jumper65, bounce65,
+  parallax65, walkers65 (`GOSUB 9000`). Feature levels 1-3 and Xemu
+  (level 0) are untouched: nothing is written there. rrblist_b65 and
+  rrblist_b65v2, SELFTEST and board_v3 switch list mode on without bit 7
+  and stay as they are. The interpreter writes XCTL only for bit 0 (1 MB
+  chip RAM, at start-up) and the OBJ65 library likewise; neither touches
+  XCTL2.
+- In the GHDL mirrors of the step-7 core, 4-pixel painting cuts the
+  longest line painting from 1524 to 784 cycles (swarm2) and from 474 to
+  292 (bounce); board figures follow.
+
 ## B65
 
 - Version string v0.3-dev (`*INFO` tells it from the release).
@@ -38,5 +55,5 @@ until then this file grows with every change.
 
 ## To come before the release
 
-- Step-7 core: XCTL2 bit 0 set by the demos when the feature level is 4
-  or more (with XCTL bits 4 and 7); level checks stay `>= 3`.
+- Board figures for XCTL2 (swarm2, bounce: XCTL $D9 against $D9 + XCTL2
+  $01).

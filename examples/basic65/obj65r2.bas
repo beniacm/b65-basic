@@ -21,7 +21,7 @@
 290 wpoke tb,100,100:poke tb+4,255,1,8,0:wpoke tb+8,$9000,oc
 300 rem the table address and the count (8-bit and 10-bit), then list mode:
 310 rem xctl bits 0 (1 mb), 3 (background), 4 (list mode), 6 (object table), 7 (fast tokens)
-320 poke $ffd71f8,0,$c0,8,1:poke $ffd728a,1,0:poke $ffd71f0,peek($ffd71f0) or $d9
+320 poke $ffd71f8,0,$c0,8,1:poke $ffd728a,1,0:poke $ffd71f0,peek($ffd71f0) or $d9:xb=1:gosub 9000
 330 rem move it: x and y with one wpoke a frame
 340 for f=0 to 299:vsync 251:wpoke tb,100+f*2,100+int(50*sin(f/20)):next f
 350 gosub 950:print "recipe 2 done: 300 frames"
@@ -34,6 +34,9 @@
 930 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 935 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000:return
 950 rem ---- back to text: list mode off (xctl bits 3, 4, 6, 7), the vic as it was
-960 poke $ffd71f0,peek($ffd71f0) and $27
+960 xb=0:gosub 9000:poke $ffd71f0,peek($ffd71f0) and $27
 970 poke $d031,v1:poke $d05b,v5:poke $d07b,v7:poke $d054,v0:poke $d058,v8,v9:poke $d05e,va
 980 poke $d060,vb,vc,vd,ve,vf,vg:poke $d020,vh:poke $d021,vi:poke $d05d,vj:scnclr:return
+9000 rem xctl2 bit 0 (4-pixel painting, with xctl bits 4 and 7) from feature level 4: xb = 1 / 0
+9010 if peek($ffd71fd)>=4 then poke $ffd71f1,(peek($ffd71f1) and 254) or xb
+9020 return

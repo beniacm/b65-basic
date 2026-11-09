@@ -93,10 +93,13 @@
 1425 poke $d05d,peek($d05d) and 127:poke $d031,peek($d031) or 8:poke $d07b,49:poke $d05b,0:poke $d054,peek($d054) or 5
 1430 wpoke $d058,l:poke $d05e,l/2:poke $d063,peek($d063) and 192:poke $d020,0:poke $d021,0
 1435 poke $d060,0,mod(int(s/256),256),int(s/65536):wpoke $d064,$4000
-1440 poke $ffd71f0,peek($ffd71f0) or $d9:return
+1440 poke $ffd71f0,peek($ffd71f0) or $d9:xb=1:gosub 9000:return
 950 rem ---- back to text
-960 poke $ffd71f0,peek($ffd71f0) and $27
+960 xb=0:gosub 9000:poke $ffd71f0,peek($ffd71f0) and $27
 970 poke $d031,v1:poke $d05b,v5:poke $d07b,v7:poke $d054,v0:poke $d058,v8,v9:poke $d05e,va
 980 poke $d060,vb,vc,vd,ve,vf,vg:poke $d020,vh:poke $d021,vi:poke $d05d,vj:scnclr:return
 2900 sys $1603:poke $d054,v0:if k then gosub 950
 2910 print err$(er);" in";el:end
+9000 rem xctl2 bit 0 (4-pixel painting, with xctl bits 4 and 7) from feature level 4: xb = 1 / 0
+9010 if peek($ffd71fd)>=4 then poke $ffd71f1,(peek($ffd71f1) and 254) or xb
+9020 return
