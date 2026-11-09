@@ -85,7 +85,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >820 ?&D702=DL% DIV 65536:?&D704=0:?&D701=(DL% DIV 256) AND 255:?&D705=DL% AND 255:REM (the list address advances: set it each time)
 >830 X%=(P% DIV 3) MOD 400:?&D00C=X% AND 255:?&D010=(X% DIV 256)*64:?&D00D=150+(P% DIV 10) MOD 6
 >840 X%=400-(P%*2) MOD 400:?&D00E=X% AND 255:?&D010=?&D010 OR (X% DIV 256)*128:?&D00F=80
->850 IF K% THEN ?&5F880=&C0+(P% DIV 4) MOD 4:?&5F884=&C0+(P% DIV 4+2) MOD 4:FOR I%=0 TO 5:X%=(640-(P%*5+I%*110) MOD 700) AND 1023:!(&5F800+16*I%)=X%+((30+I%*12+(P% DIV 4+I%*3) MOD 8) AND 1023)*65536:NEXT
+>850 IF K% THEN ?&5F900=&C0+(P% DIV 4) MOD 4:?&5F904=&C0+(P% DIV 4+2) MOD 4:FOR I%=0 TO 5:X%=(640-(P%*5+I%*110) MOD 700) AND 1023:!(&5F800+32*I%)=X%+((30+I%*12+(P% DIV 4+I%*3) MOD 8) AND 1023)*65536:NEXT
 >860 WAIT
 >870 UNTIL P%=BN%
 >880 T%=TIME-T%
@@ -152,12 +152,12 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1640 ?&D06B=&C0:?&D02D=0:?&D02E=0:?&D01B=&40:?&D017=0:?&D01D=0:?&D01C=0:?&D015=&C0:ENDPROC
 >1700 DEF PROCbirds:LOCAL F%,Y%,X%,A$,K$,I%,E%,A%
 >1710 REM four flapping frames (8x8 full colour) at &5F000 = glyphs &17C0-&17C3;
->1720 REM birds 0,2,4 use token list &5F880, birds 1,3,5 &5F884 (opposite phase)
+>1720 REM birds 0,2,4 use token list &5F900, birds 1,3,5 &5F904 (opposite phase)
 >1730 RESTORE 1790:K$=".obBwy":FOR F%=0 TO 3:FOR Y%=0 TO 7:READ A$:FOR X%=0 TO 7
 >1740 ?(&5F000+64*F%+8*Y%+X%)=VAL(MID$("000144197188175141",3*INSTR(K$,MID$(A$,X%+1,1))-2,3)):NEXT:NEXT:NEXT
->1750 ?&5F880=&C0:?&5F881=&17:?&5F882=255:?&5F883=255:?&5F884=&C2:?&5F885=&17:?&5F886=255:?&5F887=255
->1760 FOR I%=0 TO 5:E%=&5F800+16*I%:!E%=0:?(E%+4)=255:?(E%+5)=1:?(E%+6)=&45:?(E%+7)=0
->1770 !(E%+8)=(&F880+4*(I% AND 1))+&3C00*65536:!(E%+12)=0:NEXT
+>1750 ?&5F900=&C0:?&5F901=&17:?&5F902=255:?&5F903=255:?&5F904=&C2:?&5F905=&17:?&5F906=255:?&5F907=255
+>1760 FOR I%=0 TO 5:E%=&5F800+32*I%:!E%=0:?(E%+4)=255:?(E%+5)=1:?(E%+6)=&45:?(E%+7)=0
+>1770 !(E%+8)=(&F900+4*(I% AND 1))+&3C00*65536:!(E%+12)=0:NEXT
 >1780 ?(CB%-CO%+&3C00)=0:?(CB%-CO%+&3C01)=0:?&FFD71F8=0:?&FFD71F9=&F8:?&FFD71FA=5:?&FFD71FB=6:ENDPROC
 >1790 DATA "ow....wo",".owbbwo.","..obbo..","...bBy..","...BB...","........","........","........"
 >1800 DATA "........","owwbbwwo","..obbo..","...bBy..","...BB...","........","........","........"

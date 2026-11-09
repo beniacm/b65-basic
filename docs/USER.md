@@ -130,7 +130,9 @@ in Xemu).
 **Hardware info:** `?&6E0` = model id (`$D629`), `?&6E1` = `&FF` on a
 K325T, `?&6E2`/`?&6E3` = chip RAM in KB, `?&6E4` = attic RAM in MB.
 
-**K325T RRB list mode** (only with the K325T core): the VIC-IV paints
+**K325T RRB list mode** (only with the K325T core; from the step-6 core on the
+object table has 32-byte entries -- the examples are written for it and do
+not run on older cores): the VIC-IV paints
 "objects" from a table that is moved like sprites; see
 `docs/rrb_list_mode.md` in the harness repository and the examples
 `rrblist_b65.bas` (v1) and `rrblist_b65v2.bas` (v2). HOLD (`?&FFD71FC=1`)

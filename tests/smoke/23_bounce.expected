@@ -37,7 +37,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >220 REM ball without events (DI; walls: PROCwall, a negative X or Y shows as
 >225 REM a large one) and write X/Y with HOLD around the batch (all move at
 >226 REM once); without the K325T the table and HOLD go to scratch RAM
->230 F%=0:NP%=0:T%=TIME:IF K%=0 THEN TB%=&5E000:HO%=&5DFFF ELSE HO%=&FFD71FC
+>230 F%=0:NP%=0:T%=TIME:IF K%=0 THEN TB%=&5D000:HO%=&5CFFF ELSE HO%=&FFD71FC
 >240 REPEAT
 >250 WAIT:X%=(ZA0%-(F%>>2)) MOD 632:!J0%=X%+K0%:!J1%=X%+K1%:X%=(ZA1%-(F%>>1)) MOD 632:!J2%=X%+K2%:!J3%=X%+K3%
 >252 X%=(ZA2%-F%) MOD 632:!J4%=X%+K4%:!J5%=X%+K5%:X%=(ZA3%-2*F%) MOD 632:!J6%=X%+K6%:!J7%=X%+K7%
@@ -45,7 +45,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >260 IF G% THEN IF (F% AND 3)=0 THEN FOR I%=0 TO N%-1:V%(I%)=V%(I%)+65536:NEXT
 >270 DI:?HO%=1:TA%=TB%:FOR I%=0 TO N%-1:P%=P%(I%)+V%(I%)
 >280 IF (P% AND &FFFF)>632 OR P%>>>16>392 THEN PROCwall
->300 P%(I%)=P%:!TA%=P% AND &3FF03FF:TA%=TA%+16:NEXT
+>300 P%(I%)=P%:!TA%=P% AND &3FF03FF:TA%=TA%+32:NEXT
 >320 ?HO%=0:IF K%=0 THEN PROCspr
 >330 F%=F%+1:UNTIL F%=BN%
 >340 T%=TIME-T%:IF RS% THEN PROCtext:PRINT BN%;" frames in ";T%;" cs, ";NP%;" pairs"
@@ -98,7 +98,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1420 REM object table: X/Y, mask, height, bits 19-16, collision group 1, list,
 >1430 REM colour offset, stride, box width BW%
 >1440 IF K% THEN FOR C%=0 TO 5:PROCw(OA%+16*C%,&1800+C%):PROCw(OA%+16*C%+2,&FFFF):PROCw(CR%-&4000+OC%+16*C%,0):NEXT
->1450 IF K% THEN FOR I%=0 TO N%-1:A%=TB%+16*I%:C%=I% MOD 6:!A%=P%(I%):?(A%+4)=255:?(A%+5)=1:?(A%+6)=8:?(A%+7)=1:!(A%+8)=&9000+16*C%+(OC%+16*C%)*65536:!(A%+12)=BW%*65536:NEXT
+>1450 IF K% THEN FOR I%=0 TO N%-1:A%=TB%+32*I%:C%=I% MOD 6:!A%=P%(I%):?(A%+4)=255:?(A%+5)=1:?(A%+6)=8:?(A%+7)=1:!(A%+8)=&9000+16*C%+(OC%+16*C%)*65536:!(A%+12)=BW%*65536:NEXT
 >1455 REM XCTL bit 3 (newer K325T bitstreams): unpainted pixels show the background,
 >1456 REM so sparse rows need no opaque base (ZB%=0); unimplemented bits read 0
 >1458 ZB%=TRUE:IF K% THEN ?&FFD71F0=?&FFD71F0 OR 8:ZB%=(?&FFD71F0 AND 8)=0

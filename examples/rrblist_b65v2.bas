@@ -10,7 +10,7 @@
 90 ?(GA%+64*I%+8*Y%+X%)=P%:NEXT:NEXT
 100 PROCw(OA%+16*I%,G%+I%):PROCw(OA%+16*I%+2,&FFFF):PROCw(C%-&4000+OC%+16*I%,0)
 110 REM object table entry: X/Y, mask, height, address 19..16, address, colour offset, stride
-120 E%=T%+16*I%:!E%=0:?(E%+4)=255:?(E%+5)=1:?(E%+6)=8:?(E%+7)=0
+120 E%=T%+32*I%:!E%=0:?(E%+4)=255:?(E%+5)=1:?(E%+6)=8:?(E%+7)=0
 130 !(E%+8)=&9000+16*I%+(OC%+16*I%)*65536:!(E%+12)=0
 140 NEXT
 150 DATA 60,126,255,255,255,255,126,60

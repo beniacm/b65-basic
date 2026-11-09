@@ -81,7 +81,7 @@
 1020 X%=X%(I%):Y%=Y%(I%):D%=D%(I%):R%=Y% DIV 8:C%=(X%+2) DIV 4:A%=SC%+R%*LS%+2*C%
 1030 ON S% GOSUB 1100,1200,1300,1400,1500
 1040 X%(I%)=X%:Y%(I%)=Y%:D%(I%)=D%:S%(I%)=S%:IF S%=6 THEN RETURN
-1050 IF K% THEN ?(&5F880+4*I%)=&C0+FR%:!(&5F800+16*I%)=(2*X% AND 1023)+(Y% AND 1023)*65536:RETURN
+1050 IF K% THEN ?(&5F900+4*I%)=&C0+FR%:!(&5F800+32*I%)=(2*X% AND 1023)+(Y% AND 1023)*65536:RETURN
 1060 R%=Y% DIV 8:IF R%<>PR%(I%) THEN IF PR%(I%)>=0 THEN ?(SC%+PR%(I%)*LS%+162+4*I%)=&9F
 1070 PR%(I%)=R%:!(SC%+R%*LS%+160+4*I%)=2*X%+(&17C0+FR%)*65536:RETURN
 1100 REM walk: fall if nothing below; at a wall step up one tile or turn
@@ -109,7 +109,7 @@
 1500 FR%=8:RETURN
 1600 REM out of the door: hide, count
 1610 O%=O%+1:?(SC%+2*66)=48+O%
-1620 IF K% THEN ?(&5F804+16*I%)=0 ELSE ?(SC%+PR%(I%)*LS%+162+4*I%)=&9F
+1620 IF K% THEN ?(&5F804+32*I%)=0 ELSE ?(SC%+PR%(I%)*LS%+162+4*I%)=&9F
 1630 RETURN
 1700 REM give this walker the scripted job (snapped to its tile)
 1710 S%=JT%(J%):T%(I%)=0:X%=4*C%:IF S%=5 THEN BX%=X%:BR%=R%:BI%=I%
@@ -118,7 +118,7 @@
 1730 J%=J%+1:RETURN
 2000 REM a new walker drops from the hatch
 2010 S%(NS%)=2:X%(NS%)=40:Y%(NS%)=24:D%(NS%)=1:T%(NS%)=0:PR%(NS%)=-1
-2020 IF K% THEN ?(&5F804+16*NS%)=255
+2020 IF K% THEN ?(&5F804+32*NS%)=255
 2030 NS%=NS%+1:RETURN
 3000 DEF PROCbox(C1%,R1%,C2%,R2%,G%):LOCAL R%,C0%
 3010 FOR R%=R1% TO R2%:FOR C0%=C1% TO C2%:?(SC%+R%*LS%+2*C0%)=&80+G%:NEXT:NEXT:ENDPROC
@@ -190,9 +190,9 @@
 3660 FOR I%=16 TO 255:?(&D100+I%)=?(&5F400+I%):?(&D200+I%)=?(&5F500+I%):?(&D300+I%)=?(&5F600+I%):NEXT:ENDPROC
 3700 DEF PROCv2
 3710 REM full-colour walker glyphs &17C0+frame at &5F000; one token list per walker
-3720 FOR I%=0 TO 7:A%=&5F880+4*I%:?A%=&C0:?(A%+1)=&17:?(A%+2)=255:?(A%+3)=255
-3730 E%=&5F800+16*I%:!E%=0:?(E%+4)=0:?(E%+5)=1:?(E%+6)=&45:?(E%+7)=0
-3740 !(E%+8)=(&F880+4*I%)+(&3C00+4*I%)*65536:!(E%+12)=0
+3720 FOR I%=0 TO 7:A%=&5F900+4*I%:?A%=&C0:?(A%+1)=&17:?(A%+2)=255:?(A%+3)=255
+3730 E%=&5F800+32*I%:!E%=0:?(E%+4)=0:?(E%+5)=1:?(E%+6)=&45:?(E%+7)=0
+3740 !(E%+8)=(&F900+4*I%)+(&3C00+4*I%)*65536:!(E%+12)=0
 3750 ?(&FF83C00+4*I%)=0:?(&FF83C01+4*I%)=0:NEXT
 3760 ?&FFD71F8=0:?&FFD71F9=&F8:?&FFD71FA=5:?&FFD71FB=8:?&FFD71F0=?&FFD71F0 OR &50:ENDPROC
 3800 DEF PROCdma(C%,N%,S%,D%):?TL%=&80:?(TL%+1)=S% DIV &100000:?(TL%+2)=&81:?(TL%+3)=D% DIV &100000

@@ -12,7 +12,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >60 REM steps), Q%()=P%() AND &3FF03FF (10-bit X/Y: a bullet that leaves the
 >70 REM 640x400 screen goes into the invisible part of the 1024-pixel space and
 >80 REM is reused before it could come back), then 4 chained DMA jobs copy
->90 REM byte b of every Q%(i) to byte b of object i (source step 4, step 16).
+>90 REM byte b of every Q%(i) to byte b of object i (source step 4, step 32).
 >100 REM Player = object 0, moved with the mouse or a joystick in port 2; with
 >102 REM no input for 2 s (and always with BN%>0) it drifts on a slow path.
 >104 REM Collision groups (+7) and collides-with masks (+15): bullets 1/2, player
@@ -24,7 +24,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >120 BN%=0:RS%=1:N%=255:K%=(?&6E1=&FF):BG%=1:PG%=2:BW%=2:PW%=1
 >125 IF K% THEN IF ?&FFD71FD<2 THEN PG%=3:BW%=0:PW%=0:REM (no collides-with byte yet)
 >130 TB%=&8C000:GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000:DL%=&5F800
->135 IF K%=0 THEN TB%=&5E000:GA%=&58000:S%=&50000:REM (Xemu: logic only)
+>135 IF K%=0 THEN TB%=&56000:GA%=&58000:S%=&50000:REM (Xemu: logic only)
 >140 DIM P%(N%-1),V0%(N%-1),V1%(N%-1),Q%(N%-1),T0%(191),T1%(191),C%(63)
 >150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
 >160 CLS:PRINT "Swarm: ";N%-1;" bullets":PROCtables:PROCscreen
@@ -40,10 +40,10 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >267 IF ID%>100 OR BN% THEN X%=160+120*SIN(F%/70):Y%=100+70*SIN(F%/45)
 >270 P%(0)=(2*X% AND 1023)+65536*(2*Y% AND 1023):IF HT% THEN HT%=HT%-1:IF HT%=0 THEN !(TB%+8)=&9000+48+(OC%+48)*65536
 >280 IF F% AND 1 THEN P%()=P%()+V1%() ELSE P%()=P%()+V0%()
->290 A%=(A%+5) AND 63:I%=C%((F%>>2) AND 63)-&40004:P%(J%)=I%:V0%(J%)=T0%(A%):V1%(J%)=T1%(A%):!(TB%+16*J%+8)=&9000+(OC%)*65536:J%=J%+1:IF J%=N% THEN J%=1
+>290 A%=(A%+5) AND 63:I%=C%((F%>>2) AND 63)-&40004:P%(J%)=I%:V0%(J%)=T0%(A%):V1%(J%)=T1%(A%):!(TB%+32*J%+8)=&9000+(OC%)*65536:J%=J%+1:IF J%=N% THEN J%=1
 >300 IF (F% AND 7)=0 THEN I%=C%(((F%>>2)+21) AND 63):U%=(P%(0) AND &FFFF)-(I% AND &FFFF):W%=(P%(0)>>>16)-(I%>>>16):B%=64+INT(ATN(W%/(U%-(U%=0)*.5))*10.19+(U%<0)*-32.5) AND 63
->310 I%=C%(((F%>>2)+21) AND 63)-&40004:P%(J%)=I%:V0%(J%)=T0%(64+B%):V1%(J%)=T1%(64+B%):!(TB%+16*J%+8)=&9010+(OC%+16)*65536:J%=J%+1:IF J%=N% THEN J%=1
->320 C%=(C%+11) AND 63:I%=C%(((F%>>2)+42) AND 63)-&40004:P%(J%)=I%:V0%(J%)=T0%(C%+128):V1%(J%)=T1%(C%+128):!(TB%+16*J%+8)=&9020+(OC%+32)*65536:J%=J%+1:IF J%=N% THEN J%=1
+>310 I%=C%(((F%>>2)+21) AND 63)-&40004:P%(J%)=I%:V0%(J%)=T0%(64+B%):V1%(J%)=T1%(64+B%):!(TB%+32*J%+8)=&9010+(OC%+16)*65536:J%=J%+1:IF J%=N% THEN J%=1
+>320 C%=(C%+11) AND 63:I%=C%(((F%>>2)+42) AND 63)-&40004:P%(J%)=I%:V0%(J%)=T0%(C%+128):V1%(J%)=T1%(C%+128):!(TB%+32*J%+8)=&9020+(OC%+32)*65536:J%=J%+1:IF J%=N% THEN J%=1
 >330 Q%()=P%() AND &3FF03FF:DI:IF (F% AND 15)=0 THEN PROCstat
 >340 F%=F%+1:UNTIL F%=BN%
 >350 T%=TIME-T%:IF RS% THEN PROCtext:PRINT BN%;" frames in ";T%;" cs, ";HI%;" hits"
@@ -72,7 +72,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1350 IF K% THEN FOR C%=0 TO 4:PROCw(OA%+16*C%,GA% DIV 64+C%):PROCw(OA%+16*C%+2,&FFFF):PROCw(CR%-&4000+OC%+16*C%,0):NEXT
 >1360 REM objects: X/Y, mask, 1 row, bits 19-16 of the token list, group, list,
 >1370 REM colour offset, stride, box width 6, collides-with mask
->1380 IF K% THEN FOR I%=0 TO N%-1:A%=TB%+16*I%:!A%=Q%(0):?(A%+4)=255:?(A%+5)=0:?(A%+6)=8:?(A%+7)=BG%:!(A%+8)=&9000+OC%*65536:!(A%+12)=6*65536+BW%*&1000000:NEXT
+>1380 IF K% THEN FOR I%=0 TO N%-1:A%=TB%+32*I%:!A%=Q%(0):?(A%+4)=255:?(A%+5)=0:?(A%+6)=8:?(A%+7)=BG%:!(A%+8)=&9000+OC%*65536:!(A%+12)=6*65536+BW%*&1000000:NEXT
 >1390 IF K% THEN !(TB%+8)=&9030+(OC%+48)*65536:?(TB%+7)=PG%:?(TB%+15)=PW%
 >1395 GOTO 1500
 >1400 DATA 7,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0
@@ -89,7 +89,7 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >1560 ?&D060=0:?&D061=(S% DIV 256) AND 255:?&D062=S% DIV 65536:PROCw(&D064,&4000)
 >1570 IF K% THEN ?&FFD71F8=TB% AND 255:?&FFD71F9=(TB% DIV 256) AND 255:?&FFD71FA=TB% DIV 65536:?&FFD71FB=N%:?&FFD71F0=?&FFD71F0 OR &D0
 >1580 REM DMA list: byte b of Q%(i) -> byte b of object i, b = 0..3
->1590 FOR I%=0 TO 3:A%=DL%+22*I%:?A%=&80:?(A%+1)=^Q%(0) DIV &100000:?(A%+2)=&81:?(A%+3)=TB% DIV &100000:?(A%+4)=&83:?(A%+5)=4:?(A%+6)=&85:?(A%+7)=16
+>1590 FOR I%=0 TO 3:A%=DL%+22*I%:?A%=&80:?(A%+1)=^Q%(0) DIV &100000:?(A%+2)=&81:?(A%+3)=TB% DIV &100000:?(A%+4)=&83:?(A%+5)=4:?(A%+6)=&85:?(A%+7)=32
 >1600 PROCjob(A%+8,4*(I%<3)*-1,N%,^Q%(0)+I%,TB%+I%):NEXT:ENDPROC
 >1700 DEF PROCtext:IF K% THEN ON COLLISION OFF:?&FFD71F0=?&FFD71F0 AND &27
 >1710 ?&D031=V1%:?&D05B=V5%:?&D07B=V7%:MODE 0:ENDPROC

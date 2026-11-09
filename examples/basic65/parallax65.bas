@@ -83,7 +83,7 @@
 820 poke $d701,$31,5,0,0,0:rem list at $53100: the trigger ($d705) is written last
 830 x=mod(int(p/3),400):poke $d00c,x and 255:poke $d010,int(x/256)*64:poke $d00d,150+mod(int(p/10),6)
 840 x=400-mod(p*2,400):poke $d00e,x and 255:poke $d010,peek($d010) or int(x/256)*128:poke $d00f,80
-850 if k then poke $5f880,$c0+mod(int(p/4),4):poke $5f884,$c0+mod(int(p/4)+2,4):for i=0 to 5:e=$5f800+16*i:wpoke e,(1664-mod(p*5+i*110,700)) and 1023:wpoke e+2,(30+i*12+mod(int(p/4)+i*3,8)) and 1023:next i
+850 if k then poke $5f900,$c0+mod(int(p/4),4):poke $5f904,$c0+mod(int(p/4)+2,4):for i=0 to 5:e=$5f800+32*i:wpoke e,(1664-mod(p*5+i*110,700)) and 1023:wpoke e+2,(30+i*12+mod(int(p/4)+i*3,8)) and 1023:next i
 860 vsync 251
 870 if p<>bn then 790
 880 t=ti-t
@@ -143,11 +143,11 @@
 1620 poke $d06c,0,$fa,$85:poke $5fa0c,$f0,$17,$f3,$17
 1630 poke $d06b,$c0:poke $d02d,0,0:poke $d01b,$40:poke $d017,0:poke $d01d,0:poke $d01c,0:poke $d015,$c0:return
 1700 rem four flapping frames (8x8 full colour) at $5f000 = glyphs $17c0-$17c3;
-1710 rem birds 0,2,4 use token list $5f880, birds 1,3,5 $5f884 (opposite phase)
+1710 rem birds 0,2,4 use token list $5f900, birds 1,3,5 $5f904 (opposite phase)
 1720 restore 1790:k$=".obBwy":for f=0 to 3:for y=0 to 7:read a$:for x=0 to 7
 1730 poke $5f000+64*f+8*y+x,val(mid$("000144197188175141",3*instr(k$,mid$(a$,x+1,1))-2,3)):next x,y,f
-1740 poke $5f880,$c0,$17,255,255,$c2,$17,255,255
-1750 for i=0 to 5:e=$5f800+16*i:poke e,0,0,0,0,255,1,$45,0:wpoke e+8,$f880+4*(i and 1):wpoke e+10,$3c00:poke e+12,0,0,0,0:next i
+1740 poke $5f900,$c0,$17,255,255,$c2,$17,255,255
+1750 for i=0 to 5:e=$5f800+32*i:poke e,0,0,0,0,255,1,$45,0:wpoke e+8,$f900+4*(i and 1):wpoke e+10,$3c00:poke e+12,0,0,0,0:next i
 1760 poke cb-co+$3c00,0,0:poke $ffd71f8,0,$f8,5,6:return
 1790 data "ow....wo",".owbbwo.","..obbo..","...bBy..","...BB...","........","........","........"
 1800 data "........","owwbbwwo","..obbo..","...bBy..","...BB...","........","........","........"

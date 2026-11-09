@@ -47,7 +47,7 @@
 255 if k then if peek($ffd71c0) and 1 then gosub 1010:poke $ffd71c0,1
 260 if g then if (f and 3)=0 then for i=0 to n-1:dy(i)=dy(i)+1:next i
 280 for i=0 to n-1:x=x(i)+dx(i):y=y(i)+dy(i):if x<0 or x>632 or y<0 or y>392 then gosub 1135
-300 x(i)=x:y(i)=y:if k then wpoke tb+16*i,x and 1023,y and 1023
+300 x(i)=x:y(i)=y:if k then wpoke tb+32*i,x and 1023,y and 1023
 310 next i
 320 if k=0 then gosub 1660
 330 f=f+1:if f<>bn then 250
@@ -81,7 +81,7 @@
 1420 rem colour offset, stride, box width bw
 1430 if k=0 then 1470
 1440 for c=0 to 5:wpoke oa+16*c,$1800+c,$ffff:wpoke cr-$4000+oc+16*c,0:next c
-1450 for i=0 to n-1:a=tb+16*i:c=mod(i,6):wpoke a,x(i),y(i):poke a+4,255,1,8,1
+1450 for i=0 to n-1:a=tb+32*i:c=mod(i,6):wpoke a,x(i),y(i):poke a+4,255,1,8,1
 1460 wpoke a+8,$9000+16*c,oc+16*c:poke a+12,0,0,bw,0:next i
 1465 rem xctl bit 3 (newer k325t bitstreams): unpainted pixels show the
 1466 rem background, so sparse rows need no opaque base (bf=0)
