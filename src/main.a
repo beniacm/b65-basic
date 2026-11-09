@@ -1356,6 +1356,8 @@ gettop: lda page
 ; XCFLUSH: empty the compiled-expression cache (overlay 4 in bank 4: the
 ; key table XKHI and the next free byte XNEXT = XCODE, see xc.a)
 xcflush:
+        lda #0                  ; (the formals in PFB: forgotten too)
+        sta pfbkey+1
         lda #0                  ; the compiler's ARRSCAN results too
         sta ascnt
         ldx #3

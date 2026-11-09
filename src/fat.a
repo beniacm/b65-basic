@@ -437,6 +437,8 @@ fatload:
         dey
         bne -
         jsr sdread
+        lda #0                  ; (PARBUF: the formals in PFB are gone)
+        sta pfbkey+1
         lda #<FATBUF
         sta ptr3
         lda #>FATBUF

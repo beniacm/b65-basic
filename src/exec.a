@@ -2236,12 +2236,25 @@ callset2:
         sta defkey
         lda tp+1
         sta defkey+1
-        ldx #$12                ; XCFORM: PFB
+        cmp pfbkey+1            ; PFB still holds this DEF's formals (the
+        bne .xf                 ; last ones fetched; key also in PFB+21)?
+        cmp PFB+22
+        bne .xf
+        lda tp
+        cmp pfbkey
+        bne .xf
+        cmp PFB+21
+        lbeq .fast
+.xf     ldx #$12                ; XCFORM: PFB
         jsr xc4
-        lbcc .fast
-        lda #$ff                ; record them this time
+        bcs .rec
+        jsr pfbset
+        lbra .fast
+.rec    lda #$ff                ; record them this time
         sta pfok
-.bp     jsr nxt
+.bp     lda #0                  ; (PFB is rewritten: not the cached formals)
+        sta pfbkey+1
+        jsr nxt
         cmp #'('
         lbne .nof
         inw tp
@@ -2376,6 +2389,7 @@ callset2:
         sta PFB+2
         ldx #$15                ; XCFORMPUT
         jsr xc4
+        jsr pfbset
 +       jmp xeq
 .nof    lda cnt
         lbne .badarg
@@ -2440,6 +2454,16 @@ callset2:
         lda PFB+2
         jsr settph
         jmp xeq
+; PFBSET: PFB holds the formals of the DEF at defkey (CLEAR, a full code
+; cache, the slow binding and a FAT sector read into PARBUF forget it)
+pfbset: lda defkey
+        sta pfbkey
+        sta PFB+21
+        lda defkey+1
+        sta pfbkey+1
+        sta PFB+22
+        rts
+pfbkey  !word 0
 ; PFREC: note formal tmp2 (vptr, vtype) in PFB while binding (numeric only)
 pfrec:  bit pfok
         bpl .px

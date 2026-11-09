@@ -598,6 +598,7 @@ xcrun:  lda #0
 
 xflush:
         lda #0
+        sta pfbkey+1            ; (the formals in PFB: forgotten too)
         tax
 -       sta XKHI,x
         inx
