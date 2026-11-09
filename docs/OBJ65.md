@@ -193,23 +193,33 @@ can tear for one frame; for several fields at once switch the motion off
 
 ### Budget
 
-Per frame the motion costs, for 1023 objects (Xemu; B65 does the same
-work about 1.3 times faster):
+The motion costs per frame, for 1023 objects, measured on the K325T board
+(`tests/bench/objstep.txt`); B65 does the same work 1.13-1.27 times
+faster (its figure in brackets):
 
 | mode | ms per frame | objects in half a frame (10 ms) |
 |---|---|---|
-| fast (whole pixels), no limits | 6.0 | about 1700 |
-| fast with wrap limits | 12.8 | about 800 |
-| cartesian | 11.6 | about 880 |
-| cartesian with limits | 22.0 | about 460 |
-| polar, straight | 18.0 | about 570 |
-| polar, curving or exact | 29-32 | about 330 |
-| orbit, spring | 34-38 | about 300 |
+| static (no motion) | 1.6 (1.2) | |
+| fast (whole pixels), no limits | 5.6 (4.4) | about 1800 |
+| fast with wrap limits | 11.6 (9.6) | about 880 |
+| cartesian | 10.8 (8.8) | about 950 |
+| cartesian with an acceleration | 13.6 (11.2) | about 750 |
+| cartesian with wrap limits | 20.0 (16.4) | about 510 |
+| polar, straight, with limits | 16.4 (14.4) | about 620 |
+| polar, curving (k = 5), with limits | 27.2 (23.6) | about 380 |
+| polar, exact, with limits | 29.2 (25.2) | about 350 |
+| orbit, with limits | 32.0 (28.4) | about 320 |
+| spring, with limits | 36.0 (32.0) | about 280 |
 
-So with OBJ65 budget about 1000 fast bullets (lifetimes instead of
-limits) or 450-800 objects with limits or sub-pixel steps per frame.
-HITPIX: about 0.15 ms for two objects whose boxes are apart, 0.2-0.4 ms
-for two 8x8 objects, plus BASIC 65's call (a few hundred microseconds).
+So with OBJ65 budget about 1000 fast bullets per frame (whole-pixel
+steps, lifetimes instead of limits: 5.6 ms, 28 % of a 20 ms frame), or
+500-950 objects with limits or sub-pixel steps in half a frame. HITPIX:
+about 0.15 ms for two objects whose boxes are apart, 0.2-0.4 ms for two
+8x8 objects, plus BASIC 65's call (a few hundred microseconds).
+
+(Xemu measures 1.19-1.36x between the two builds, the board 1.13-1.27x;
+Xemu's figures for OBJ65: fast 6.0, cartesian 11.6, cartesian + wrap
+22.0, exact polar 31.6 ms.)
 
 ### jumper65
 

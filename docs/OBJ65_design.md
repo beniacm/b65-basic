@@ -106,8 +106,11 @@ pointer:
 | orbit + wrap | 28.8 | 34.4 | 1.19x |
 | spring + wrap | 32.0 | 38.4 | 1.20x |
 
-(The board numbers of both builds are to come: Xemu's cycle model of
-`[zp],z` may differ from the board's 10 cycles.)
+On the board (K325T, the same benchmark) both builds are a little closer:
+B65 / far 1.2 / 1.6 static, 4.4 / 5.6 fast, 9.6 / 11.6 fast + wrap, 8.8 /
+10.8 cartesian, 16.4 / 20.0 cartesian + wrap, 14.4 / 16.4 straight polar,
+23.6 / 27.2 curving, 25.2 / 29.2 exact polar, 28.4 / 32.0 orbit, 32.0 /
+36.0 spring: 1.13-1.27x (docs/OBJ65.md has the budget from these).
 
 **Go.** With half a frame (10 ms) for the motion, OBJ65 moves about 1700
 fast (whole-pixel) objects, 800 fast with wrap limits, 880 cartesian,
