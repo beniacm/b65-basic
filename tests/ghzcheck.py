@@ -68,8 +68,8 @@ class Act3:
             q2 = (g.c[0] + 32 * grp + 16 * k) & 255; q3 = (g.c[1] + 32 * grp + 16 * k) & 255
             x = s1[q0] + s1[q2] + 4
             y = (s2[q1] + s2[q3]) & 255
-            e = {0: x & 255, 1: x >> 8, 4: 0xFF if 8 <= y < 223 else 0, 8: 4 * ((grp + self.anim) & 3)}
-            if 8 <= y < 223:
+            e = {0: x & 255, 1: x >> 8, 4: 0xFF if 23 <= y < 223 else 0, 8: 4 * ((grp + self.anim) & 3)}
+            if 23 <= y < 223:
                 yy = (y - 15) & 0x3FF
                 e[2], e[3] = yy & 255, yy >> 8
             return e
@@ -112,7 +112,7 @@ def main():
     if a3 is not None:
         src = src.replace('A1%=3000:SM%=1:A2%=1:XT%=0', 'A1%%=%d:SM%%=0:A2%%=0:XT%%=1' % a3)
     if shot:                        # keep the picture: no return to text, stay in a loop
-        src = src.replace('T0%=TIME-T0%:PROCback:', 'T0%=TIME-T0%:REPEAT UNTIL FALSE:')
+        src = src.replace('T0%=TIME-T0%:PROCctr(AN%):PROCback:', 'T0%=TIME-T0%:REPEAT UNTIL FALSE:')
     with tempfile.TemporaryDirectory() as td:
         card = os.path.join(td, 'card.img')
         subprocess.run(['cp', '--sparse=always', os.path.expanduser('~/src/xemu-work/card.img'), card], check=True)

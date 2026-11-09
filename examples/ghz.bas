@@ -12,7 +12,7 @@
 95 REM into the slots of 3 rows (as SCROLLTEST does). The data: docs/GHZ.md.
 100 REM BN%>0: BN% frames without the intro and the frame wait (tests); RN%>0: stop after RN% frames.
 110 BN%=0:RN%=0:VS%=0:A1%=3000:SM%=1:A2%=1:XT%=0:REM A1%: the frames of act 1; SM%=0: the text in 8-pixel steps (Xemu draws no GOTOX Y offsets); A2%=0: no act 2; XT%=1: act 3's objects in a scratch table (tests)
-115 DN$="INTRO2.D81":PN$="SCROLLTEST":SV%=2:REM the D81 in the SD card root and the program on it that has the art; SV%: act 2 scrolls 1, 2, 4 or 8 pixels a frame
+115 DN$="INTRO2.D81":PN$="SCROLLTEST":SV%=2:MK%=1:REM the D81 in the SD card root and the program on it that has the art; SV%: act 2 scrolls 1, 2, 4 or 8 pixels a frame; MK%: row masks on the text sets
 120 SC%=&50000:LS%=372:CO%=&800:CR%=&FF80000+CO%:TM%=&52600:GA%=&55800:TA%=&5A600:DL%=&5C000:FT%=&5D000:TT%=&8580000:PS%=&5F000:OG%=&5E800:OP%=&5F400:OL%=&5F500:JS%=&5F600:C3%=&3000:HU%=&85A0000
 130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25),FR%(3),LA%(3),LM%(3),LP%(3)
 140 ON ERROR E$=REPORT$:E%=ERL:PROCback:PRINT E$;" at line ";E%:END
@@ -54,11 +54,12 @@
 420 K%(B%)=K%(B%)+1:IF K%(B%)>=W%(B%) THEN K%(B%)=0
 430 ?(V%+17+B%)=2*K%(B%):ENDPROC:REM (RING moves the rows' job sources)
 440 REM ---- act 2: the source scrolls up over the picture (two token sets a row: line L moved up by S pixels, line L+1 down by 8-S)
-442 DEF PROCact2:AC%=2:TL%=0:TS%=0:?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:PROCtext:ENDPROC
+442 DEF PROCact2:AC%=2:TL%=0:TS%=0:?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:?&D1FB=0:?&D2FB=0:?&D3FB=0:PROCtext:ENDPROC
 444 DEF PROCscroll:TS%=TS%+SV%:IF TS%>=8 THEN TS%=0:TL%=TL%+1:PROCtext
-445 IF TL%>=NL%-27 THEN AC%=3:?(V%+8)=0:?(V%+9)=2:ENDPROC:REM (the closing caption stays on rows 11 and 13)
-446 IF SM%=0 THEN ?(V%+8)=0:?(V%+9)=2:ENDPROC
-447 IF TS% THEN ?(V%+8)=TS%<<5:?(V%+9)=((8-TS%)<<5) OR &10 ELSE ?(V%+8)=0:?(V%+9)=2:REM (Y offset: bits 15-13 up, bit 12: down)
+445 IF TL%>=NL%-27 THEN AC%=3:?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC:REM (the closing caption stays on rows 11 and 13)
+446 IF SM%=0 THEN ?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
+447 IF TS% THEN ?(V%+8)=TS%<<5:?(V%+9)=((8-TS%)<<5) OR &10:?(V%+28)=&FF>>TS%:?(V%+29)=(&FF<<(8-TS%)) AND &FF ELSE ?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF
+448 REM (Y offset: bits 15-13 up, bit 12 down; row masks: set 1 draws pixel rows 0..7-S, set 2 rows 8-S..7, else the VIC-IV paints the neighbouring glyphs' rows there)
 448 ENDPROC
 449 DEF PROCtext:PROCtb(&80000+80*TL%):ENDPROC
 450 DEF PROCfront
@@ -107,7 +108,7 @@
 750 ?(A%+44)=&70:?(A%+45)=0:?(C%+44)=&90:?(C%+45)=0
 760 FOR I%=46 TO 86 STEP 2:?(A%+I%)=&60:?(A%+I%+1)=&15:?(C%+I%)=8:?(C%+I%+1)=&20:NEXT
 770 FOR I%=88 TO 204 STEP 4:?(A%+I%)=0:?(A%+I%+1)=1:?(A%+I%+2)=&84:?(A%+I%+3)=&16:?(C%+I%)=&90:?(C%+I%+1)=0:?(C%+I%+2)=8:?(C%+I%+3)=&30:NEXT
-775 FOR I%=208 TO 290 STEP 82:?(A%+I%)=0:?(A%+I%+1)=2:?(C%+I%)=&90:?(C%+I%+1)=0:NEXT
+775 FOR I%=208 TO 290 STEP 82:?(A%+I%)=16:?(A%+I%+1)=2:?(C%+I%)=&90+8*MK%:?(C%+I%+1)=&FF:NEXT:REM text sets at X 16 (the first visible pixel), GOTOX + transparent + row mask
 777 FOR I%=210 TO 370 STEP 2:IF I%<>290 THEN ?(A%+I%)=&40:?(A%+I%+1)=&17:?(C%+I%)=0:?(C%+I%+1)=0
 778 NEXT
 780 NEXT:ENDPROC
@@ -136,7 +137,7 @@
 960 NO%=1020:RT%=&17000:IF K3% THEN RT%=&E0000:REM the object table (K325T: B65's own table address; tests: scratch in bank 1 above the program)
 961 IF K3%=0 AND XT% AND TOP>RT% THEN ERROR 215,"Program too long for the test table"
 962 DIM OV% 130:FOR I%=0 TO 3:?(OV%+70+I%)=((RT%+256)>>(8*I%)) AND 255:?(OV%+74+I%)=((RT%+32*1008)>>(8*I%)) AND 255:?(OV%+78+I%)=(RT%>>(8*I%)) AND 255:NEXT
-963 ?OV%=64:?(OV%+1)=0:?(OV%+2)=0
+963 ?OV%=64:?(OV%+1)=0:?(OV%+2)=0:CL%=FB%+78:CH%=CL%+26:FOR I%=0 TO 25:O%=CO%+LS%*I%:?(CL%+I%)=O% AND 255:?(CH%+I%)=O%>>8:NEXT:?(V%+28)=&FF:?(V%+29)=&FF
 965 DIM RING% 700,A3% 600:FOR I%=0 TO 2 STEP 2:P%=RING%
 970 [OPT I%
 971 .ring LDA #(DL%>>16):STA &C2:LDA #0:STA &C3:LDA #((DL%+13) AND 255):STA &C0:LDA #(((DL%+13)>>8) AND 255):STA &C1:LDY #0
@@ -144,9 +145,10 @@
 973 .s2 LDA FB%,Y:CLC:ADC V%+24:LDZ #0:STA [&C0],Z:LDA FB%+26,Y:ADC #0:INZ:STA [&C0],Z:LDA FB%+52,Y:ADC #0:INZ:STA [&C0],Z:JSR nx:INY:CPY #26:BNE s2
 974 LDA V%+25:STA &B0:LDA V%+26:STA &B1:LDA V%+27:STA &B2:JSR tx:LDA V%+25:CLC:ADC #80:STA &B0:LDA V%+26:ADC #0:STA &B1:LDA V%+27:ADC #0:STA &B2:JSR tx
 975 LDA #(DL%>>16):STA &D702:LDA #0:STA &D704:LDA #((DL%>>8) AND 255):STA &D701:LDA #(DL% AND 255):STA &D705
-976 LDA #(SC%>>16):STA &C2:LDA #0:STA &C3:LDY #25
+976 LDA #(SC%>>16):STA &C2:LDA #0:STA &C3:LDA #&F8:STA &C6:LDA #&0F:STA &C7:LDY #25
 977 .f1 LDA PL%+2,Y:SEC:SBC #88:STA &C0:LDA PH%+2,Y:SBC #0:STA &C1:LDX RM%,Y:LDA V%+10,X:LDZ #0:STA [&C0],Z
-978 LDA V%+7:LDZ #44:STA [&C0],Z:LDA V%+8:LDZ #209:STA [&C0],Z:LDA V%+9:LDZ #291-256:INC &C1:STA [&C0],Z:LDZ #0:DEY:BPL f1
+978 LDA V%+7:LDZ #44:STA [&C0],Z:LDA V%+8:LDZ #209:STA [&C0],Z:LDA V%+9:LDZ #291-256:INC &C1:STA [&C0],Z
+979 LDA CL%,Y:STA &C4:LDA CH%,Y:STA &C5:LDA V%+28:LDZ #209:STA [&C4],Z:LDA V%+29:LDZ #35:INC &C5:STA [&C4],Z:LDZ #0:DEY:LBPL f1
 980 INC V%:INC V%+1:INC V%+5:LDA V%+5:CMP #10:BNE r1:LDA #0:STA V%+5:LDA V%+4:CLC:ADC #3:CMP #&96:BNE r0:LDA #&84
 990 .r0 STA V%+4
 1000 .r1 LDA V%+4:STA &B7:LDA V%+2:STA &B2:LDA V%+3:STA &B3:LDA #0:STA &B4:LDA #4:STA &B5
@@ -182,7 +184,7 @@
 1216 .a3g LDA V%:CLC:ADC &B7:STA &BD:LDA V%+1:CLC:ADC &B8:STA &BE:LDA &B9:STA &BF:LDA &BA:STA &C0
 1218 LDA &B5:CLC:ADC OV%+2:AND #3:ASL A:ASL A:STA &C1:LDX #16
 1220 .a3k LDY &BD:LDA S1%,Y:LDY &BF:CLC:ADC S1%,Y:STA &C2:LDA #0:ROL A:STA &C3:LDA &C2:CLC:ADC #4:LDZ #0:STA [&B0],Z:LDA &C3:ADC #0:INZ:STA [&B0],Z
-1222 LDY &BE:LDA S2%,Y:LDY &C0:CLC:ADC S2%,Y:CMP #8:BCC a3h:CMP #223:BCS a3h:SEC:SBC #15:LDZ #2:STA [&B0],Z:LDA #0:SBC #0:AND #3:INZ:STA [&B0],Z:LDA #&FF:BRA a3v
+1222 LDY &BE:LDA S2%,Y:LDY &C0:CLC:ADC S2%,Y:CMP #23:BCC a3h:CMP #223:BCS a3h:SEC:SBC #15:LDZ #2:STA [&B0],Z:LDA #0:SBC #0:AND #3:INZ:STA [&B0],Z:LDA #&FF:BRA a3v
 1224 .a3h LDA #0
 1226 .a3v LDZ #4:STA [&B0],Z:LDA &C1:LDZ #8:STA [&B0],Z:LDZ #0
 1228 LDA &BD:CLC:ADC #16:STA &BD:LDA &BE:CLC:ADC #16:STA &BE:LDA &BF:CLC:ADC #16:STA &BF:LDA &C0:CLC:ADC #16:STA &C0
@@ -226,8 +228,8 @@
 1510 DEF PROCact3:LOCAL I%,A%
 1512 IF A2% THEN PROCctr(2)
 1513 AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA
-1514 PROCfill(HU%,26*80,&40,&17):PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
-1516 ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
+1514 PROCfill(HU%,26*80,&40,&17):PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
+1516 ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:?&D1FB=0:?&D2FB=0:?&D3FB=0:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
 1518 PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
 1520 IF K3%+XT%=0 THEN ENDPROC
 1522 ?(V%+30)=1:PROCobjs:IF K3%=0 THEN ENDPROC
@@ -263,7 +265,7 @@
 1588 FOR I%=0 TO 63 STEP 4:!(&FF80000+C3%+I%)=0:NEXT
 1590 FOR I%=0 TO 31:?(OV%+86+I%)=0:NEXT:?(OV%+86+5)=1:?(OV%+86+6)=&40+(OL%>>16):?(OV%+86+9)=(OL%>>8) AND 255:?(OV%+86+10)=C3% AND 255:?(OV%+86+11)=C3%>>8
 1592 CALL AI%:REM rings: the template written to 1000 entries
-1594 FOR I%=0 TO 19:IF I%<8 THEN A%=RT%+32*I%:X%=56*I%+20*(I% MOD 3):Y%=4+(I%*13) MOD 30:S%=OL%+16:W%=20 ELSE A%=RT%+32*(1000+I%):X%=40*(I%-8):Y%=176+8*(I% MOD 3):S%=OL%+56:W%=16
+1594 FOR I%=0 TO 19:IF I%<8 THEN A%=RT%+32*I%:X%=56*I%+20*(I% MOD 3):Y%=10+(I%*13) MOD 26:S%=OL%+16:W%=20 ELSE A%=RT%+32*(1000+I%):X%=40*(I%-8):Y%=176+8*(I% MOD 3):S%=OL%+56:W%=16
 1596 FOR X3%=0 TO 31 STEP 4:!(A%+X3%)=0:NEXT:PROCw(A%,X% AND &3FF):PROCw(A%+2,Y%):?(A%+4)=&FF:?(A%+5)=2:?(A%+6)=&40+(S%>>16):PROCw(A%+8,S% AND &FFFF):PROCw(A%+10,C3%):PROCw(A%+12,W%)
 1598 O%=OV%+8+3*I%:?O%=0:PROCw(O%+1,X%):NEXT:?(OV%+5)=64:?(OV%+6)=0:?(OV%+3)=0:?(OV%+4)=0:ENDPROC
 1600 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V%>>8) AND 255:ENDPROC

@@ -92,7 +92,13 @@ token lines ("...BUT IN BASIC?" first). Each screen row gets two more token
 sets after SCROLLTEST's 104 tokens: a GOTOX and 40 characters of line L
 moved up by S pixels, a GOTOX and 40 characters of line L+1 moved down by
 8 - S (the GOTOX Y offset: bits 15-13 up, bit 12 down), so the text moves
-SV% pixels a frame (line 115: 2; 1, 2, 4 or 8); the rows grow to 186
+SV% pixels a frame (line 115: 2; 1, 2, 4 or 8). Each set's GOTOX has a
+row mask (colour byte 0 bit 3, the mask in byte 1, written by the routine
+each frame): set 1 draws pixel rows 0..7-S, set 2 rows 8-S..7; without it
+the VIC-IV paints the neighbouring glyphs' rows in the rest of the row (on
+the board: doubled, smeared text; `MK%=0` switches the masks off). The
+text sets start at X 16, the first visible pixel, and the font has a black
+shadow (colour 251) right of and below each white pixel. The rows grow to 186
 tokens (line step 372). When the listing ends, "B65 BASIC. n LINES." and
 "50 FRAMES PER SECOND." stay for 3 s. The text
 tokens come from attic RAM ($8580000) with the same DMA list (52 more
@@ -126,7 +132,8 @@ bit 0):
   ring's X, Y, mask and token list (one of four, for the turn) and moves the
   clouds and bushes (X in 1/256 pixel, wrapping at -64 to 383); BASIC only
   ramps the count, turns the animation and updates the HUD;
-- the HUD (row 0, through act 2's text sets, from a page in attic RAM):
+- the HUD (row 0, kept free of objects: rings only from pixel row 8, clouds
+  from row 10; through act 2's text sets, from a page in attic RAM):
   RINGS, FPS (from `$D7FA`), OBJECTS and LINE (the VIC-IV's counter 25,
   the longest painting of the last half second, in pixel cycles; read
   through `$FFD71E0-E3`).

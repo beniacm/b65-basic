@@ -175,7 +175,7 @@ TEXTCH = 0x1740                     # char of ' ' in the overlay font (FCM, at $
 
 def text_pack():
     """build/B65GHZS.BBC: act 2's overlay: lines (2 bytes), the font (96 FCM
-    glyphs, ASCII 32..127, pixel colour 250), then 40 tokens a line: blank
+    glyphs, ASCII 32..127, pixel colour 250, shadow 251), then 40 tokens a line: blank
     lines, 'BUT HAVE YOU SEEN IT IN BASIC?', blank lines, examples/ghz.bas
     wrapped at 40 columns, blank lines, 'B65 BASIC. n LINES.' (n: the
     program's lines) and '50 FRAMES PER SECOND.', blank lines; the scroll
@@ -185,10 +185,11 @@ def text_pack():
         if '!byte' in ln:
             font += [int(v.strip().lstrip('$'), 16) for v in ln.split('!byte')[1].split(';')[0].split(',')]
     glyphs = bytearray()
-    for c in range(96):
+    for c in range(96):                 # white (250) with a black shadow (251) to the right and below
+        on = lambda x, y: 0 <= x < 8 and 0 <= y < 8 and font[c * 8 + y] >> (7 - x) & 1
         for y in range(8):
-            row = font[c * 8 + y]
-            glyphs += bytes(250 if row >> (7 - x) & 1 else 0 for x in range(8))
+            glyphs += bytes(250 if on(x, y) else 251 if on(x - 1, y) or on(x, y - 1) or on(x - 1, y - 1) else 0
+                            for x in range(8))
     src = open(os.path.join(ROOT, 'examples', 'ghz.bas')).read().splitlines()
     nlines = sum(1 for ln in src if ln[:1].isdigit())
     lines = [''] * 13 + ['BUT HAVE YOU SEEN IT IN BASIC?'.center(40)] + [''] * 13
