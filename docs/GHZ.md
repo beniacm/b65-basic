@@ -163,4 +163,7 @@ ways now (see RELEASE_v0.3.md).
   `tests/board_ghz3.txt`: act 3 after 200 frames of act 1 (the objects, 4 px
   painting, the HUD; "act 3: 1001 frames, n late"); `tests/board_ghzall.txt`:
   the demo as shipped (the recording). Each run ends with "act n: frames, late"
-  per act (late frames counted from each act's 11th frame, through `$D7FA`).
+  per act (late frames counted from each act's 11th frame, through `$D7FA`);
+  on a K325T also the VIC-IV's longest painting (counter 25, pixel cycles;
+  5184 is two lines, the DBLRR cut-off) and its late pixels (counter 23),
+  each act measured from its 11th frame (act 3: the HUD's readings).

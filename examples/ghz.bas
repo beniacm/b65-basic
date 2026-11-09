@@ -14,7 +14,7 @@
 110 BN%=0:RN%=0:VS%=0:A1%=3000:SM%=1:A2%=1:XT%=0:REM A1%: the frames of act 1; SM%=0: the text in 8-pixel steps (Xemu draws no GOTOX Y offsets); A2%=0: no act 2; XT%=1: act 3's objects in a scratch table (tests)
 115 DN$="INTRO2.D81":PN$="SCROLLTEST":SV%=2:REM the D81 in the SD card root and the program on it that has the art; SV%: act 2 scrolls 1, 2, 4 or 8 pixels a frame
 120 SC%=&50000:LS%=372:CO%=&800:CR%=&FF80000+CO%:TM%=&52600:GA%=&55800:TA%=&5A600:DL%=&5C000:FT%=&5D000:TT%=&8580000:PS%=&5F000:OG%=&5E800:OP%=&5F400:OL%=&5F500:JS%=&5F600:C3%=&3000:HU%=&85A0000
-130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25),FR%(3),LA%(3)
+130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25),FR%(3),LA%(3),LM%(3),LP%(3)
 140 ON ERROR E$=REPORT$:E%=ERL:PROCback:PRINT E$;" at line ";E%:END
 150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(26,11);"YOU HAVE SEEN THIS ON MEGA65":PRINT TAB(23,13);"SCROLLTEST BY MAXICE, INTRO DISK 2"
 155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,16);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
@@ -30,12 +30,12 @@
 270 CALL RING%:REM the job sources, the DMA list, the GOTOX bytes, the rings
 275 IF AC%=4 THEN IF K3%+XT% THEN CALL A3%:REM act 3: 1000 rings, clouds and bushes in the object table
 280 F%=F%+1:FR%(AN%)=FR%(AN%)+1:IF BN%=0 THEN WAIT:Q%=?&D7FA:IF F%-AS%>10 THEN LA%(AN%)=LA%(AN%)+((Q%-LQ%-1) AND 255)
-282 LQ%=Q%
+282 LQ%=Q%:IF KH% THEN IF F%-AS%=11 THEN ?&FFD71E3=0:REM (K325T: the VIC-IV's counters from each act's 11th frame)
 285 IF BN%=0 THEN IF F%=RN% OR INKEY(0)>=0 THEN EX%=1
 290 UNTIL F%=BN% OR EX%
-300 T0%=TIME-T0%:PROCback:IF BN%+RN%=0 THEN PROCcard
+300 T0%=TIME-T0%:PROCctr(AN%):PROCback:IF BN%+RN%=0 THEN PROCcard
 305 IF BN%+RN% THEN PRINT "frames ";F%;" speed ";SP%;" front ";FC%;",";FX%;" in ";T0%;" cs"
-308 FOR I%=1 TO 3:IF FR%(I%) THEN PRINT "act ";I%;": ";FR%(I%);" frames, ";LA%(I%);" late"
+308 FOR I%=1 TO 3:IF FR%(I%) THEN PRINT "act ";I%;": ";FR%(I%);" frames, ";LA%(I%);" late";:IF KH% THEN PRINT ", longest painting ";LM%(I%);", late pixels ";LP%(I%) ELSE PRINT
 309 NEXT
 310 END
 320 DEF PROCcard:CLS:PRINT TAB(25,11);"B65 BASIC FOR MEGA65 AND K325T":PRINT TAB(26,13);"github.com/beniacm/b65-basic":T%=TIME:REPEAT UNTIL TIME-T%>=400:PRINT:ENDPROC
@@ -46,7 +46,7 @@
 340 IF AC%=3 THEN H2%=H2%+1:IF H2%>=150 THEN PROCact3:ENDPROC
 342 IF AC%=4 THEN PROCa3
 344 ENDPROC
-346 DEF PROCa1:IF NL%=0 THEN EX%=1:ENDPROC:REM (no B65GHZS.BBC: act 1 only)
+346 DEF PROCa1:PROCctr(1):IF NL%=0 THEN EX%=1:ENDPROC:REM (no B65GHZS.BBC: act 1 only)
 347 AN%=2:AS%=F%:AC%=3:H2%=150:IF A2% THEN PROCact2
 348 ENDPROC
 400 DEF PROCband(B%)
@@ -132,7 +132,7 @@
 956 REM job sources: band row = BB(row) + 2 x column (V%+17+band), front row = FB(row) + 2 x column (V%+24), text rows from V%+25..27 (80 bytes a line)
 957 BB%=RM%+26:FB%=BB%+78:FOR I%=0 TO 25:FOR O%=0 TO 2:?(BB%+26*O%+I%)=(BL%(I%)>>(8*O%)) AND 255:?(FB%+26*O%+I%)=(FL%(I%)>>(8*O%)) AND 255:NEXT:NEXT
 958 FOR I%=17 TO 24:?(V%+I%)=0:NEXT:?(V%+25)=0:?(V%+26)=0:?(V%+27)=8:?(V%+30)=0
-959 K3%=0:IF ?&6E1=&FF THEN IF ?&FFD71FD>=3 THEN K3%=1
+959 K3%=0:KH%=(?&6E1=&FF):IF KH% THEN IF ?&FFD71FD>=3 THEN K3%=1
 960 NO%=1020:RT%=&17000:IF K3% THEN RT%=&E0000:REM the object table (K325T: B65's own table address; tests: scratch in bank 1 above the program)
 961 IF K3%=0 AND XT% AND TOP>RT% THEN ERROR 215,"Program too long for the test table"
 962 DIM OV% 130:FOR I%=0 TO 3:?(OV%+70+I%)=((RT%+256)>>(8*I%)) AND 255:?(OV%+74+I%)=((RT%+32*1008)>>(8*I%)) AND 255:?(OV%+78+I%)=(RT%>>(8*I%)) AND 255:NEXT
@@ -224,7 +224,8 @@
 1500 REM ---- act 3: "NOW WITH THE K325T VIC-IV": rings 64 -> 300 -> 1000 as list-mode objects (8x8 full-colour rings on SCROLLTEST's sine paths,
 1502 REM written each frame by the routine A3%), 8 clouds behind and 12 bushes in front (objects too), 4-pixel painting; a HUD row; any other core: 64 rings (plain RRB)
 1510 DEF PROCact3:LOCAL I%,A%
-1512 AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA
+1512 IF A2% THEN PROCctr(2)
+1513 AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA
 1514 PROCfill(HU%,26*80,&40,&17):PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
 1516 ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
 1518 PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
@@ -243,9 +244,13 @@
 1546 ENDPROC
 1550 DEF PROChud:LOCAL E%,L%,M%,S$
 1552 E%=(?&D7FA-QH%) AND 255:QH%=?&D7FA:IF E%=0 THEN E%=25
-1554 S$="RINGS "+STR$(N3%)+"   FPS "+STR$(INT(50*25/E%+.5)):IF BN% THEN S$="RINGS "+STR$(N3%)
-1556 IF K3% THEN ?&FFD71E0=25:REPEAT L%=?&FFD71E1+256*?&FFD71E2:M%=?&FFD71E1+256*?&FFD71E2:UNTIL L%=M%:?&FFD71E3=0:S$=S$+"   OBJECTS "+STR$(N3%+20)+"   LINE "+STR$(L%)
-1558 PROCput(0,S$):ENDPROC
+1554 S$=" RINGS "+STR$(N3%)+"  FPS "+STR$((1250+E% DIV 2) DIV E%):IF BN% THEN S$=" RINGS "+STR$(N3%)
+1556 IF K3% THEN L%=FNctr(25):PROCctr(3):S$=S$+"  OBJECTS "+STR$(N3%+20)+"  LINE "+STR$(L%)
+1558 $DB%=LEFT$(S$+"                                        ",40):!(OV%+120)=HU%:CALL PU%:ENDPROC
+1564 DEF FNctr(N%):LOCAL L%,M%:?&FFD71E0=N%:REPEAT L%=?&FFD71E1+256*?&FFD71E2:M%=?&FFD71E1+256*?&FFD71E2:UNTIL L%=M%:=L%
+1566 DEF PROCctr(A%):LOCAL L%:IF KH%=0 THEN ENDPROC
+1568 L%=FNctr(25):IF L%>LM%(A%) THEN LM%(A%)=L%
+1569 LP%(A%)=LP%(A%)+FNctr(23):?&FFD71E3=0:ENDPROC:REM (counter 25: the longest painting in pixel cycles, 23: late pixels; then cleared)
 1560 DEF PROCput(R%,S$):LOCAL A%:A%=HU%+80*R%:S$=STRING$((40-LEN(S$)) DIV 2," ")+S$:$DB%=LEFT$(S$+STRING$(40," "),40)
 1562 !(OV%+120)=A%:CALL PU%:ENDPROC:REM (PU%: the 40 characters at DB% as text tokens to the HUD page)
 1570 DEF PROCfill(A%,N%,B%,C%):PROCjob(JS%,3,N% DIV 2,B%,A% AND &FFFFF,2):?(JS%+3)=A%>>20:?(JS%+10)=3
