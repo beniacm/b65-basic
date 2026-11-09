@@ -54,6 +54,13 @@ def pos_add(e, fo, lo, v):
     h = (e[lo + 1] + sign + (s >> 8)) & 3
     e[lo + 1] = (e[lo + 1] & 0xfc) | h
 
+def rsh(v, k):
+    """v >> k rounded as B65 does it: >> (k - 1), + 1 (16 bits), >> 1"""
+    v >>= k - 1
+    v = (v + 1) & 0xffff
+    v = v - 0x10000 if v & 0x8000 else v
+    return v >> 1
+
 def step(tab, lim, base_events=None):
     ev = set()
     for n, e in enumerate(tab):
@@ -77,8 +84,8 @@ def step(tab, lim, base_events=None):
                 if e[28]:                   # Minsky rotation, 1/2^k radian
                     k = e[28] & 7
                     sg = -1 if e[28] & 0x80 else 1
-                    w16(e, 18, s16(e, 18) - sg * (s16(e, 20) >> k))
-                    w16(e, 20, s16(e, 20) + sg * (s16(e, 18) >> k))
+                    w16(e, 18, s16(e, 18) - sg * rsh(s16(e, 20), k))
+                    w16(e, 20, s16(e, 20) + sg * rsh(s16(e, 18), k))
             vx, vy = u16(e, 18), u16(e, 20)
             pos_add(e, 30, 0, vx)
             pos_add(e, 31, 2, vy)

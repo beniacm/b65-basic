@@ -476,16 +476,21 @@ objstep:
         adc oT+1
         sta (oP),y
         rts
-.shk    lda (oP),y              ; oT = field +Y >> k (arithmetic)
+.shk    lda (oP),y              ; oT = field +Y >> k, rounded
         sta oT
         iny
         lda (oP),y
         sta oT+1
-        ldx oT+2
+        ldx oT+2                ; (rounded: >> (k-1), + 1, >> 1)
+        dex
+        beq +
 -       asr oT+1
         ror oT
         dex
         bne -
++       inw oT
+        asr oT+1
+        ror oT
         rts
 ; ---- polar: speed += dspeed, heading += turn, v from the sine table ----
 .polar  ldy #22                 ; speed += dspeed

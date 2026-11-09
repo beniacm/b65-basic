@@ -71,5 +71,5 @@ MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 >310 PROCtext:S%=0:FOR I%=0 TO 330:S%=S%+OBJX(I%)*3+OBJY(I%)*7:NEXT:PRINT "frames ";F%;" sum ";S%;" ";OBJX(250);" ";OBJY(250)
 >RUN
 Swarm 2: 1000 bullets
-frames 40 sum 846594 311 302
+frames 40 sum 846659 311 302
 >
