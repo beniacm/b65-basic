@@ -13,7 +13,7 @@ just LOAD "NAME") then RUN.
 
 usage: tools/mkdist.py [outdir]
 """
-import os, re, shutil, sys
+import subprocess, os, re, shutil, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRACKS, SECTORS, SECSIZE = 80, 40, 256
@@ -131,6 +131,8 @@ def main():
     disk = D81('B65 BASIC ' + version())
     disk.add('B65', prg, 2)
     shutil.copy(os.path.join(ROOT, 'build/b65.prg'), os.path.join(out, 'sd', 'B65.PRG'))
+    subprocess.run([sys.executable, os.path.join(ROOT, 'tools/mkghz.py')], check=True, stdout=subprocess.DEVNULL)
+    shutil.copy(os.path.join(ROOT, 'build/B65GHZG.BBC'), os.path.join(out, 'sd', 'B65GHZG.BBC'))   # ghz.bas's generated pack
     for name in ('obj65', 'obj65x'):    # the BASIC 65 object library (docs/OBJ65.md)
         lib = open(os.path.join(ROOT, 'build', name + '.prg'), 'rb').read()
         disk.add(name.upper(), lib, 2)

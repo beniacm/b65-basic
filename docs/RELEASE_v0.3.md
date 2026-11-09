@@ -40,6 +40,19 @@ until then this file grows with every change.
   longest line painting from 1524 to 784 cycles (swarm2) and from 474 to
   292 (bounce); board figures follow.
 
+## GHZ: SCROLLTEST in B65 (examples/ghz.bas, docs/GHZ.md)
+
+- Act 1 (S1): Maxice's SCROLLTEST (INTRO2.D81, the Green Hill scroller)
+  frame for frame: seven parallax bands, the front layer's speed ramp, 64
+  rings on sine paths, the cycling waterfall; BASIC with one chained DMA
+  list a frame and a small inline-assembler routine for the rings, 50 fps
+  (about 6 ms a frame). Decoded from the original's machine code into a
+  Python model (`tests/ghzmodel.py`) that reproduces a memory dump of the
+  real demo after 965 frames; B65 matches the model (`tests/ghzcheck.py`).
+  The art is loaded from the SD card: your own pack (`B65GHZ.BBC`, made
+  locally from SCROLLTEST) or the original generated `B65GHZG.BBC` shipped
+  in dist/sd.
+
 ## B65
 
 - Version string v0.3-dev (`*INFO` tells it from the release).

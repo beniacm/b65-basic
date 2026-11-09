@@ -37,6 +37,7 @@ def main():
     ap.add_argument('--prg', help='run this PRG under the MEGA65 ROM instead of B65 (BASIC 65 programs; script "-")')
     ap.add_argument('--card', help='use this SD card image (written to!) instead of the virtual SD directory')
     ap.add_argument('--memout', help='copy the memory dump to this file')
+    ap.add_argument('--sdfile', action='append', default=[], help='copy this file into the virtual SD card root (repeatable; NAME=path renames)')
     ap.add_argument('--peek', help='comma list of symbols/addresses to dump (from build/b65.sym)')
     a = ap.parse_args()
     script = b'' if a.script == '-' else open(a.script, 'rb').read()
@@ -53,6 +54,10 @@ def main():
         open(img, 'wb').write(build_image(script))
         sd = os.path.join(td, 'sd')
         os.mkdir(sd)
+        for f in a.sdfile:
+            n, _, path = f.rpartition('=') if '=' in f else ('', '', f)
+            import shutil
+            shutil.copy(path, os.path.join(sd, n or os.path.basename(path)))
         mem = os.path.join(td, 'mem.bin')
         scr = os.path.join(td, 'screen.txt')
         cmd = [XEMU, '-skipconfigfile', '-headless', '-sleepless', '-besure', '-testing',
