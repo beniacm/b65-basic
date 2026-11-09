@@ -1,3 +1,4 @@
+1 rem core: any mega65 core; k325t feature level 3 (step 6) adds the six birds. not on k325t levels 1-2.
 5 rem per frame: 19 statements (46 with the k325t birds), 3.9 ms in xemu without the vsync wait: 50 fps. rrb: 3 gotox + 123 fcm glyphs a line, ~1970 of 2592 cycles (16 per fcm glyph); dblrr on the v400 schedule doubles that
 10 rem parallax demo for basic 65: three overlapping rrb layers (vic-iv)
 20 rem twin of examples/parallax.bas (b65 basic): same picture, same motion.

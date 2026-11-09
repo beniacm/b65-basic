@@ -1,3 +1,4 @@
+1 REM Core: any MEGA65 core (the K325T collision item needs K325T feature level 3, step 6).
 10 REM SELFTEST: one PASS/FAIL line per subsystem, for bug reports from any
 20 REM MEGA65. Paste the whole output (and *INFO) into an issue at
 30 REM https://github.com/beniacm/b65-basic/issues -- thank you! It writes

@@ -95,7 +95,8 @@ drive 0 (read-only). A file that is not a tokenised program is read as
 text and entered line by line, exactly as if typed (lines without a
 number get the highest number so far + 10). Text files need attic RAM.
 
-Examples (`examples/`): `rrblist_b65.bas` and `rrblist_b65v2.bas` (RRB
+Examples (`examples/`; the first line of each, `1 REM Core: ...`, says
+which core it needs): `rrblist_b65.bas` and `rrblist_b65v2.bas` (RRB
 list mode v1/v2; K325T core only), `parallax.bas` (three overlapping RRB
 layers in 40 columns, all full-colour glyphs from an own 256-colour palette:
 sky gradient and snowy mountains, rolling hills seen in the mountains'

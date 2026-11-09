@@ -3,6 +3,7 @@ Derived from BBC BASIC (Z80) v5
 (C) Copyright R.T.Russell 2025
 MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
 
+>1 REM Core: K325T feature level 3 (step 6); any other core: runs, nothing drawn (motion and landing only). Not on K325T levels 1-2.
 >5 REM Jumper: gravity, double jump and bounce with list mode v3 objects (step-6 core). The frame interrupt moves the player; BASIC only reads the stick
 >10 REM Object 0 is the player: OBJVEL 0,vx,vy,0,0.35 gives it gravity, the
 >20 REM limit set 0 (x 0..632, y down to 384) makes it bounce off the walls

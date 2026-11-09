@@ -1,4 +1,4 @@
-1 REM K325T core only: needs the RRB list mode (XCTL $FFD71F0), see
+1 REM Core: K325T feature level 3 (step 6: the 32-byte table); not on other cores or K325T levels 1-2. See
 2 REM https://github.com/beniacm/mega65-k325t-cm4 docs/rrb_list_mode.md
 10 REM RRB list mode v2 demo for B65 BASIC (K325T XCTL bit 6): bouncing balls
 20 N%=6:S%=&80000:C%=&FF84000:L%=160:G%=&1800:GA%=&60000:OA%=&89000:OC%=&7800:T%=&8C000

@@ -1,3 +1,4 @@
+1 REM Core: K325T feature level 3 (step 6) for the 64 list-mode balls; any other MEGA65 core: 8 sprite balls. Not on K325T levels 1-2.
 5 REM Per frame (64 balls), Xemu, no vsync wait: about 14 ms (move loop about 13.3, 210 us a ball; star planes 0.6: 8 writes, one 8-job DMA) + about 1.3 ms a colliding pair: 50 fps. RRB row: 6x4x(GOTOX+star) = 48 tokens (no XCTL bit 3: +GOTOX+80 black)
 10 REM Bounce: N% balls that bounce off the walls and off each other (B65),
 12 REM in front of four parallax star planes (1/4, 1/2, 1, 2 pixels a frame)

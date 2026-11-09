@@ -1,3 +1,4 @@
+1 REM Core: K325T feature level 3 (step 6); any other core: runs, nothing drawn (logic only). Not on K325T levels 1-2.
 5 REM Swarm 2: about 1000 bullets moved by B65's frame interrupt (list mode v3 objects, step-6 core); BASIC only spawns. Budget (Xemu): 800 fast straight + 200 polar curving bullets = about 10 ms of the frame in the interrupt
 10 REM Objects: 0 = the player (mouse or joystick in port 2; drifts on its
 20 REM own in test mode), 1..NB% = bullets. A bullet is OBJECT (position,

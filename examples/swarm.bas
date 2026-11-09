@@ -1,3 +1,4 @@
+1 REM Core: K325T feature level 3 (step 6); any other core: runs, nothing drawn (logic only). Not on K325T levels 1-2.
 5 REM Per frame (255 objects), Xemu, no vsync wait: 4.7 ms, 5.7 with the drifting player (P%()+V%() 1.6, AND mask 1.4, three respawns, mouse, one 4-job DMA into the table): 50 fps
 10 REM Swarm: 254 bullets and a player (B65, K325T list mode v2 objects).
 20 REM Three spawners circle the screen: a spiral, a stream aimed at the

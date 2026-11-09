@@ -1,3 +1,4 @@
+1 rem core: k325t feature level 3 (step 6) for the 32 list-mode balls; any other mega65 core: 8 sprite balls. not on k325t levels 1-2.
 5 rem per frame (32 balls): 42 ms in xemu with the vsync wait, so 24 fps (move, walls, table about 1.2 ms a ball; the four star planes: 8 wpokes and one 8-job dma, about 1.5 ms). rrb per row: 6 x 4 x (gotox + star) = 48 tokens (no xctl bit 3: + gotox + 80 black)
 10 rem bounce: n balls that bounce off the walls and off each other (basic 65),
 12 rem in front of four parallax star planes (1/4, 1/2, 1, 2 pixels a frame)

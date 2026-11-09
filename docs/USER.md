@@ -287,6 +287,13 @@ hundred moving objects, more in the fast mode without limits).
 
 ## Examples
 
+The first line of every example says which core it needs: `1 REM Core:
+any MEGA65 core`, `K325T, any feature level` or `K325T feature level 3
+(step 6)` (the feature level is `?&FFD71FD`, shown by `*INFO`). The
+examples with list mode v3 objects (32-byte table entries) must not run
+on K325T bitstreams of levels 1-2; without the K325T core they run
+without drawing the objects, or fall back to sprites/GOTOX.
+
 | file | what |
 |---|---|
 | `examples/parallax.bas` | three overlapping RRB layers of full-colour glyphs, own 256-colour palette, 16-colour sprites between the layers, DMA-list scrolling; birds on a K325T |

@@ -1,3 +1,4 @@
+1 REM Core: any MEGA65 core (GOTOX slots); K325T feature level 3 (step 6) for the object path. Not on K325T levels 1-2. Work in progress.
 5 REM Per frame: (measured below)
 10 REM Walkers: an original crowd demo for B65 BASIC (VIC-IV, 256 colours)
 20 REM Little walkers drop from a hatch, walk, turn at walls, step up single
