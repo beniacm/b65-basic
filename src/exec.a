@@ -408,10 +408,9 @@ eqexpr: jsr nxt
 
 wait:   jsr termq
         bne +
--       lda $d011               ; wait for vsync
-        bpl -
--       lda $d011
-        bmi -
+        lda $d7fa               ; wait for the next frame: the VIC-IV frame
+-       cmp $d7fa               ; counter (a long frame interrupt, such as
+        beq -                   ; the object integrator, cannot hide it)
         jmp xeq
 +       jsr expri
 -       lda acc
