@@ -30,7 +30,7 @@
 250 sys $1600,int(tb/65536),int(tb/256)-256*int(tb/65536),np+1,0
 260 if bn=0 then sys $1609,1
 270 jc=0:f=0:sp=0:fr=0:t=ti:lf=-1:ff=-1
-300 if bn=0 then vsync 251
+300 if bn=0 or sl=0 then vsync 251:rem (the engine path: one step a frame, also in tests)
 310 z=peek($dc00) and 31:if bn then gosub 1100
 320 vx=0:if (z and 4)=0 then vx=-768
 330 if (z and 8)=0 then vx=768
