@@ -60,7 +60,9 @@ lines and CTRL-U. RUN/STOP is ESCAPE.
   without a number are appended). Channels: `OPENIN`, `OPENOUT`,
   `OPENUP`, `BGET#`, `BPUT#`, `PRINT#`, `INPUT#`/`READ#`, `GET$#`,
   `PTR#`, `EXT#`, `EOF#`, `CLOSE#` (files up to 960 KB, 4 open at a
-  time; they need attic RAM). `*CAT` lists the card, `*DELETE` deletes (a
+  time; they need attic RAM). `BGET#c,addr,n` as a statement reads a
+  block: n bytes from `PTR#` (fewer at the end of the file) to memory at
+  addr (28-bit; below &10000 bank 0 RAM), and `PTR#` moves on. `*CAT` lists the card, `*DELETE` deletes (a
   file found by its 8.3 or long name; its long name entries go too; both
   FAT copies and the FSInfo free count are updated).
   Files are written by B65's own FAT32 code (root directory only).
@@ -323,7 +325,7 @@ without drawing the objects, or fall back to sprites/GOTOX.
 |---|---|
 | `examples/parallax.bas` | three overlapping RRB layers of full-colour glyphs, own 256-colour palette, 16-colour sprites between the layers, DMA-list scrolling; birds on a K325T |
 | `examples/basic65/parallax65.bas` | the same in BASIC 65 |
-| `examples/ghz.bas` | Maxice's SCROLLTEST (the Green Hill scroller of INTRO2.D81) frame for frame in B65: seven parallax bands, a speed ramp, 64 rings, a cycling waterfall; then its own source scrolls over the picture; copy GHZ.BAS, `B65GHZG.BBC` and `B65GHZS.BBC` from dist/sd to the SD card's root directory (B65 reads data files from the SD root only) (docs/GHZ.md) |
+| `examples/ghz.bas` | Maxice's SCROLLTEST (the Green Hill scroller of INTRO2.D81) frame for frame in B65: seven parallax bands, a speed ramp, 64 rings, a cycling waterfall; then its own source scrolls over the picture. The art comes from your own `INTRO2.D81` in the SD card root (read at run time), else the generated `B65GHZG.BBC`; copy GHZ.BAS, `B65GHZG.BBC` and `B65GHZS.BBC` from dist/sd to the SD card's root directory (B65 reads data files from the SD root only) (docs/GHZ.md) |
 | `examples/basic65/jumper65.bas` | jumper in BASIC 65 with the OBJ65 library (docs/OBJ65.md: B65's object motion and HITPIX as a BLOAD library for BASIC 65; OBJ65R1..4: the object table and the collision engine with POKEs only) |
 | `examples/rrblist_b65.bas` | RRB list mode v1: bouncing balls (K325T only) |
 | `examples/rrblist_b65v2.bas` | RRB list mode v2: bouncing balls, V400 (K325T only) |

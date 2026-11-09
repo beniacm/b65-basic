@@ -15,6 +15,7 @@ TSTEP   = $88
 TSPC    = $89
 TTAB    = $8a
 TPTR    = $8f
+TBGET   = $9a           ; BGET (as a statement: BGET#c,addr,n block read)
 TPAGE   = $90
 TTIME   = $91
 TLOMEM  = $92

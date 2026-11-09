@@ -267,6 +267,9 @@ ptrset: jsr ovjmp
 bput:   jsr ovjmp
         !byte 3
         !word o_bput
+bgetst: jsr ovjmp
+        !byte 3
+        !word o_bgetb
 printh: jsr ovjmp
         !byte 3
         !word o_printh

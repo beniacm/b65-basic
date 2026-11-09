@@ -1644,6 +1644,108 @@ o_ptrset:
         ldy #198
         jmp ovmsg
 
+; BGET#c,addr,n: n bytes from PTR# (fewer at the end of the file) to memory
+; at addr (28-bit flat; below &10000: bank 0 RAM, no I/O); PTR# moves on.
+; A copy loop through two 32-bit pointers (fptr: the channel buffer, fq: the
+; destination), page by page: about 0.5 ms a KB.
+!zone zbgetb
+o_bgetb:
+        jsr channel
+        phx
+        jsr comma
+        jsr expri               ; addr (kept on the stack: N may call an FN)
+        lda acc+3
+        pha
+        lda acc+2
+        pha
+        lda acc+1
+        pha
+        lda acc
+        pha
+        jsr comma
+        jsr expri               ; n
+        pla
+        sta fq
+        pla
+        sta fq+1
+        pla
+        sta fq+2
+        pla
+        sta fq+3
+        plx
+        lda acc+3               ; n < 0: nothing
+        bpl +
+        lda #0
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
++       sec                     ; fr = EXT - PTR
+        lda CHT+CH_EXT,x
+        sbc CHT+CH_PTR,x
+        sta fr
+        lda CHT+CH_EXT+1,x
+        sbc CHT+CH_PTR+1,x
+        sta fr+1
+        lda CHT+CH_EXT+2,x
+        sbc CHT+CH_PTR+2,x
+        sta fr+2
+        lda acc+3               ; n = min(n, fr)
+        bne .clamp
+        lda fr+2
+        cmp acc+2
+        bne +
+        lda fr+1
+        cmp acc+1
+        bne +
+        lda fr
+        cmp acc
++       bcs .ok
+.clamp  lda fr
+        sta acc
+        lda fr+1
+        sta acc+1
+        lda fr+2
+        sta acc+2
+.ok     jsr chpos               ; source
+        clc                     ; PTR += n
+        lda CHT+CH_PTR,x
+        adc acc
+        sta CHT+CH_PTR,x
+        lda CHT+CH_PTR+1,x
+        adc acc+1
+        sta CHT+CH_PTR+1,x
+        lda CHT+CH_PTR+2,x
+        adc acc+2
+        sta CHT+CH_PTR+2,x
+        ldz #0
+.pg     lda acc+1               ; whole pages
+        ora acc+2
+        beq .rest
+-       lda [fptr],z
+        sta [fq],z
+        inz
+        bne -
+        inc fptr+1
+        bne +
+        inc fptr+2
++       inc fq+1
+        bne +
+        inc fq+2
+        bne +
+        inc fq+3
++       dew acc+1
+        bra .pg
+.rest   ldy acc                 ; the rest
+        beq +
+-       lda [fptr],z
+        sta [fq],z
+        inz
+        dey
+        bne -
++       ldz #0
+        jmp xeq
+
 ; BPUT#c,n  /  BPUT#c,s$[;]
 !zone zbput
 o_bput: jsr channel

@@ -181,6 +181,9 @@ xeq1:   lda [tp],z              ; (NXT inline)
 +       cmp #TOBJ
         bne +
         jmp objst
++       cmp #TBGET
+        bne +
+        jmp bgetst
 +       cmp #TELSE
         bne +
         jmp rem
