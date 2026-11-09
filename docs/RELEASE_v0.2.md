@@ -1,8 +1,8 @@
 # B65 BASIC v0.2-dev (release notes, draft)
 
 Draft: to be published together with the K325T step-6 core (list mode v3:
-32-byte object table entries). Before publishing: set the version string
-(`src/version.a`, README), rebuild `b65.prg` / `b65.d81` (`make dist`),
+32-byte object table entries). Before publishing (the version string is
+already v0.2-dev): rebuild `b65.prg` / `b65.d81` (`make dist`),
 run the smoke and card tests and SELFTEST on the board with the step-6
 bitstream, and fill in the board numbers marked TBD.
 
