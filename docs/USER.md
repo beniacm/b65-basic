@@ -63,7 +63,7 @@ lines and CTRL-U. RUN/STOP is ESCAPE.
   time; they need attic RAM). `*CAT` lists the card, `*DELETE` deletes.
   Files are written by B65's own FAT32 code (root directory only).
 * **Memory:** programs live in their own 64 KB bank (`PAGE` = `&10800`,
-  about 60 KB); variables and strings share about 16 KB with the stack;
+  about 60 KB); variables and strings share about 11 KB with the stack;
   global arrays live in attic RAM (2 MB, up to 65535 elements each).
   `INSTALL "lib"` loads a library of PROCs/FNs. B65.PRG is packed: at
   start-up (about 0.7 s) it unpacks itself into bank 0 and its overlays
