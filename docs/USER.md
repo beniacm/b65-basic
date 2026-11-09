@@ -214,8 +214,8 @@ Table entry (bytes 0..15 are read by the VIC-IV, 16..31 only by B65):
 | +0 | X 9..0 (bit 10 REL, as v2) |
 | +2 | Y 9..0, signed (bit 10 REL) |
 | +4 .. +15 | draw mask, height, address 19..16 / flags, group, token list, colour offset, stride, box width, collides-with (as v2) |
-| +16 | mode: bits 3..0 = 0 static, 1 cartesian, 2 polar, 3 orbit; bit 4 harmonic (with 1); bits 6..5 limit set; bit 7 pixel-collision hint |
-| +17 | limit action (bits 3..0 as above), bit 4 kill at lifetime 0, bit 5 half restitution |
+| +16 | mode: bits 3..0 = 0 static, 1 cartesian, 2 polar, 3 orbit, 4 fast (whole-pixel steps: the high bytes of VX/VY; OBJVEL chooses it when there are no fractions, no acceleration and no bounce); bit 4 harmonic (with 1); bits 6..5 limit set; bit 7 pixel-collision hint |
+| +17 | limit action (bits 3..0 as above), bit 4 lifetime counts (kill at 0), bit 5 half restitution, bit 6 the acceleration (+22/+24) is added (OBJVEL sets it) |
 | +18 | cartesian VX / polar speed / orbit radius (16-bit signed, 8.8 pixels) |
 | +20 | cartesian VY / polar heading / orbit angle (16-bit; angles in 1/65536 turn) |
 | +22 | cartesian AX (8.8 per frame) / polar speed change / harmonic k (8.8) |
@@ -245,9 +245,11 @@ and the mode to 0 and the object's event bit (ON OBJEVENT). The sine
 table (1024 quarter-wave magnitudes, 16 bits) is built at start-up in
 bank 4 at `$4E800`. `tests/objmodel.py` is a Python model of the step,
 `tests/objcheck.py` compares it with B65 byte for byte. Cost (Xemu, 1023
-objects, `tests/bench/objstep.txt`): static 1.6 ms, cartesian 10.4,
-with acceleration 12.8, plus limits 18, polar 29, orbit 32, spring 32 ms
-per frame (so far: fewer objects for 50 fps).
+objects, `tests/bench/objstep.txt`, ms per frame / cycles per object):
+static 1.2 / 47, fast 5.6 / 222, fast with wrap limits 12 / 475,
+cartesian 8 / 317, with acceleration 10.4 / 412, plus limits 16.8 / 665,
+polar 28 / 1108, orbit 32.4 / 1283, spring 32 / 1267 (for 50 fps: a few
+hundred moving objects, more in the fast mode without limits).
 
 ## Examples
 

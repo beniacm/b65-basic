@@ -62,12 +62,20 @@ def step(tab, lim, base_events=None):
         if mode == 1:
             if m & 0x10:
                 harm(tab, e)
-            elif u16(e, 22) | u16(e, 24):
+            elif e[17] & 0x40:            # +17 bit 6: acceleration
                 w16(e, 18, u16(e, 18) + u16(e, 22))
                 w16(e, 20, u16(e, 20) + u16(e, 24))
             vx, vy = u16(e, 18), u16(e, 20)
             pos_add(e, 30, 0, vx)
             pos_add(e, 31, 2, vy)
+        elif mode == 4:                     # fast: integer steps only
+            for lo, vo in ((0, 19), (2, 21)):
+                st = e[vo]
+                sign = 0xff if st & 0x80 else 0
+                t = e[lo] + st
+                e[lo] = t & 255
+                h = (e[lo + 1] + sign + (t >> 8)) & 3
+                e[lo + 1] = (e[lo + 1] & 0xfc) | h
         elif mode == 2:
             w16(e, 18, u16(e, 18) + u16(e, 22))
             w16(e, 20, u16(e, 20) + u16(e, 24))
@@ -94,10 +102,10 @@ def step(tab, lim, base_events=None):
             kill(e, n, ev)
             continue
         life = u16(e, 26)
-        if life:
+        if life and e[17] & 0x10:
             life -= 1
             w16(e, 26, life)
-            if life == 0 and e[17] & 0x10:
+            if life == 0:
                 kill(e, n, ev)
     return ev
 

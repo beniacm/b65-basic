@@ -275,7 +275,70 @@ movleft2:
         iny
         cpy #26
         bne -
+        jsr .rest               ; +17 bit 6: there is an acceleration
+        sei
+        ldz #22
+        lda [fptr],z
+        inz
+        ora [fptr],z
+        inz
+        ora [fptr],z
+        inz
+        ora [fptr],z
+        beq +
+        lda #$40
++       sta objt
+        ldz #17
+        lda [fptr],z
+        and #$bf
+        ora objt
+        sta [fptr],z
+        jsr .fsel               ; fast (mode 4) when the fields allow it
+        ldz #0
+        cli
         jmp xeq
+; .FSEL (interrupts off): an entry in mode 1 or 4 becomes 4 (fast) if it
+; has no fractions (+18, +20, +30, +31 low bytes 0), no acceleration, no
+; spring and no bounce in its action, else 1
+.fsel   ldz #16
+        lda [fptr],z
+        and #$1f
+        cmp #1
+        beq +
+        cmp #4
+        bne .fsx
++       ldz #18
+        lda [fptr],z
+        ldz #20
+        ora [fptr],z
+        ldz #30
+        ora [fptr],z
+        inz
+        ora [fptr],z
+        bne .f1
+        ldz #17
+        lda [fptr],z
+        and #$40
+        bne .f1
+        lda [fptr],z            ; no action is 2 (bounce)
+        and #3
+        cmp #2
+        beq .f1
+        lda [fptr],z
+        and #$0c
+        cmp #8
+        beq .f1
+        lda #4
+        bra +
+.f1     lda #1
++       sta objt
+        ldz #16
+        lda [fptr],z
+        and #$f0
+        ora objt
+        sta [fptr],z
+.fsx    ldz #0
+        rts
 
 ; ---- OBJMOVE n,speed,heading[,turn[,dspeed]]: polar ----
 .move   jsr .n
@@ -394,9 +457,10 @@ movleft2:
         ldz #17
         sei
         lda [fptr],z
-        and #$10
+        and #$50
         ora objv
         sta [fptr],z
+        jsr .fsel               ; (a bounce needs the full mode 1)
         cli
         ldz #0
         jmp xeq

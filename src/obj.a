@@ -182,8 +182,9 @@ objevfirst:
 ZPB     = $1f
 oP      = $ec                   ; 2 entry in the window
 oQ      = $ee                   ; 4 far pointer (parent / anchor, sine table, HOLD)
-oN      = $f2                   ; 2 object number
-oL      = $f4                   ; 2 objects left
+oX      = $f2                   ; entries left in the window (0 = 256)
+oA      = $f3                   ; +17 of the object
+oL      = $f4                   ; 2 objects left after this window
 oVX     = $f6                   ; 2 step X (8.8)
 oVY     = $f8                   ; 2 step Y
 oT      = $fa                   ; 4 temporaries
@@ -204,8 +205,6 @@ objstep:
         ora oL
         lbeq .out
         lda #0
-        sta oN
-        sta oN+1
         sta oW
         lda #1
         jsr .hold
@@ -239,28 +238,35 @@ objstep:
         sta oP
         lda #$e0
         sta oP+1
+        ldx #0                  ; entries in this window: 256, or what is left
+        lda oL+1
+        beq +
+        dec oL+1
+        bra ++
++       ldx oL
+        stz oL
+++      stx oX
 .ent    ldy #16
         lda (oP),y
         sta oM
         and #$0f
         beq .nx
-        jsr .one
+        cmp #1
+        bne +
+        jsr .cart
+        bra .nx
++       jsr .one
 .nx     lda oP
         clc
         adc #32
         sta oP
         bcc +
         inc oP+1
-+       inw oN
-        lda oL
-        bne +
-        dec oL+1
-+       dec oL
++       dec oX
+        bne .ent
         lda oL
         ora oL+1
         beq .done
-        lda oP+1
-        bne .ent
         inc oW                  ; the next 8 KB
         bra .win
 .done   lda #0
@@ -289,28 +295,73 @@ objstep:
 
 ; one object: oP -> its entry, oM = its mode byte
 .one    and #$0f
-        cmp #1
-        beq .cart
+        cmp #4
+        beq .fast
         cmp #2
         lbeq .polar
         cmp #3
         lbeq .orbit
         rts
+; ---- fast (mode 4, chosen by OBJVEL for bullets): integer steps (the
+; high bytes of VX/VY) added to the integer position; the fractions stay ----
+.fast   ldy #19
+        lda (oP),y
+        sta oT+2                ; step X
+        asl
+        lda #0
+        sbc #0
+        eor #$ff
+        sta oT+3                ; its sign
+        ldy #0
+        lda (oP),y
+        clc
+        adc oT+2
+        sta (oP),y
+        iny
+        lda (oP),y
+        sta oT
+        adc oT+3
+        eor oT
+        and #3
+        eor oT
+        sta (oP),y
+        ldy #21
+        lda (oP),y
+        sta oT+2                ; step Y
+        asl
+        lda #0
+        sbc #0
+        eor #$ff
+        sta oT+3
+        ldy #2
+        lda (oP),y
+        clc
+        adc oT+2
+        sta (oP),y
+        iny
+        lda (oP),y
+        sta oT
+        adc oT+3
+        eor oT
+        and #3
+        eor oT
+        sta (oP),y
+        ldy #17
+        lda (oP),y
+        and #$1f
+        lbne .bnd
+        rts
 ; ---- cartesian: v += a (or the harmonic pull), position += v ----
-.cart   lda oM
+.cart   ldy #17
+        lda (oP),y
+        sta oA
+        lda oM
         and #$10
         beq .acc
         jsr .harm
         bra .cv
-.acc    ldy #22                 ; ax, ay all 0: nothing to add
-        lda (oP),y
-        iny
-        ora (oP),y
-        iny
-        ora (oP),y
-        iny
-        ora (oP),y
-        beq .cv
+.acc    bit oA                  ; +17 bit 6: there is an acceleration
+        bvc .cv
         ldy #22                 ; vx += ax
         lda (oP),y
         ldy #18
@@ -346,7 +397,10 @@ objstep:
         lda (oP),y
         sta oVY+1
         jsr .pos
-        jmp .bnd
+        lda oA
+        and #$1f                ; no limits, no lifetime: done
+        lbne .bnd
+        rts
 ; ---- polar: speed += dspeed, heading += turn, v from the sine table ----
 .polar  ldy #22                 ; speed += dspeed
         lda (oP),y
@@ -655,7 +709,19 @@ objstep:
 .hl     !byte 0, 2
 .hv     !byte 18, 20
 ; ---- .POS: position += (oVX, oVY); 10 integer bits, flags kept ----
-.pos    ldy #30
+.pos    lda oVX+1               ; signs of the steps: $00 / $ff
+        asl
+        lda #0
+        sbc #0
+        eor #$ff
+        sta oT+2
+        lda oVY+1
+        asl
+        lda #0
+        sbc #0
+        eor #$ff
+        sta oT+3
+        ldy #30
         lda (oP),y
         clc
         adc oVX
@@ -664,20 +730,13 @@ objstep:
         lda (oP),y
         adc oVX+1
         sta (oP),y
-        lda #0
-        bit oVX+1
-        bpl +
-        lda #$ff
-+       sta oT
         iny
-        lda (oP),y
-        sta oT+1
-        adc oT
-        and #3
+        lda (oP),y              ; bits 9..8 += sign + carry, flags kept
         sta oT
-        lda oT+1
-        and #$fc
-        ora oT
+        adc oT+2
+        eor oT
+        and #3
+        eor oT
         sta (oP),y
         ldy #31
         lda (oP),y
@@ -688,20 +747,13 @@ objstep:
         lda (oP),y
         adc oVY+1
         sta (oP),y
-        lda #0
-        bit oVY+1
-        bpl +
-        lda #$ff
-+       sta oT
         iny
         lda (oP),y
-        sta oT+1
-        adc oT
-        and #3
         sta oT
-        lda oT+1
-        and #$fc
-        ora oT
+        adc oT+3
+        eor oT
+        and #3
+        eor oT
         sta (oP),y
         rts
 ; ---- limits (+17 action, mode bits 6..5 set), then the lifetime ----
@@ -793,7 +845,11 @@ objstep:
         lda #3
         jsr .act
         bcs .killed
-.life   ldy #26                 ; lifetime: count down, kill at 0
+.life   ldy #17                 ; lifetime (only with +17 bit 4): count
+        lda (oP),y              ; down, kill at 0
+        and #$10
+        beq .lx
+        ldy #26
         lda (oP),y
         iny
         ora (oP),y
@@ -812,10 +868,6 @@ objstep:
         iny
         ora (oP),y
         bne .lx
-        ldy #17
-        lda (oP),y
-        and #$10
-        beq .lx
         jmp .kill
 .killed
 .lx     rts
@@ -970,17 +1022,24 @@ objstep:
         sta (oP),y
         ldy #16
         sta (oP),y
-        lda oN+1
-        sta oT+1
-        lda oN
-        ldx #3
--       lsr oT+1
-        ror
-        dex
-        bne -
+        lda oW                  ; byte = window * 32 + (oP - $E000) / 256
+        asl
+        asl
+        asl
+        asl
+        asl
+        sta oT
+        lda oP+1
+        sec
+        sbc #$e0
+        ora oT
         tax
-        lda oN
-        and #7
+        lda oP                  ; bit = (oP / 32) AND 7
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
         tay
         lda bitmask8,y
         ora objevb,x

@@ -27,14 +27,14 @@ def scenario(rnd, n):
         e[2], e[3] = y & 255, (y >> 8) & 3
         e[4] = 255
         e[7] = 1
-        mode = rnd.choice((0, 1, 1, 1, 2, 2, 3, 0x11))
+        mode = rnd.choice((0, 1, 1, 1, 2, 2, 3, 0x11, 4, 4))
         if mode == 3 or mode == 0x11:
             if i == 0:
                 mode = 1
             else:
                 objmodel.w16(e, 28, rnd.randint(0, i - 1))
         e[16] = mode | rnd.randint(0, 3) << 5
-        e[17] = rnd.choice((0, 0, rnd.randint(0, 15))) | rnd.choice((0, 0x10)) | rnd.choice((0, 0x20))
+        e[17] = rnd.choice((0, 0, rnd.randint(0, 15))) | rnd.choice((0, 0x10)) | rnd.choice((0, 0x20)) | rnd.choice((0, 0x40))
         for o in (18, 20, 22, 24):
             objmodel.w16(e, o, rnd.randint(-1500, 1500))
         if mode == 1:
