@@ -176,8 +176,10 @@ TEXTCH = 0x1740                     # char of ' ' in the overlay font (FCM, at $
 def text_pack():
     """build/B65GHZS.BBC: act 2's overlay: lines (2 bytes), the font (96 FCM
     glyphs, ASCII 32..127, pixel colour 250), then 40 tokens a line: blank
-    lines, '...BUT IN BASIC?', blank lines, examples/ghz.bas wrapped at 40
-    columns, blank lines"""
+    lines, 'BUT HAVE YOU SEEN IT IN BASIC?', blank lines, examples/ghz.bas
+    wrapped at 40 columns, blank lines, 'B65 BASIC. n LINES.' (n: the
+    program's lines) and '50 FRAMES PER SECOND.', blank lines; the scroll
+    stops with that caption on rows 11 and 13"""
     font = []
     for ln in open(os.path.join(ROOT, 'src', 'font.a')):
         if '!byte' in ln:
@@ -187,13 +189,14 @@ def text_pack():
         for y in range(8):
             row = font[c * 8 + y]
             glyphs += bytes(250 if row >> (7 - x) & 1 else 0 for x in range(8))
-    lines = [''] * 13 + ['...BUT IN BASIC?'.center(40)] + [''] * 13
-    for ln in open(os.path.join(ROOT, 'examples', 'ghz.bas')):
-        ln = ln.rstrip('\n')
+    src = open(os.path.join(ROOT, 'examples', 'ghz.bas')).read().splitlines()
+    nlines = sum(1 for ln in src if ln[:1].isdigit())
+    lines = [''] * 13 + ['BUT HAVE YOU SEEN IT IN BASIC?'.center(40)] + [''] * 13
+    for ln in src:
         while len(ln) > 40:
             lines.append(ln[:40]); ln = '  ' + ln[40:]
         lines.append(ln)
-    lines += [''] * 30
+    lines += [''] * 11 + [('B65 BASIC. %d LINES.' % nlines).center(40), '', '50 FRAMES PER SECOND.'.center(40)] + [''] * 13
     toks = bytearray()
     for ln in lines:
         for ch in ln.ljust(40)[:40]:
