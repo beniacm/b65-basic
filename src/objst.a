@@ -277,6 +277,13 @@ movleft2:
         bne -
         jsr .rest               ; +17 bit 6: there is an acceleration
         sei
+        ldz #16                 ; (no spring: +28 = no turn)
+        lda [fptr],z
+        and #$10
+        bne +
+        ldz #28
+        sta [fptr],z
++
         ldz #22
         lda [fptr],z
         inz
@@ -314,6 +321,8 @@ movleft2:
         ldz #30
         ora [fptr],z
         inz
+        ora [fptr],z
+        ldz #28
         ora [fptr],z
         bne .f1
         ldz #17
@@ -356,6 +365,13 @@ movleft2:
         jsr .rest
         ldy #20
         jsr .w16
+        lda #0                  ; turn and speed change: 0 unless given
+        sta acc
+        sta acc+1
+        ldy #22
+        jsr .w16
+        ldy #24
+        jsr .w16
         jsr .arg
         bcs +
         jsr .deg                ; turn per frame
@@ -368,7 +384,76 @@ movleft2:
         jsr .rest
         ldy #22
         jsr .w16
-+       jmp xeq
++       jsr .mq
+        jmp xeq
+; .MQ: no speed change: mode 5 (velocity once from speed and heading,
+; then cartesian) with the turn rounded to 1/2^k radian per frame (k =
+; 1..7, +28 = k, bit 7 = negative); other turns or a speed change: the
+; exact polar mode 2
+.mq     sei
+        ldz #22
+        lda [fptr],z
+        inz
+        ora [fptr],z
+        bne .mqx
+        ldz #24
+        lda [fptr],z
+        sta objv
+        inz
+        lda [fptr],z
+        sta objv+1
+        ora objv
+        beq .m5                 ; (A = 0: no turn)
+        lda #0
+        sta objv+2              ; sign
+        bit objv+1
+        bpl +
+        lda #0
+        sec
+        sbc objv
+        sta objv
+        lda #0
+        sbc objv+1
+        sta objv+1
+        lda #$80
+        sta objv+2
++       ldx #0                  ; k - 1 = the first threshold <= |turn|
+-       lda objv
+        cmp .thr,x
+        lda objv+1
+        sbc .thr+1,x
+        bcs +
+        inx
+        inx
+        cpx #16
+        bne -
+        bra .mqx                ; below 1/128 radian: exact polar
++       txa
+        beq .mqx                ; above 1/2 radian (the first entry): exact
+        lsr
+        ora objv+2
+.m5     ldz #28                 ; A = the turn code
+        sta [fptr],z
+        inz
+        lda #0
+        sta [fptr],z
+        ldz #24
+        sta [fptr],z
+        inz
+        sta [fptr],z
+        ldz #17
+        lda [fptr],z
+        and #$bf
+        sta [fptr],z
+        ldz #16
+        lda [fptr],z
+        and #$e0
+        ora #5
+        sta [fptr],z
+.mqx    ldz #0
+        cli
+        rts
+.thr    !word 7375, 3688, 1844, 922, 461, 231, 115, 58
 
 ; ---- OBJORBIT n,parent,r,omega ----
 .orbit  jsr .n

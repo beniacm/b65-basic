@@ -140,7 +140,7 @@ def main():
         m = open(mem, 'rb').read()
         if a.memout:
             open(a.memout, 'wb').write(m)
-        t = m[0x4a000:0x4e800]
+        t = m[0x4a000:0x4f000]
         t = t[:t.index(0)] if 0 in t else t
         out = t.decode('latin-1').replace('\r\n', '\n').replace('\r', '')
         sys.stdout.write(out)

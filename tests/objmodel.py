@@ -59,12 +59,26 @@ def step(tab, lim, base_events=None):
     for n, e in enumerate(tab):
         m = e[16]
         mode = m & 15
+        if mode == 5:                       # velocity once, then cartesian
+            r, a = s16(e, 18), u16(e, 20)
+            vx, vy = rsin(r, (a + 0x4000) & 0xffff), rsin(r, a)
+            w16(e, 18, vx)
+            w16(e, 20, vy)
+            m = (m & 0xf0) | 1
+            e[16] = m
+            mode = 1
         if mode == 1:
             if m & 0x10:
                 harm(tab, e)
-            elif e[17] & 0x40:            # +17 bit 6: acceleration
-                w16(e, 18, u16(e, 18) + u16(e, 22))
-                w16(e, 20, u16(e, 20) + u16(e, 24))
+            else:
+                if e[17] & 0x40:            # +17 bit 6: acceleration
+                    w16(e, 18, u16(e, 18) + u16(e, 22))
+                    w16(e, 20, u16(e, 20) + u16(e, 24))
+                if e[28]:                   # Minsky rotation, 1/2^k radian
+                    k = e[28] & 7
+                    sg = -1 if e[28] & 0x80 else 1
+                    w16(e, 18, s16(e, 18) - sg * (s16(e, 20) >> k))
+                    w16(e, 20, s16(e, 20) + sg * (s16(e, 18) >> k))
             vx, vy = u16(e, 18), u16(e, 20)
             pos_add(e, 30, 0, vx)
             pos_add(e, 31, 2, vy)

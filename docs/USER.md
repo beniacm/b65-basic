@@ -203,7 +203,13 @@ also into `&FFD728A-B`). The program still switches list mode on (XCTL
 its colour RAM offset, `height` in character rows (1..64), `mask`, `group`
 and `with` the draw mask and the collision masks. Omitted arguments of
 OBJVEL keep their value (a double jump is `OBJVEL n,,-9`); OBJVEL keeps an
-OBJSPRING's pull. `action` (and table byte +17): bits 1..0 for X, bits
+OBJSPRING's pull. OBJMOVE without a speed change computes the velocity
+once (mode 5, then cartesian: a straight polar bullet costs as much as a
+cartesian one) and rounds its turn to the nearest 1/2^k radian per frame,
+k = 1..7 (28.6, 14.3, 7.2, 3.6, 1.8, 0.9, 0.45 degrees): the velocity is
+then rotated with shifts only (Minsky: VX -= VY >> k, then VY += VX >> k);
+turns outside 0.32 .. 40 degrees per frame or a speed change keep the
+exact polar mode 2. OBJVX/OBJVY read back the (rotated) velocity. `action` (and table byte +17): bits 1..0 for X, bits
 3..2 for Y: 0 none, 1 wrap, 2 bounce, 3 kill; bit 5 halves the speed on a
 bounce. OBJEVENT(n) is TRUE once after object n was killed by its limits or
 its lifetime (and clears it); OBJEVENT(-1) is the lowest object with an
@@ -216,14 +222,14 @@ Table entry (bytes 0..15 are read by the VIC-IV, 16..31 only by B65):
 | +0 | X 9..0 (bit 10 REL, as v2) |
 | +2 | Y 9..0, signed (bit 10 REL) |
 | +4 .. +15 | draw mask, height, address 19..16 / flags, group, token list, colour offset, stride, box width, collides-with (as v2) |
-| +16 | mode: bits 3..0 = 0 static, 1 cartesian, 2 polar, 3 orbit, 4 fast (whole-pixel steps: the high bytes of VX/VY; OBJVEL chooses it when there are no fractions, no acceleration and no bounce; it clears the flag bits of +1/+3, no REL); bit 4 harmonic (with 1); bits 6..5 limit set; bit 7 pixel-collision hint |
+| +16 | mode: bits 3..0 = 0 static, 1 cartesian, 2 polar, 3 orbit, 5 polar to cartesian (the velocity from +18/+20 once), 4 fast (whole-pixel steps: the high bytes of VX/VY; OBJVEL chooses it when there are no fractions, no acceleration and no bounce; it clears the flag bits of +1/+3, no REL); bit 4 harmonic (with 1); bits 6..5 limit set; bit 7 pixel-collision hint |
 | +17 | limit action (bits 3..0 as above), bit 4 lifetime counts (kill at 0), bit 5 half restitution, bit 6 the acceleration (+22/+24) is added (OBJVEL sets it) |
 | +18 | cartesian VX / polar speed / orbit radius (16-bit signed, 8.8 pixels) |
 | +20 | cartesian VY / polar heading / orbit angle (16-bit; angles in 1/65536 turn) |
 | +22 | cartesian AX (8.8 per frame) / polar speed change / harmonic k (8.8) |
 | +24 | cartesian AY / polar and orbit turn per frame (1/65536 turn) |
 | +26 | lifetime in frames (16-bit, 0 = unlimited) |
-| +28 | orbit parent / harmonic anchor (object number) |
+| +28 | orbit parent / harmonic anchor (object number) / cartesian turn: bits 2..0 k (a turn of 1/2^k radian per frame), bit 7 negative, 0 none |
 | +30 | X fraction (1/256 pixel) |
 | +31 | Y fraction |
 
@@ -245,12 +251,14 @@ the limit with the velocity or heading reflected, or kill) and the
 lifetime (count down; at 0 kill if +17 bit 4). A kill sets the draw mask
 and the mode to 0 and the object's event bit (ON OBJEVENT). The sine
 table (1024 quarter-wave magnitudes, 16 bits) is built at start-up in
-bank 4 at `$4E800`. `tests/objmodel.py` is a Python model of the step,
+bank 0, the 2 KB after the interpreter (LOMEM starts after it). `tests/objmodel.py` is a Python model of the step,
 `tests/objcheck.py` compares it with B65 byte for byte. Cost (Xemu, 1023
 objects, `tests/bench/objstep.txt`, ms per frame / cycles per object):
 static 1.2 / 47, fast 4.0 / 158, fast with wrap limits 9.6 / 380,
 cartesian 8.4 / 332, with acceleration 10.8 / 428, plus limits 16.4 / 649,
-polar 27.2 / 1077, orbit 32.4 / 1283, spring 32.4 / 1283 (for 50 fps: a few
+with wrap limits: polar straight (mode 5) 14.4 / 570, polar curving
+(k = 5) 24.8 / 982, exact polar 24.8 / 982, orbit 28.8 / 1140, spring
+32 / 1267 (for 50 fps: a few
 hundred moving objects, more in the fast mode without limits).
 
 ## Examples

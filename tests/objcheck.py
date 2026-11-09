@@ -27,7 +27,7 @@ def scenario(rnd, n):
         e[2], e[3] = y & 255, (y >> 8) & 3
         e[4] = 255
         e[7] = 1
-        mode = rnd.choice((0, 1, 1, 1, 2, 2, 3, 0x11, 4, 4))
+        mode = rnd.choice((0, 1, 1, 1, 2, 2, 3, 0x11, 4, 4, 5, 5))
         if mode == 3 or mode == 0x11:
             if i == 0:
                 mode = 1
@@ -42,6 +42,10 @@ def scenario(rnd, n):
             objmodel.w16(e, 24, rnd.choice((0, rnd.randint(-40, 40))))
         if mode == 0x11:
             objmodel.w16(e, 22, rnd.randint(0, 40))           # k (8.8)
+        if mode in (1, 5) and rnd.random() < 0.5:
+            e[28] = rnd.randint(1, 7) | rnd.choice((0, 0x80))   # a turn
+        if mode == 5:
+            objmodel.w16(e, 18, rnd.randint(0, 1200))
         if mode == 2:
             objmodel.w16(e, 18, rnd.randint(0, 1200))
             objmodel.w16(e, 22, rnd.randint(-20, 20))

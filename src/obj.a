@@ -10,7 +10,7 @@
 OBJMAX  = 1024
 OBJTAB_K = $0e0000              ; K325T: chip RAM (the VIC-IV reads it)
 OBJTAB_X = $058000              ; elsewhere: chip RAM $58000-$5FFFF (no list mode)
-SINTAB  = $04e800               ; quarter-wave sine, 1024 x 16 bits (BOOT)
+SINTAB  = sintab0               ; quarter-wave sine, 1024 x 16 bits (BOOT)
 
 objbase !byte 0, 0, 0, 0        ; table base (32-bit)
 objcnt  !word 0                 ; objects in use (highest number + 1)
@@ -206,6 +206,10 @@ objstep:
         lbeq .out
         lda #0
         sta oW
+        sta $d772               ; multiplier high bytes: 0 for .SIN
+        sta $d773
+        sta $d776
+        sta $d777
         lda #1
         jsr .hold
 .win    lda oW                  ; MAP $E000 -> objbase + oW * $2000
@@ -333,11 +337,34 @@ objstep:
 
 ; one object: oP -> its entry, oM = its mode byte
 .one    and #$0f
+        cmp #5
+        beq .conv
         cmp #2
         lbeq .polar
         cmp #3
         lbeq .orbit
         rts
+; ---- mode 5 (OBJMOVE without a speed change): v = speed * (cos, sin)
+; heading once, then cartesian (+28: the turn as a rotation, if any) ----
+.conv   jsr .vang
+        ldy #18
+        lda oVX
+        sta (oP),y
+        iny
+        lda oVX+1
+        sta (oP),y
+        iny
+        lda oVY
+        sta (oP),y
+        iny
+        lda oVY+1
+        sta (oP),y
+        lda oM
+        and #$f0
+        ora #1
+        sta oM
+        ldy #16
+        sta (oP),y
 ; ---- cartesian: v += a (or the harmonic pull), position += v ----
 .cart   ldy #17
         lda (oP),y
@@ -348,7 +375,7 @@ objstep:
         jsr .harm
         bra .cv
 .acc    bit oA                  ; +17 bit 6: there is an acceleration
-        bvc .cv
+        bvc .rq
         ldy #22                 ; vx += ax
         lda (oP),y
         ldy #18
@@ -371,6 +398,10 @@ objstep:
         ldy #21
         adc (oP),y
         sta (oP),y
+.rq     ldy #28                 ; +28: a turn of 1/2^k radian per frame
+        lda (oP),y              ; (bit 7: negative, bits 2..0: k)
+        beq .cv
+        jsr .rot
 .cv     ldy #18
         lda (oP),y
         sta oVX
@@ -387,6 +418,54 @@ objstep:
         lda oA
         and #$1f                ; no limits, no lifetime: done
         lbne .lim
+        rts
+; .ROT: A = turn code: VX -= VY >> k, then VY += VX >> k (the new VX;
+; negative turn: += / -=): Minsky's rotation, shifts only
+.rot    sta oT+3
+        and #7
+        sta oT+2
+        ldy #20                 ; t = VY >> k
+        jsr .shk
+        ldy #18
+        jsr .sadd               ; VX -= t (+= for a negative turn)
+        lda oT+3
+        eor #$80
+        sta oT+3
+        ldy #18                 ; t = VX >> k
+        jsr .shk
+        ldy #20
+.sadd   bit oT+3                ; field +Y -= t (bit 7 of oT+3 set: += t)
+        bmi +
+        lda (oP),y
+        sec
+        sbc oT
+        sta (oP),y
+        iny
+        lda (oP),y
+        sbc oT+1
+        sta (oP),y
+        rts
++       lda (oP),y
+        clc
+        adc oT
+        sta (oP),y
+        iny
+        lda (oP),y
+        adc oT+1
+        sta (oP),y
+        rts
+.shk    lda (oP),y              ; oT = field +Y >> k (arithmetic)
+        sta oT
+        iny
+        lda (oP),y
+        sta oT+1
+        ldx oT+2
+-       lda oT+1
+        asl
+        ror oT+1
+        ror oT
+        dex
+        bne -
         rts
 ; ---- polar: speed += dspeed, heading += turn, v from the sine table ----
 .polar  ldy #22                 ; speed += dspeed
@@ -464,22 +543,12 @@ objstep:
         clc
         adc #>SINTAB
         sta oQ+1
-        lda #^SINTAB
-        sta oQ+2
-        lda #0
-        sta oQ+3
-        ldz #0
-        lda [oQ],z
+        ldy #0                  ; (bank 0; the multiplier's high bytes are
+        lda (oQ),y              ; 0 for the whole step)
         sta $d774
-        inz
-        lda [oQ],z
+        iny
+        lda (oQ),y
         sta $d775
-        ldz #0
-        lda #0
-        sta $d776
-        sta $d777
-        sta $d772
-        sta $d773
         lda oT+3                ; sign: quadrants 2 and 3, and r's
         and #$80
         sta oT+2
@@ -681,7 +750,9 @@ objstep:
         lda #0
         sbc oT+3
         sta oT+3
-+       lda .hv,x               ; velocity field
++       lda #0                  ; (.SIN expects it 0)
+        sta $d772
+        lda .hv,x               ; velocity field
         tay
         lda (oP),y
         clc
