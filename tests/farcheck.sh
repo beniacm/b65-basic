@@ -6,7 +6,7 @@
 cd "$(dirname "$0")/.." || exit 1
 W=$(mktemp -d)
 git worktree add -q "$W/wt" HEAD || exit 1
-( cd "$W/wt" && ACMEFLAGS=-DOBJFAR=1 python3 tools/fixbranches.py >"$W/build.log" 2>&1 &&
+( cd "$W/wt" && mkdir -p build && acme tests/boot.a && ACMEFLAGS=-DOBJFAR=1 python3 tools/fixbranches.py >"$W/build.log" 2>&1 &&
   python3 tests/objcheck.py 1 40 60 | tail -1 ) >"$W/out" 2>&1
 r=$?
 git worktree remove --force "$W/wt"
