@@ -2005,5 +2005,7 @@ arrle1x:
         dec acnt+1
 +       dec acnt
         rts
+!src "src/hitpix.a"
 ovl_xtra_end:
+!if ovl_xtra_end > HB { !error "overlay 2 runs into HITPIX's buffers" }
 }

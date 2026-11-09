@@ -131,11 +131,18 @@ currently about 15 KB without floating point or the assembler.
     `code_end`) and the five overlay images. BOOT copies the blob to bank 5
     with one DMA job, unpacks the interpreter into bank 0 at `res_start` and
     the overlays into bank 4, then jumps to `cold_prg` / `cold_test` (QUIT
-    restarts there without unpacking again). Start-up takes about 36 frames
-    (0.7 s) in Xemu. Limits: the packed PRG must end below `$D000` (about
-    `$1F00` bytes free now), the unpacked interpreter must end below `$A000`
-    (`prog_start`, the heap/LOMEM, starts on the next page; `$8E88` now), each
-    overlay below `$FFFA`. A stronger packer (exomizer-like: overlays 16.7
+    restarts there without unpacking again). Start-up takes about 39 frames
+    in Xemu. Limits: the packed PRG must end below `$D000` (about `$E9E`
+    bytes free now), the unpacked interpreter plus the 2 KB sine table of
+    the objects after it must end below `$A800` (`prog_start`, the
+    heap/LOMEM, starts after the table; code to `$9A9F`, LOMEM `$A300`
+    now), each overlay below `$FFFA` (overlay 2 below `$FD00`: HITPIX's
+    buffers). ACME's output is limited to 64 KB, which the interpreter and
+    the five images side by side no longer fit: `tools/fixbranches.py`
+    assembles `src/b65.a` five times (`-DOVL=0..4`): run k puts overlay
+    k's image after the code and the other four on top of each other
+    behind it; `tools/packovl.py` takes the code (the same in every run, it
+    checks) and overlay k from run k (`build/b65_k.prg`). A stronger packer (exomizer-like: overlays 16.7
     -> 15.0 KB, interpreter about 18.6 KB) is a later option.
   * Decimal/hex text constants (DATA, VAL, EVAL of floats) are read with Q
     operations; DIV/MOD use the hardware divider; integer FOR/NEXT, static
@@ -576,8 +583,9 @@ must fit below `libase`. Up to 32 KB per library. Tested by
 | `$1FB0`-`$1FB7` | testmode, lexmode, AUTO number/step, TRACE limit (moved out of zero page) |
 | `$1FB8`-`$1FDF` | libase/libcur, array cursors aelp/aelq, arrtop, avt2, RETURN far capture, overlay-2 element addresses |
 | `$2001`-`$97FF` | boot code (`$2001`-`res_start`), then the resident interpreter as unpacked at start-up (the PRG itself holds the boot code and the packed blob, up to `$D000`; the blob is copied to bank 5 and unpacked from there) |
-| `$9800`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
-| `$E000`-`$FFFF` | overlay window (MAP) |
+| after the code | 2 KB: the objects' sine table (built at start-up) |
+| `$A300`-`$CEFF` | LOMEM..HIMEM: variables, heap, CPU stack from the top |
+| `$E000`-`$FFFF` | overlay window (MAP); overlay 2 keeps HITPIX's row buffers and glyph slots at `$FD00`-`$FE8F` (its bank-4 RAM) |
 | bank 1 `$10800`-`$1F7FF` | program text (PAGE..TOP), libraries at the top |
 | bank 1 `$10000` | test script as loaded by Xemu, copied to attic `$8020000` at start-up |
 | bank 4 `$40000`-`$47FFF` | overlays 0-3 (unpacked at start-up) |

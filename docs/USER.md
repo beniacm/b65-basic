@@ -197,6 +197,7 @@ also into `&FFD728A-B`). The program still switches list mode on (XCTL
     OBJUPDATE                    : REM one step now; the frame interrupt stops
     OBJUPDATE ON                 : REM the frame interrupt moves the objects again
     OBJX(n) OBJY(n) OBJVX(n) OBJVY(n) OBJEVENT(n) OBJEVENT(-1)
+    HITPIX(a,b)                  : REM TRUE if their pixels touch
     ON OBJEVENT PROCname / ON OBJEVENT OFF
 
 `tokens` is the 20-bit screen address of the object's token list, `colour`
@@ -214,6 +215,26 @@ exact polar mode 2. OBJVX/OBJVY read back the (rotated) velocity. `action` (and 
 bounce. OBJEVENT(n) is TRUE once after object n was killed by its limits or
 its lifetime (and clears it); OBJEVENT(-1) is the lowest object with an
 event, -1 if none. RUN and the prompt remove all objects.
+
+**HITPIX(a,b)** is TRUE if a pixel of object a that is not transparent lies
+on such a pixel of object b, FALSE if not: the confirmation of a box
+collision for shapes that are not boxes (the jumper's player lands on a
+platform when its pixels touch it, not when its box does). It looks at
+the intersection of the two boxes only (X..X+W-1, Y..Y+8H-1, as the
+collision engine's) and reads the glyphs as the VIC-IV draws them: object
+row r's tokens at the token list address + r * stride (colour bytes at
+the colour offset + r * stride), 8 pixels a glyph token, GOTOX tokens
+skipped, up to `$FFFF`; FLIPX/FLIPY of the object (+6 bits 4/5) XORed
+into each glyph's flips (colour byte 0 bits 6/7), FLIPY also reverses the
+object rows. A glyph is full colour (64 bytes at char * 64, index 0
+transparent) or mono (8 bytes at CHARPTR `$D068` + char * 8, bit 0
+transparent) as `$D054` bits 1 (chars 0..255) and 2 (chars 256 and up)
+say. An object with draw mask 0 never touches; REL positions, NCM glyphs
+and width trims are not followed (X and Y as OBJX/OBJY read them). Cost
+(Xemu, `tests/bench/hitpix.txt`, the call included): boxes apart 0.12
+ms, two 8x8 glyphs 0.2 ms (a hit in the first row) to 0.36 ms (no hit),
+24x24 objects up to 1.8 ms. `tests/hitmodel.py` is a model of it,
+`tests/hitcheck.py` compares it with B65 on random scenes.
 
 Table entry (bytes 0..15 are read by the VIC-IV, 16..31 only by B65):
 
@@ -269,7 +290,7 @@ hundred moving objects, more in the fast mode without limits).
 | `examples/basic65/parallax65.bas` | the same in BASIC 65 |
 | `examples/rrblist_b65.bas` | RRB list mode v1: bouncing balls (K325T only) |
 | `examples/rrblist_b65v2.bas` | RRB list mode v2: bouncing balls, V400 (K325T only) |
-| `examples/jumper.bas` | gravity, double jump and bounce (list mode v3 objects, step-6 core): the frame interrupt moves the player (OBJVEL with an acceleration, limits with bounce and half restitution), BASIC reads the stick (`OBJVEL 0,,-7` jumps, twice in the air); platforms by the collision engine |
+| `examples/jumper.bas` | gravity, double jump and bounce (list mode v3 objects, step-6 core): the frame interrupt moves the player (OBJVEL with an acceleration, limits with bounce and half restitution), BASIC reads the stick (`OBJVEL 0,,-7` jumps, twice in the air); platforms by the collision engine, the landing confirmed with HITPIX (without the K325T core: HITPIX against every platform) |
 | `examples/selftest.bas` | one PASS/FAIL line per subsystem (with `*INFO` first): for bug reports, see the README |
 | `examples/swarm2.bas` | 1000 bullets moved by B65's frame interrupt (list mode v3 objects, step-6 core): BASIC only spawns 8 a frame (6 straight ones in the fast mode, 2 curving polar ones), OBJLIFE removes them; 50 fps in Xemu |
 | `examples/swarm.bas` | 254 bullets and a player (K325T list mode v2, 255 objects): three spawners (spiral, aimed stream, sprinkler), motion with whole-array operations (`P%()=P%()+V0%()`, `Q%()=P%() AND &3FF03FF`), the object table filled by 4 chained DMA jobs from the array in attic RAM; player with the mouse or a joystick in port 2, ON COLLISION counts hits (bullets and player in different collision groups). 4.7 ms a frame in Xemu: 50 fps |

@@ -1,0 +1,10 @@
+#include examples/jumper.bas
+110 REM landing test: the player falls onto platform 3 (340,230) seven pixels to the right, so only its column 0 (rows 2..4) is over the platform: the boxes overlap from y 223, HITPIX from y 226, then it stands at y 222
+120 BN%=30:RS%=0:NP%=6
+155 OBJUPDATE:REM (no objects yet: stops the frame interrupt)
+160 OBJECT 0,347,200,OA%,OC%,0,1,255,2,1:OBJVEL 0,0,0,0,0.35
+205 OBJUPDATE
+220 Z%=31
+265 OBJUPDATE:P$=P$+STR$OBJY(0)+":"+STR$(-HITPIX(0,3))+" "
+280 PROCtext:PRINT P$:PRINT "frames ";F%;" y ";OBJY(0);" vy ";OBJVY(0);" platform 3 at ";OBJY(3)
+RUN

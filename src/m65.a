@@ -793,7 +793,8 @@ EXTWDS: !byte TAFTER : !text "AFTER"
         !byte TDI    : !text "DI "
         !byte TEI    : !text "EI "
         !byte TEVERY : !text "EVERY"
-        !byte $c1 : !text "OBJBOUNDS"     ; ($c1..$d0: TOBJ, then 'A'..'P')
+        !byte $d1 : !text "HITPIX("       ; ($c1..$d1: TOBJ, then 'A'..'Q')
+        !byte $c1 : !text "OBJBOUNDS"
         !byte $c2 : !text "OBJECT"
         !byte $c3 : !text "OBJEVENT("
         !byte $c4 : !text "OBJEVENT"

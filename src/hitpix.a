@@ -1,0 +1,677 @@
+; B65 BASIC - HITPIX(a,b): pixel overlap of two list mode v3 objects
+; (overlay 2; tests/hitmodel.py is a model of it, tests/hitcheck.py
+; compares the two)
+;
+; TRUE if a pixel of object a that is not transparent (full colour: index
+; 0, mono: bit 0) lies on such a pixel of object b, in the intersection of
+; their boxes (X..X+W-1, Y..Y+8H-1 as the collision engine's); FALSE if
+; not, or if a draw mask is 0. The rows are read as the VIC-IV draws them:
+; object row r's tokens at +6/+8 + r * stride, colour bytes at +10 + r *
+; stride, 8 pixels a glyph, GOTOX tokens skipped, up to $FFFF; FLIPX/FLIPY
+; (+6 bits 4/5) XORed into each glyph's flips, FLIPY also reverses the
+; rows; full colour (char * 64) or mono (CHARPTR $D068 + char * 8) as
+; $D054 bits 1/2 say. REL, NCM and width trims are not followed.
+; Per pixel row of the intersection: both objects' glyph rows as bit
+; masks (a byte a glyph, bit 7 = its left pixel), a's clipped to the
+; intersection, b's shifted onto a's and ANDed. The glyphs of an object
+; row (a token walk) are looked up once per object row.
+
+!zone hitpix
+HR      = NUMBUF                ; two records of 24 bytes (a at 0, b at 24):
+; +0 X, +2 Y (signed), +4 W, +6 8*H (16 bits each), +8 flags (+6), +9 the
+; tokens (20 bits), +12 colour offset, +14 stride, +16 draw mask, +17 H,
+; +18/+19 the first/last glyph in the intersection, +20 the object row
+; whose glyphs are in the slots ($FF: none), +21 $40 FLIPX, +22 $80 FLIPY
+HB      = $fd00                 ; in the overlay window, after the code:
+RA      = HB                    ; a's row: glyph k at RA + k (k 0..31)
+RB      = HB+$40                ; b's: glyph k at RB + 1 + k (k -1..33)
+SA      = HB+$80                ; slots, 4 bytes a glyph: its row 0's
+SB      = HB+$100               ; address (3), flags ($80 vflip, $40 hflip,
+                                ; $20 full colour, $02 a glyph; 0 none)
+hix0    = HB+$180               ; intersection: first X (2), width (1)
+hn      = HB+$182
+hcs     = HB+$183               ; CHARPTR (3)
+hfc     = HB+$186               ; $D054
+hD      = HB+$187               ; Xa - Xb (2)
+hla0    = HB+$189               ; a's first and last pixel AND 7
+hla1    = HB+$18a
+hqo     = HB+$18b               ; (Xa - Xb) >> 3: b's glyph for a's glyph 0
+hs      = HB+$18c               ; (Xa - Xb) AND 7
+hT      = fp64                  ; far: an object row's tokens
+hC      = fp64+4                ; far: their colour bytes
+hG      = fnum                  ; far: a glyph row
+hly     = fnum+4                ; local Y (2)
+hk      = fnum+6                ; glyph index
+hgy     = fnum+7                ; glyph row
+hmb     = fq                    ; colour byte 0 / the bits
+hfl     = fq+1                  ; a glyph's flags
+hrow    = fq+2                  ; object row / glyph row
+hbp     = fr                    ; the row buffer (2)
+hsp     = fr+2                  ; the slots (2)
+hiy     = fa_                   ; Y of the row (2: fa_, fb_)
+hrc     = fc_                   ; rows left (2: fc_, fd_)
+hlo     = fe_
+hhi     = ff_
+o_hitpix:
+        jsr expri
+        jsr .nacc               ; (range check)
+        lda objn
+        pha
+        lda objn+1
+        pha
+        jsr comma
+        jsr expri
+        jsr braket
+        jsr .nacc
+        ldx #24
+        jsr .hrec
+        pla
+        sta objn+1
+        pla
+        sta objn
+        jsr .ent
+        ldx #0
+        jsr .hrec
+        lda HR+16
+        lbeq .hno
+        lda HR+24+16
+        lbeq .hno
+        ldx #0                  ; X axis: hix0, hn
+        jsr .hax
+        lbcc .hno
+        lda fq
+        sta hix0
+        lda fq+1
+        sta hix0+1
+        lda fr
+        sta hn
+        ldx #2                  ; Y axis
+        jsr .hax
+        lbcc .hno
+        lda fq
+        sta hiy
+        lda fq+1
+        sta hiy+1
+        lda fr
+        sta hrc
+        lda fr+1
+        sta hrc+1
+        lda $d054
+        sta hfc
+        lda $d068
+        sta hcs
+        lda $d069
+        sta hcs+1
+        lda $d06a
+        sta hcs+2
+        ldx #24
+        jsr .hob
+        ldx #0
+        jsr .hob                ; (A = a's local X of the intersection)
+        pha
+        and #7
+        sta hla0
+        pla
+        clc
+        adc hn
+        dec
+        and #7
+        sta hla1
+        sec                     ; D = Xa - Xb: b's glyph q = k + D >> 3,
+        lda HR                  ; shifted by D AND 7
+        sbc HR+24
+        sta hD
+        and #7
+        sta hs
+        lda HR+1
+        sbc HR+25
+        sta hD+1
+        ldx #3
+-       cmp #$80
+        ror
+        ror hD
+        dex
+        bne -
+        lda hD
+        sta hqo
+.hrw    lda #<RA                ; a's row
+        sta hbp
+        lda #>RA
+        sta hbp+1
+        lda #<SA
+        sta hsp
+        lda #>SA
+        sta hsp+1
+        ldx #0
+        jsr .hgen
+        ldy HR+18               ; nothing in it: next row
+        lda #0
+-       ora RA,y
+        cpy HR+19
+        iny
+        bcc -
+        tax
+        beq .hnr
+        lda #<(RB+1)            ; b's row
+        sta hbp
+        lda #>(RB+1)
+        sta hbp+1
+        lda #<SB
+        sta hsp
+        lda #>SB
+        sta hsp+1
+        ldx #24
+        jsr .hgen
+        ldx HR+18               ; a's glyphs against b's
+.hcp    lda RA,x
+        cpx HR+18
+        bne +
+        ldy hla0                ; (clipped to the intersection)
+        and .hmf,y
++       cpx HR+19
+        bne +
+        ldy hla1
+        and .hml,y
++       sta hmb
+        beq .hcn
+        txa                     ; b's bits on these pixels
+        clc
+        adc hqo                 ; q = k + qo (-1 .. 33: index q + 1)
+        tay
+        iny
+        lda RB,y
+        sta hhi
+        lda RB+1,y
+        sta hlo
+        ldy hs
+        beq +
+-       asl hlo
+        rol hhi
+        dey
+        bne -
++       lda hhi
+        and hmb
+        bne .hyes
+.hcn    cpx HR+19
+        inx
+        bcc .hcp
+.hnr    inw hiy
+        dew hrc
+        lda hrc
+        ora hrc+1
+        lbne .hrw
+.hno    ldz #0
+        jmp f_false
+.hyes   ldz #0
+        jmp f_true
+.hmf    !byte $ff, $7f, $3f, $1f, $0f, $07, $03, $01
+.hml    !byte $80, $c0, $e0, $f0, $f8, $fc, $fe, $ff
+; .HOB: the record at HR+X: the glyphs of the intersection, the flips, no
+; slots yet; A = the local X of the intersection
+.hob    sec
+        lda hix0
+        sbc HR,x
+        pha
+        clc
+        adc hn
+        dec
+        lsr
+        lsr
+        lsr
+        sta HR+19,x
+        pla
+        pha
+        lsr
+        lsr
+        lsr
+        sta HR+18,x
+        lda #$ff
+        sta HR+20,x
+        lda HR+8,x
+        and #$10
+        asl
+        asl
+        sta HR+21,x
+        lda HR+8,x
+        and #$20
+        asl
+        asl
+        sta HR+22,x
+        pla
+        rts
+; .N: object number in acc -> objn, fptr = its entry (as OBJ...'s)
+.nacc   lda acc+2
+        ora acc+3
+        bne .bad
+        lda acc+1
+        cmp #>OBJMAX
+        bcs .bad
+        sta objn+1
+        lda acc
+        sta objn
+.ent    lda objn
+        sta fptr
+        lda objn+1
+        ldx #5
+-       asl fptr
+        rol
+        dex
+        bne -
+        sta fptr+1
+        lda #0
+        rol
+        sta fptr+2
+        clc
+        lda fptr
+        adc objbase
+        sta fptr
+        lda fptr+1
+        adc objbase+1
+        sta fptr+1
+        lda fptr+2
+        adc objbase+2
+        sta fptr+2
+        lda objbase+3
+        sta fptr+3
+        ldz #0
+        rts
+.bad    lda #15                 ; Bad subscript (object number 0..1023)
+        jmp error
+; .HREC: fptr -> an entry: its record at HR+X
+.hrec   sei
+        ldz #0
+        lda [fptr],z            ; X 0..1023
+        sta HR,x
+        inz
+        lda [fptr],z
+        and #3
+        sta HR+1,x
+        inz
+        lda [fptr],z            ; Y: signed 10 bits
+        sta HR+2,x
+        inz
+        lda [fptr],z
+        and #3
+        cmp #2
+        bcc +
+        ora #$fc
++       sta HR+3,x
+        inz
+        lda [fptr],z            ; draw mask
+        sta HR+16,x
+        inz
+        lda [fptr],z            ; height (0 = 1)
+        and #$3f
+        bne +
+        lda #1
++       sta HR+17,x
+        asl
+        asl
+        asl
+        sta HR+6,x
+        lda #0
+        rol
+        sta HR+7,x
+        inz
+        lda [fptr],z            ; flags, address 19..16
+        sta HR+8,x
+        and #$0f
+        sta HR+11,x
+        ldz #8
+        lda [fptr],z
+        sta HR+9,x
+        inz
+        lda [fptr],z
+        sta HR+10,x
+        inz
+        lda [fptr],z
+        sta HR+12,x
+        inz
+        lda [fptr],z
+        sta HR+13,x
+        inz
+        lda [fptr],z
+        sta HR+14,x
+        inz
+        lda [fptr],z
+        sta HR+15,x
+        inz
+        lda [fptr],z            ; box width (0 = 8)
+        bne +
+        lda #8
++       sta HR+4,x
+        lda #0
+        sta HR+5,x
+        ldz #0
+        cli
+        rts
+; .HAX: X = 0 (X axis) / 2 (Y axis): fq = the larger start, fr = the
+; smaller end - fq; carry clear if that is <= 0
+.hax    sec
+        lda HR,x
+        sbc HR+24,x
+        lda HR+1,x
+        sbc HR+25,x
+        bvc +
+        eor #$80
++       bmi +
+        lda HR,x
+        sta fq
+        lda HR+1,x
+        bra ++
++       lda HR+24,x
+        sta fq
+        lda HR+25,x
+++      sta fq+1
+        clc
+        lda HR,x
+        adc HR+4,x
+        sta fq+2
+        lda HR+1,x
+        adc HR+5,x
+        sta fq+3
+        clc
+        lda HR+24,x
+        adc HR+28,x
+        sta fr
+        lda HR+25,x
+        adc HR+29,x
+        sta fr+1
+        sec
+        lda fq+2
+        sbc fr
+        lda fq+3
+        sbc fr+1
+        bvc +
+        eor #$80
++       bpl +
+        lda fq+2
+        sta fr
+        lda fq+3
+        sta fr+1
++       sec
+        lda fr
+        sbc fq
+        sta fr
+        lda fr+1
+        sbc fq+1
+        sta fr+1
+        bmi +
+        ora fr
+        beq +
+        sec
+        rts
++       clc
+        rts
+; .HGEN: the row at hiy of the object at HR+X (hsp: its slots): the bit
+; masks of its glyphs HR+18..HR+19 at (hbp) + k
+.hgen   sec
+        lda hiy
+        sbc HR+2,x
+        sta hly
+        lda hiy+1
+        sbc HR+3,x
+        sta hly+1
+        lda hly
+        and #7
+        sta hgy
+        lda hly+1               ; object row = ly / 8
+        lsr
+        lda hly
+        ror
+        lsr
+        lsr
+        sta hrow
+        bit HR+22,x
+        bpl +
+        lda HR+17,x             ; FLIPY: row H - 1 - r
+        sec
+        sbc #1
+        sbc hrow
+        sta hrow
++       lda hrow                ; a new object row: its glyphs into the slots
+        cmp HR+20,x
+        beq +
+        sta HR+20,x
+        jsr .hwalk
++       lda HR+18,x
+        sta hk
+-       jsr .hbits
+        ldy hk
+        sta (hbp),y
+        lda hk
+        cmp HR+19,x
+        inc hk
+        bcc -
+        rts
+; .HBITS: A = the bits of slot hk's glyph in row hgy
+.hbits  lda hk
+        asl
+        asl
+        tay
+        iny
+        iny
+        iny
+        lda (hsp),y
+        bne +
+        rts                     ; no glyph: 0
++       sta hfl
+        dey
+        lda (hsp),y
+        sta hG+2
+        dey
+        lda (hsp),y
+        sta hG+1
+        dey
+        lda (hsp),y
+        sta hG
+        lda #0
+        sta hG+3
+        lda hgy
+        bit hfl
+        bpl +
+        eor #7
++       sta hrow
+        lda hfl
+        and #$20
+        lbeq .hbm
+        lda hrow                ; full colour: + row * 8, a bit a pixel
+        asl
+        asl
+        asl
+        ora hG
+        sta hG
+        bit hfl
+        bvs +
+        ldz #0
+!for i, 1, 8 {
+        lda [hG],z              ; (index 0 is transparent)
+        cmp #1
+        rol hmb
+        inz
+}
+        ldz #0
+        lda hmb
+        rts
++       ldz #7                  ; (mirrored)
+!for i, 1, 8 {
+        lda [hG],z
+        cmp #1
+        rol hmb
+        dez
+}
+        ldz #0
+        lda hmb
+        rts
+.hbm    lda hrow                ; mono: + row
+        clc
+        adc hG
+        sta hG
+        bcc +
+        inw hG+1
++       ldz #0
+        lda [hG],z
+        bit hfl
+        bvc +
+        sta hmb                 ; mirrored: bit order reversed
+        ldy #8
+-       lsr hmb
+        rol
+        dey
+        bne -
++       rts
+; .HWALK: object row hrow of the object at HR+X: the glyphs of its tokens
+; HR+18..HR+19 into the slots
+.hwalk  lda HR+18,x             ; (no token: no glyph)
+        sta hk
+-       lda hk
+        asl
+        asl
+        ora #3
+        tay
+        lda #0
+        sta (hsp),y
+        lda hk
+        cmp HR+19,x
+        inc hk
+        bcc -
+        sei                     ; (the frame interrupt uses the multiplier)
+        lda HR+14,x             ; row * stride
+        sta $d770
+        lda HR+15,x
+        sta $d771
+        lda hrow
+        sta $d774
+        lda #0
+        sta $d772
+        sta $d773
+        sta $d775
+        sta $d776
+        sta $d777
+        clc
+        lda HR+9,x
+        adc $d778
+        sta hT
+        lda HR+10,x
+        adc $d779
+        sta hT+1
+        lda HR+11,x
+        adc $d77a
+        and #$0f
+        sta hT+2
+        clc
+        lda HR+12,x
+        adc $d778
+        sta hC
+        lda HR+13,x
+        adc $d779
+        sta hC+1
+        cli
+        lda #0
+        sta hT+3
+        sta hk
+        lda #$f8                ; colour RAM $FF80000
+        sta hC+2
+        lda #$0f
+        sta hC+3
+.htk    lda HR+19,x             ; past the intersection: done
+        cmp hk
+        bcc .hdn
+        ldz #0
+        lda [hT],z
+        sta hG
+        inz
+        lda [hT],z
+        sta hG+1
+        and hG
+        cmp #$ff
+        beq .hdn                ; $FFFF: end of the row
+        ldz #0
+        lda [hC],z
+        sta hmb
+        clc
+        lda hT
+        adc #2
+        sta hT
+        bcc +
+        inw hT+1
++       inw hC                  ; (16 bits: the colour RAM offset wraps)
+        inw hC
+        lda hmb
+        and #$10
+        bne .htk                ; GOTOX: skipped
+        lda hk
+        cmp HR+18,x
+        bcc +                   ; before the intersection
+        jsr .hslot
++       inc hk
+        bra .htk
+.hdn    ldz #0
+        rts
+; .HSLOT: token hG (colour byte 0 in hmb) into slot hk
+.hslot  lda hmb
+        and #$c0
+        eor HR+21,x
+        eor HR+22,x
+        ora #2
+        sta hfl
+        lda hG+1
+        and #$1f
+        sta hG+1
+        beq +                   ; full colour: char > 255 and $D054 bit 2,
+        lda hfc                 ; or char < 256 and bit 1
+        and #4
+        bra ++
++       lda hfc
+        and #2
+++      beq .hsm
+        lda hG+1                ; char * 64
+        sta hG+2
+        lda hG
+        sta hG+1
+        lda #0
+        lsr hG+2
+        ror hG+1
+        ror
+        lsr hG+2
+        ror hG+1
+        ror
+        sta hG
+        lda hfl
+        ora #$20
+        sta hfl
+        bra .hst
+.hsm    lda #0                  ; mono: CHARPTR + char * 8
+        sta hG+2
+        ldy #3
+-       asl hG
+        rol hG+1
+        rol hG+2
+        dey
+        bne -
+        clc
+        lda hG
+        adc hcs
+        sta hG
+        lda hG+1
+        adc hcs+1
+        sta hG+1
+        lda hG+2
+        adc hcs+2
+        sta hG+2
+.hst    lda hk
+        asl
+        asl
+        tay
+        lda hG
+        sta (hsp),y
+        iny
+        lda hG+1
+        sta (hsp),y
+        iny
+        lda hG+2
+        sta (hsp),y
+        iny
+        lda hfl
+        sta (hsp),y
+        rts

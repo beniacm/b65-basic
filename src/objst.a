@@ -3,7 +3,8 @@
 ;
 ; tp -> the letter after TOBJ ($19): A OBJBOUNDS, B OBJECT, C OBJEVENT(,
 ; D OBJEVENT (ON), E OBJKILL, F OBJLIFE, G OBJLIMITS, H OBJMOVE, I OBJORBIT,
-; J OBJSPRING, K OBJUPDATE, L OBJVEL, M OBJVX(, N OBJVY(, O OBJX(, P OBJY(.
+; J OBJSPRING, K OBJUPDATE, L OBJVEL, M OBJVX(, N OBJVY(, O OBJX(, P OBJY(
+; (Q HITPIX( is in overlay 2: src/hitpix.a).
 ; Writes to an entry are done with interrupts off (SEI .. CLI), so the
 ; frame integrator never sees half a field.
 

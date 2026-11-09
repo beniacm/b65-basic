@@ -61,9 +61,17 @@ objreset:
 objst:  jsr ovjmp               ; OBJ... statements (end with XEQ)
         !byte 1
         !word o_objst
-f_obj:  jsr ovjsr               ; OBJX( OBJY( OBJVX( OBJVY( OBJEVENT(
+f_obj:  lda [tp],z               ; (the letter after TOBJ)
+        cmp #'Q'
+        beq +
+        jsr ovjsr               ; OBJX( OBJY( OBJVX( OBJVY( OBJEVENT(
         !byte 1
         !word o_objfn
+        rts
++       inw tp                  ; HITPIX(
+        jsr ovjsr
+        !byte 2
+        !word o_hitpix
         rts
 
 ; OBJREGS: K325T: table base and count into the list-mode registers (the

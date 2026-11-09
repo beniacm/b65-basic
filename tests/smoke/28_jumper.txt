@@ -1,5 +1,6 @@
 #include examples/jumper.bas
 120 BN%=120:RS%=0:NP%=6
+155 OBJUPDATE:REM (no objects yet: stops the frame interrupt, so no step depends on the time taken)
 205 OBJUPDATE:REM (manual steps: the same result on any machine)
 265 OBJUPDATE:IF F% MOD 10=0 THEN P$=P$+STR$OBJX(0)+","+STR$OBJY(0)+" "
 280 PROCtext:PRINT P$:PRINT "frames ";F%;" x ";OBJX(0);" y ";OBJY(0);" vy ";OBJVY(0);" jumps ";JC%
