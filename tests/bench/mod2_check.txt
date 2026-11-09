@@ -1,0 +1,9 @@
+10 REM compiled MOD / DIV: powers of two and others, both signs (compare builds)
+20 S%=0:X%=0:FOR I%=1 TO 2000:A%=RND:K%=RND(31)-1:B%=1<<K%:IF I% MOD 3=0 THEN B%=RND(1000)
+30 IF I% MOD 5=0 THEN B%=-B%
+40 Q%=A% MOD B%:R%=A% DIV B%:IF R%*B%+Q%<>A% OR ABS(Q%)>=ABS(B%) OR (Q%<>0 AND SGN(Q%)<>SGN(A%)) THEN X%=X%+1:PRINT A%,B%,Q%,R%
+50 S%=S% EOR Q% EOR R%:NEXT:PRINT "bad ";X%;" sum ";S%
+60 PRINT 7 MOD 4;-7 MOD 4;7 MOD -4;-2147483647-1 MOD 2;-2147483647-1 MOD 65536;12 MOD 1;1E3 MOD 64;2.5 MOD 2
+70 ON ERROR PRINT REPORT$:END
+80 PRINT 5 MOD 0
+RUN

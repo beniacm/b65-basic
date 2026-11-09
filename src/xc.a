@@ -821,6 +821,8 @@ h_coll: jmp x_coll              ; COLLIDE(acc)
 h_shl:  jmp x_shl               ; << >> >>> (integers; count AND 31)
 h_asr:  jmp x_asr
 h_lsr:  jmp x_lsr
+h_mod:  jmp x_mod               ; MOD / DIV of integers (else BINOP)
+h_idiv: jmp x_idiv
 xhend:
 !if xhend - xhand > 256 { !error "xc handlers exceed a page" }
 
@@ -1256,6 +1258,83 @@ x_mul:  +intop OP_MUL
         ldx xsx
         ldy xsy
         jmp xgo
+
+; MOD / DIV of two integers: the integer routines directly; a dividend
+; >= 0 and a power of two divisor: MOD = AND (divisor - 1), DIV (divisor
+; up to 256) = shifts
+x_mod:  +intop OP_MOD
+        stx xsx
+        sty xsy
+        jsr .p2
+        bcc .md
+        ldq arg
+        andq xsav
+        stq acc
+        ldz #0
+        bra .mx
+.md     jsr i_mod
+.mx     ldx xsx
+        ldy xsy
+        jmp xnext
+x_idiv: +intop OP_IDIV
+        stx xsx
+        sty xsy
+        jsr .p2
+        bcc .dd
+        lda acc+2               ; (up to 256: 8 shifts at most)
+        ora acc+3
+        bne .dd
+        lda acc+1
+        beq .ds
+        lsr
+        bne .dd
+.ds     lda acc                 ; done when the divisor is 1
+        cmp #1
+        bne +
+        lda acc+1
+        beq .de
++       lsr acc+1
+        ror acc
+        lsr arg+3
+        ror arg+2
+        ror arg+1
+        ror arg
+        bra .ds
+.de     ldq arg
+        stq acc
+        ldz #0
+        bra .mx
+.dd     jsr i_idiv
+        bra .mx
+; .P2: carry set if arg >= 0 and acc is a power of two > 0 (xsav = acc - 1)
+.p2     bit arg+3
+        bmi .pn
+        lda acc+3
+        bmi .pn
+        ora acc+2
+        ora acc+1
+        ora acc
+        beq .pn
+        ldq acc
+        deq
+        stq xsav
+        ldz #0
+        lda xsav
+        and acc
+        bne .pn
+        lda xsav+1
+        and acc+1
+        bne .pn
+        lda xsav+2
+        and acc+2
+        bne .pn
+        lda xsav+3
+        and acc+3
+        bne .pn
+        sec
+        rts
+.pn     clc
+        rts
 
 ; ---- array elements: operands field (2), handle (2), size (2), base (4) ----
 ; XAEL: index xix (16-bit; the caller has checked that it is an integer
