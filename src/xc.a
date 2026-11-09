@@ -380,10 +380,16 @@ xcline: lda #3
 
 ; ---------------- slots ----------------
 !zone xfind
-; XFINDT (key tp) / XFINDD (key defkey), A = kind: two-way: the slot at
-; key lo EOR hi and the one at that EOR $80. Carry clear: X = the slot
-; with this key and kind (kind $40: PROC/FN DEF, $40 | retmask). Carry
-; set: X = the slot to use (an empty one of the two, else alternately).
+; XFINDT (key tp) / XFINDD (key defkey), A = kind: sixteen-way: the slots
+; at h = key lo EOR hi and at h EOR the 15 other values of bits 7..4 (16
+; groups of 16; a hit outside way 0 is swapped into way 0, so XCRUN's inline
+; test of way 0 finds hot keys). Carry clear: X = the slot with this key and
+; kind (kind $40: PROC/FN DEF, $40 | retmask). Carry set: X = the slot to
+; use (an empty one, else ways 1..15 in turn: way 0 holds the last hit).
+; Four ways (and eight) were too few: more hot keys of a loop than ways in
+; one group (it depends on where the lines are in memory) evicted each
+; other on every pass, and every recompile filled the code cache towards
+; a flush.
 xfindt: ldx tp
         stx xkey
         ldx tp+1
@@ -402,7 +408,7 @@ xfindd: ldx defkey
         bcc .r
         lda #1
         sta xw
-.lp     ldx xw                  ; four ways: h, h EOR $80, $40, $C0
+.lp     ldx xw                  ; ways 1..15: h EOR .wt
         lda xh
         eor .wt,x
         tax
@@ -410,7 +416,7 @@ xfindd: ldx defkey
         bcc .mtf
         inc xw
         lda xw
-        cmp #4
+        cmp #16
         bne .lp
         lda #0                  ; miss: the first empty one
         sta xw
@@ -422,19 +428,21 @@ xfindd: ldx defkey
         beq .u
         inc xw
         lda xw
-        cmp #4
+        cmp #16
         bne .le
-        lda xrot                ; all used: replace in turn
+        lda xrot                ; all used: replace ways 1..15 in turn
         inc
-        and #3
-        sta xrot
+        and #15
+        bne +
+        lda #1
++       sta xrot
         tax
         lda xh
         eor .wt,x
         tax
 .u      sec
 .r      rts
-.wt     !byte 0, $80, $40, $c0
+.wt     !byte 0, $80, $40, $c0, $20, $a0, $60, $e0, $10, $90, $50, $d0, $30, $b0, $70, $f0
 .mtf    phy                     ; a hit in another way: swap it into way 0
         ldy xh                  ; (hot keys end up where XCRUN looks first)
         lda XKLO,x
