@@ -18,7 +18,8 @@ objauto !byte 0                 ; $80: the frame IRQ runs the integrator
 objevon !byte 0                 ; $FF: ON OBJEVENT active
 objfeat !byte 0                 ; K325T feature level ($FFD71FD)
 objlim  !fill 36, 0             ; 4 limit sets: x0, y0, x1, y1 (16-bit), action
-OEVTXT  !fill 48, 0             ; ON OBJEVENT handler: TPROC name ':' TRETURN CR
+OEVTXT  = BUFFER+$80             ; ON OBJEVENT handler: TPROC name ':' TRETURN CR
+                                ; (bank 0 below PMIN: text there is read from bank 0, as COLTXT)
 objn    !word 0                 ; object number being worked on
 evtxt   !word 0                 ; (EVCHECK: the handler text)
 objt    !byte 0

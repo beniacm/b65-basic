@@ -250,7 +250,41 @@ movleft2:
         bne +
         cpx objcnt
         bcc .regs
-+       stx objcnt
++       stx objv                ; the count grows: the entries in between
+        sta objv+1              ; (never written since RUN) are cleared
+        lda objn
+        sta objv+2
+        lda objn+1
+        sta objv+3
+        lda objcnt
+        sta objn
+        lda objcnt+1
+        sta objn+1
+.clr    lda objn
+        cmp objv+2
+        lda objn+1
+        sbc objv+3
+        bcs .cd
+        jsr .ent
+        sei
+        lda #0
+        ldz #31
+-       sta [fptr],z
+        dez
+        bpl -
+        ldz #0
+        cli
+        inc objn
+        bne .clr
+        inc objn+1
+        bra .clr
+.cd     lda objv+2
+        sta objn
+        lda objv+3
+        sta objn+1
+        lda objv
+        sta objcnt
+        lda objv+1
         sta objcnt+1
 .regs   jsr objregs
         jmp xeq
