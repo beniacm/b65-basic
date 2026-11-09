@@ -1,0 +1,61 @@
+5 REM Swarm 2: about 1000 bullets moved by B65's frame interrupt (list mode v3 objects, step-6 core); BASIC only spawns. Budget (Xemu): 800 fast straight + 200 polar curving bullets = about 10 ms of the frame in the interrupt
+10 REM Objects: 0 = the player (mouse or joystick in port 2; drifts on its
+20 REM own in test mode), 1..NB% = bullets. A bullet is OBJECT (position,
+30 REM token list), then OBJVEL with whole pixels per frame (the fast mode,
+40 REM no fractions) or OBJMOVE with a turn (polar: a curving bullet), and
+50 REM OBJLIFE: after 110 frames it is gone (killed by the integrator; it
+60 REM left the screen long before, into the invisible part of the 10-bit
+70 REM space). Two spawners circle the centre and fire 8 bullets a frame:
+80 REM a straight ring and a curving spiral. Collision groups: bullets 1
+90 REM (collide with 2), player 2 (with 1); ON COLLISION counts hits.
+100 REM BN%>0: stop after BN% frames (tests); RS%=1: back to text, timing.
+120 BN%=0:RS%=1:NB%=1000:NF%=6:NP%=2:LF%=110
+130 K%=(?&6E1=&FF):GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000
+135 IF K%=0 THEN GA%=&54000:S%=&50000:OA%=&56000:REM (Xemu: logic only)
+140 DIM DX%(63),DY%(63):FOR I%=0 TO 63:DX%(I%)=INT(3.5*COS(I%*PI/32)+.5):DY%(I%)=INT(3.5*SIN(I%*PI/32)+.5):NEXT
+150 V1%=?&D031:V5%=?&D05B:V7%=?&D07B:ON ERROR PROCtext:REPORT:PRINT " at line ";ERL:END
+160 CLS:PRINT "Swarm 2: ";NB%;" bullets":PROCscreen
+170 OBJECT 0,320,300,OA%+48,OC%+48,0,1,255,2,1:J%=1:HI%=0:A%=0:B%=0:F%=0
+180 FOR I%=1 TO NB%:OBJECT I%,700,600,OA%,OC%,0,1,0,1,2:NEXT:REM all hidden first
+190 IF K% THEN ON COLLISION PROChit
+200 MOUSE TO 160,150:T%=TIME
+210 REPEAT
+220 WAIT:EI:MOUSE X%,Y%,Z%:IF BN% THEN X%=160+120*SIN(F%/70):Y%=100+70*SIN(F%/45)
+230 OBJECT 0,2*X%,2*Y%,OA%+48,OC%+48,0,1,255,2,1
+240 C%=(F%>>1) AND 63:SX%=320+(DX%(C%)*40):SY%=200+(DY%(C%)*25)
+250 FOR I%=1 TO NF%:A%=(A%+11) AND 63:OBJECT J%,SX%,SY%,OA%,OC%,0,1,255,1,2:OBJVEL J%,DX%(A%),DY%(A%):OBJLIFE J%,LF%:J%=J%+1:IF J%>NB% THEN J%=1
+260 NEXT
+270 FOR I%=1 TO NP%:B%=(B%+7) AND 63:OBJECT J%,640-SX%,400-SY%,OA%+16,OC%+16,0,1,255,1,2:OBJMOVE J%,2.5,B%*5.625,1.5:OBJLIFE J%,LF%:J%=J%+1:IF J%>NB% THEN J%=1
+280 NEXT
+290 DI:F%=F%+1:IF (F% AND 31)=0 THEN PROCstat
+300 UNTIL F%=BN%
+310 T%=TIME-T%:IF RS% THEN PROCtext:PRINT BN%;" frames in ";T%;" cs"
+320 END
+1000 DEF PROChit
+1010 IF COLLIDE(0)>0 THEN HI%=HI%+1
+1020 ENDPROC
+1100 DEF PROCstat:LOCAL I%,S$
+1110 S$="HITS "+STR$HI%+"  TIME "+STR$((TIME-T%) DIV 100)+"   "
+1120 FOR I%=1 TO LEN(S$):?(S%+2*I%-2)=ASC(MID$(S$,I%,1)):NEXT:ENDPROC
+1200 DEF PROCscreen:LOCAL I%,A%,C%,D%,L%
+1210 REM glyphs GA%/64+n (8x8 full colour): 0 a yellow dot (straight), 1 a
+1220 REM cyan dot (curving), 3 the player (white diamond); token lists at OA%
+1230 RESTORE 1300:FOR C%=0 TO 3:READ I%:FOR A%=0 TO 63:READ D%:?(GA%+64*C%+A%)=I%*D%:NEXT:NEXT
+1240 FOR C%=0 TO 3:PROCw(OA%+16*C%,GA% DIV 64+C%):PROCw(OA%+16*C%+2,&FFFF):IF K% THEN PROCw(CR%-&4000+OC%+16*C%,0)
+1250 NEXT
+1260 GOTO 1400
+1300 DATA 7,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0
+1310 DATA 3,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,1,1,0,0,0,1,1,0,0,1,1,0,0,1,1,0,0,1,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0
+1320 DATA 5,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0
+1330 DATA 1,0,0,0,1,1,0,0,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,0
+1400 REM rows of 20 tokens (score text) with XCTL bit 3, else 80 (opaque)
+1410 ZB%=TRUE:IF K% THEN ?&FFD71F0=?&FFD71F0 OR 8:ZB%=(?&FFD71F0 AND 8)=0
+1420 L%=40-120*ZB%:FOR I%=0 TO 49*L%+L%-2 STEP 2:PROCw(S%+I%,32):PROCw(CR%+I%,256):NEXT
+1430 ?&D05D=?&D05D AND 127:?&D031=?&D031 OR 8:?&D07B=49:?&D05B=0:?&D054=?&D054 OR 5
+1440 PROCw(&D058,L%):?&D05E=L% DIV 2:?&D063=?&D063 AND 192:?&D020=0:?&D021=0
+1450 ?&D060=0:?&D061=(S% DIV 256) AND 255:?&D062=S% DIV 65536:PROCw(&D064,&4000)
+1460 IF K% THEN ?&FFD71F0=?&FFD71F0 OR &D0
+1470 ENDPROC
+1700 DEF PROCtext:IF K% THEN ON COLLISION OFF:?&FFD71F0=?&FFD71F0 AND &27
+1710 ?&D031=V1%:?&D05B=V5%:?&D07B=V7%:MODE 0:ENDPROC
+1720 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V% DIV 256) AND 255:ENDPROC

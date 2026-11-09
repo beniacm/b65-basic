@@ -1,0 +1,6 @@
+#include examples/swarm2.bas
+120 BN%=40:RS%=0:NB%=1000:NF%=6:NP%=2:LF%=110
+205 OBJUPDATE:REM (manual steps: the same result on any machine)
+285 OBJUPDATE
+310 PROCtext:S%=0:FOR I%=0 TO 330:S%=S%+OBJX(I%)*3+OBJY(I%)*7:NEXT:PRINT "frames ";F%;" sum ";S%;" ";OBJX(250);" ";OBJY(250)
+RUN
