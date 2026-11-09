@@ -69,6 +69,12 @@ interpreter alone, load address `$2001`). On a MEGA65: copy the D81 to the SD ca
 K325T rig: `scripts/b65_run.sh` in the harness repository. Each release lists what was verified on
 hardware; a standard MEGA65 has not been tested yet.
 
+**Reports welcome**, especially from a standard MEGA65: in B65 type `*INFO` (one line: B65
+version, machine, ROM, RAM, K325T level), then `LOAD "SELFTEST"`, `RUN` (one PASS/FAIL line per
+subsystem: arithmetic, strings, procedures, attic arrays, files, timers, events, sound, graphics,
+sprites, objects, the K325T collision engine), and paste both into an issue at
+https://github.com/beniacm/b65-basic/issues.
+
 ## Build
 
 You need ACME 0.97 or later (`brew install acme`) and python3. Then run

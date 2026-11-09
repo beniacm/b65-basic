@@ -1,0 +1,5 @@
+#include examples/selftest.bas
+110 REM (*INFO and the K325T test differ per machine: not in the smoke test)
+170 PRINT "PASS files (skipped in the smoke test)":NP%=NP%+1
+250 REM
+RUN

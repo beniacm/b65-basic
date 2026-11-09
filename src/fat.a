@@ -2337,15 +2337,81 @@ d81load:
 o_star: ldy #0
         lda [tp],z
         cmp #'.'
-        beq .cat
+        lbeq .cat
         jsr .word
         cmp #'C'
         bne +
         jmp .cat
 +       cmp #'D'
-        bne .bad
+        bne +
         jmp .del
++       cmp #'I'
+        bne .bad
+        jmp .info
 .bad    rts                     ; unknown * command: ignored
+; *INFO: one line for bug reports: B65 version, machine, ROM, RAM, K325T
+.info   jsr tell
+        !text "B65 "
+!src "src/version.a"
+        !text " MEGA65 model $",0
+        lda hw_model
+        jsr hexb_core
+        jsr tell
+        !text " ROM ",0
+        lda #$16                ; the ROM's version text at $20016 ("V92...")
+        sta fptr
+        lda #$00
+        sta fptr+1
+        lda #$02
+        sta fptr+2
+        lda #0
+        sta fptr+3
+        ldz #0                  ; (copied first: output uses fptr)
+        ldx #0
+-       lda [fptr],z
+        sta STRBUF,x
+        inz
+        inx
+        cpx #7
+        bne -
+        ldz #0
+        ldy #0
+-       lda STRBUF,y
+        cmp #' '+1
+        bcc +
+        cmp #127
+        bcs +
+        jsr outchr
+        iny
+        cpy #7
+        bne -
++
+        jsr tell
+        !text " chip ",0
+        lda hw_chip
+        ldx hw_chip+1
+        jsr prdec16
+        jsr tell
+        !text "K attic ",0
+        lda hw_attic
+        ldx #0
+        jsr prdec16
+        jsr tell
+        !text "MB K325T ",0
+        bit hw_k325t
+        bmi +
+        jsr tell
+        !text "no",0
+        jmp crlf
++       jsr tell
+        !text "level ",0
+        jsr colptr              ; feature level $FFD71FD
+        ldz #$3d
+        lda [fptr],z
+        ldz #0
+        ldx #0
+        jsr prdec16
+        jmp crlf
 .word   +ldtpy              ; first letter (upper case), skip the word
         and #$df
         pha

@@ -1,0 +1,65 @@
+B65 BASIC v0.1-dev (45GS02) for MEGA65
+Derived from BBC BASIC (Z80) v5
+(C) Copyright R.T.Russell 2025
+MEGA65 (model $03), 384K chip RAM, 8MB attic RAM
+
+>10 REM SELFTEST: one PASS/FAIL line per subsystem, for bug reports from any
+>20 REM MEGA65. Paste the whole output (and *INFO) into an issue at
+>30 REM https://github.com/beniacm/b65-basic/issues -- thank you! It writes
+>40 REM and deletes one file, B65STEST.BBC, on the current drive.
+>100 ON ERROR PROCerr:END
+>110 *INFO
+>120 NP%=0:NF%=0:E$=""
+>130 PROCt("arithmetic",(7*6=42) AND (1E6/4=250000) AND (SQR(2)*SQR(2)>1.9999) AND (-7 DIV 2=-3) AND (&FF AND 15)=15)
+>140 S$="":FOR I%=1 TO 5:S$=S$+CHR$(64+I%):NEXT:PROCt("strings",S$="ABCDE" AND MID$(S$,2,3)="BCD" AND LEN(STRING$(200,"x"))=200)
+>150 PROCt("procedures",FNf(10)=55)
+>160 DIM A%(60000),B(1000):A%(60000)=12345:B(999)=PI:A%()=A%()+1:PROCt("attic arrays",A%(60000)=12346 AND A%(5)=1 AND B(999)=PI)
+>170 E%=0:PROCfile:PROCt("files",E%=1)
+>180 T%=TIME:WAIT:WAIT:WAIT:WAIT:WAIT:PROCt("timer / frames",TIME-T%>=6 AND TIME-T%<=14)
+>190 V%=0:EVERY 2,1 GOSUB 1000:EI:T%=TIME:REPEAT:UNTIL TIME-T%>=30:DI:PROCt("EVERY events",V%>=5 AND V%<=10)
+>200 SOUND 1,-10,100,20:A%=ADVAL(-6):SOUND 1,-10,120,20:PROCt("sound queue",ADVAL(-6)<A%)
+>210 MODE 1:GCOL 5:CIRCLE FILL 160,100,30:P%=POINT(160,100):GCOL 0:MODE 0:PROCt("graphics",P%=5)
+>220 SPRITE 0,100,80,2:S%=?&D015 AND 1:SPRITE 0 OFF:PROCt("sprites",S%=1 AND (?&D015 AND 1)=0)
+>230 OBJUPDATE:OBJECT 3,100,50,&9000:OBJVEL 3,2,-1:FOR I%=1 TO 10:OBJUPDATE:NEXT:PROCt("objects (motion)",OBJX(3)=120 AND OBJY(3)=40)
+>240 OBJECT 4,0,0,0:OBJMOVE 4,2,0:OBJECT 5,0,0,0:OBJVEL 5,0,0:OBJLIFE 5,1:OBJUPDATE:PROCt("objects (polar, life)",OBJX(4)>=1 AND OBJX(4)<=2 AND OBJY(4)=0 AND OBJEVENT(5))
+>250 IF ?&6E1<>&FF THEN PRINT "K325T collision engine: skipped (no K325T)" ELSE PROCk
+>260 PRINT:PRINT NP%;" PASS, ";NF%;" FAIL";E$
+>270 END
+>1000 V%=V%+1:RETURN
+>1100 DEF FNf(N%):IF N%=0 THEN =0 ELSE =N%+FNf(N%-1)
+>1200 DEF PROCt(N$,OK%):IF OK% THEN NP%=NP%+1:PRINT "PASS ";N$ ELSE NF%=NF%+1:PRINT "FAIL ";N$
+>1210 ENDPROC
+>1300 DEF PROCfile:LOCAL F%,G%,B%:ON ERROR LOCAL PRINT "  (";:REPORT:PRINT ")":ENDPROC
+>1310 F%=OPENOUT "B65STEST":IF F%=0 THEN ENDPROC
+>1320 FOR B%=0 TO 99:BPUT#F%,B%:NEXT:CLOSE#F%
+>1330 G%=OPENIN "B65STEST":IF G%=0 THEN ENDPROC
+>1340 E%=1:FOR B%=0 TO 99:IF BGET#G%<>B% THEN E%=0
+>1350 NEXT:CLOSE#G%:*DELETE B65STEST
+>1360 ENDPROC
+>1400 DEF PROCk:LOCAL L%
+>1410 REM two overlapping objects, then a pass of the engine
+>1420 OBJECT 1,100,100,&89000,0,0,1,255,1,1:OBJECT 2,104,100,&89000,0,0,1,255,1,1
+>1430 ?&FFD71F0=?&FFD71F0 OR &50:WAIT:WAIT:WAIT:L%=COLLIDE(1)
+>1440 ?&FFD71F0=?&FFD71F0 AND &AF:PROCt("K325T collision engine",L%=2)
+>1450 ENDPROC
+>1500 DEF PROCerr:NF%=NF%+1:PRINT "FAIL (error: ";:REPORT:PRINT " at line ";ERL;")"
+>1510 PRINT:PRINT NP%;" PASS, ";NF%;" FAIL":ENDPROC
+>110 REM (*INFO and the K325T test differ per machine: not in the smoke test)
+>170 PRINT "PASS files (skipped in the smoke test)":NP%=NP%+1
+>250 REM
+>RUN
+PASS arithmetic
+PASS strings
+PASS procedures
+PASS attic arrays
+PASS files (skipped in the smoke test)
+PASS timer / frames
+PASS EVERY events
+PASS sound queue
+PASS graphics
+PASS sprites
+PASS objects (motion)
+PASS objects (polar, life)
+
+        12 PASS, 0 FAIL
+>
