@@ -24,6 +24,7 @@ class GHZ:
         self.fx = 0                 # front fine X ($2D1A)
         self.fcol = 0               # front column ($2D2E)
         self.speed = 4              # ($213F)
+        self.ramp = True            # False: the speed stays (ghz.bas after act 1)
         self.wf_c = 0               # waterfall frame counter ($2D19), phase ($2D18)
         self.wf_p = 0
         self.rg = 0x84              # ring frame base ($2D1F), counter ($2D20)
@@ -81,7 +82,7 @@ class GHZ:
             f += 16
             self.fcol += 1
             if self.fcol == 0x7C:
-                s = (self.speed + 1) & 15
+                s = (self.speed + 1) & 15 if self.ramp else 0   # (ghz.bas: only in act 1)
                 if s:
                     self.speed = s
                 self.fcol = 0

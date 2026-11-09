@@ -45,6 +45,7 @@ class Act3:
         self.x = [(56 * i + 20 * (i % 3)) << 8 for i in range(8)] + [(40 * i) << 8 for i in range(12)]
     def frame(self, f3):             # f3: PROCa3's frame count (0: the PROCact3 frame)
         g = self.g
+        self.ph = list(g.ph)
         if f3:
             if 150 < f3 <= 268 or (f3 > 700 and self.n < 1000):
                 self.n += 2
@@ -64,7 +65,7 @@ class Act3:
         def want_ring(i):
             grp, k = i >> 4, i & 15
             o0, o1 = (37 * (grp >> 3)) & 255, (53 * (grp >> 3)) & 255
-            q0 = (g.ph[0] + o0 + 16 * k) & 255; q1 = (g.ph[1] + o1 + 16 * k) & 255
+            q0 = (self.ph[0] + o0 + 16 * k) & 255; q1 = (self.ph[1] + o1 + 16 * k) & 255
             q2 = (g.c[0] + 32 * grp + 16 * k) & 255; q3 = (g.c[1] + 32 * grp + 16 * k) & 255
             x = s1[q0] + s1[q2] + 4
             y = (s2[q1] + s2[q3]) & 255
@@ -146,10 +147,12 @@ def main():
         m = open(mem, 'rb').read()
     g = ghzmodel.GHZ(unpack(pack))
     a3m = Act3(g) if a3 is not None else None
+    a1 = a3 if a3 is not None else int(sys.argv[sys.argv.index('--act2') + 1]) if '--act2' in sys.argv else 1500
     for f in range(frames):
-        g.frame()
-        if a3m and f >= a3 + 1:
+        if a3m and f >= a3 + 1:     # A3% runs before the frame's RING (with the last frame's ring phases)
             a3m.frame(f - a3 - 1)
+        g.ramp = f <= a1            # the front layer's speed ramps in act 1 only
+        g.frame()
     if '-v' in sys.argv:            # which model frame is nearest (debugging)
         h = ghzmodel.GHZ(unpack(pack))
         for f in range(frames + 6):

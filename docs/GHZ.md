@@ -86,8 +86,12 @@ missed: the front layer's 26 sources every 4 frames, plus band reloads.)
 ## Act 2: the listing
 
 After act 1 (A1% = 1500 frames, 30 s) the picture turns into a BASIC screen:
-a blue panel (rows 0..21: the text sets opaque, the screen colour `$D021`
-blue behind light blue text, as on a C64/MEGA65 screen) with the fixed top
+a blue panel (rows 0..21: their band and front row copies read a line of
+empty glyphs, so the band layer's opaque GOTOX group paints the screen
+colour `$D021`, blue; the front group is transparent; the rings are
+parked; light blue text on top, as on a C64/MEGA65 screen; both text sets
+stay transparent: an opaque group would paint the background colour over
+its masked rows, docs/rrb_gotox_hw.md in the harness) with the fixed top
 line "BUT HAVE YOU SEEN IT IN BASIC?", and below it (rows 2..21) a LIST of
 parts of this program as B65's LIST shows them: ">LIST 200-290" (the frame
 loop), ">LIST 800-895" (the DMA list), ">LIST 971-1010" (RING), ">LIST
@@ -115,6 +119,17 @@ with a per-row table (PF%: the panel's rows), and keeps the first V%+31
 rows fixed (no offset, the caption line's text: the routine FIX points
 their text jobs at it). Xemu does not draw GOTOX Y offsets or row masks,
 so `SM%=0` scrolls in 8-pixel steps for the tests.
+
+## Frame timing
+
+With the frame wait on (BN%=0) RING waits for the picture and then for
+raster line RW% (254, below it), so the DMA list, the ring slot fills and
+the ring placement all happen in the vertical blank: no rows show cleared
+slots (the board showed flicker in the top rows while the update ran right
+after the frame start). The front layer's speed ramps in act 1 only (it
+stays at about 7 for acts 2 and 3). Act 3's object routine A3% runs
+mid-frame, before the next RING (the VIC-IV copies the object table at the
+top of a frame).
 
 ## Act 3: the K325T VIC-IV
 

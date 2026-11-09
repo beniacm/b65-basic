@@ -53,7 +53,7 @@ small inline-assembler routines:
   965 frames; B65 matches the model frame for frame in Xemu
   (`tests/ghzcheck.py`).
 - **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?" (the fixed top line): the
-  scene turns into a BASIC screen, a blue panel with a LIST of the
+  scene turns into a BASIC screen (the band layer paints a blue panel), a LIST of the
   program's frame loop, DMA list and ring routines scrolling under the
   caption (two text token sets per row with GOTOX Y offsets and row masks,
   1 pixel a frame), the scene going on below; then "B65 BASIC. n LINES." /
@@ -90,7 +90,8 @@ Board figures (QMTECH K325T, step-7 core, level 4; art from INTRO2.D81;
 | act 3 HUD at 1000 rings | RINGS 1000, FPS 50, OBJECTS 1020, LINE 1895 (pixel cycles of 5184, DBLRR) |
 | before the job sources moved into the assembler routine (4c88bae) | act 1, 1500 frames: 3192 cs (6% late) |
 
-Late frames are counted from each act's 11th frame through the VIC-IV's
+All screen updates run in the vertical blank (RING waits for raster
+line 254); the scroll speed ramps in act 1 only. Late frames are counted from each act's 11th frame through the VIC-IV's
 frame counter `$D7FA`. In Xemu (stock core path): act 1 4 late (start-up),
 act 2 0, act 3 0.
 
