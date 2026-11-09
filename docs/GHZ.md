@@ -131,6 +131,25 @@ stays at about 7 for acts 2 and 3). Act 3's object routine A3% runs
 mid-frame, before the next RING (the VIC-IV copies the object table at the
 top of a frame).
 
+## Painting budget
+
+The rows are painted on the slow RRB path in acts 1 and 2 on a stock core:
+every token costs time wherever its X is (NCM and FCM glyphs 16 pixel
+cycles each), so a full 186-token row costs 3200-3580 cycles (GHDL, from
+board dumps). That fits the 5184 cycles of DBLRR ($D051 bit 6: two lines
+per painting) but not the 2592 of one line: when DBLRR was lost on the
+board (any write to $D051 with bit 6 clear switches it off; $D051 also
+holds the raster-X compare MSB) every row was cut where the painter stood,
+a staircase. So:
+
+- CHRCOUNT ($D05E) follows the act: 104 tokens in act 1 (SCROLLTEST's row:
+  the text sets are not fetched at all), 186 in act 2 (both text sets),
+  145 for the closing caption and act 3 (set 1 only). LINESTEP stays 372.
+- RING writes $D051 = $40 (DBLRR) every frame in the vertical blank.
+- On a K325T the fast RRB and fast token paths (XCTL bits 4 and 7) are on
+  from act 1 (pixel-identical; 1209-1686 cycles for a full row), act 3 adds
+  bit 6 (objects) and, at level 4, 4-pixel painting; PROCback clears them.
+
 ## Act 3: the K325T VIC-IV
 
 "NOW WITH THE K325T VIC-IV": on a K325T core of feature level 3 or more
