@@ -8,7 +8,8 @@ $M65_HOST with m65run, the serial monitor on TCP 4510, m65d on TCP 4511).
   tests/board.py type 'TEXT\\n'       type on the matrix (m65ctl)
   tests/board.py screen               dump the 80x25 text screen (screen RAM)
 
-The script goes to attic RAM ($8000000, magic "B65HWTS:"); B65 BASIC reads it
+The script goes to attic RAM ($8000000, magic "B65HWTS:"; the monitor's binary
+load 'l', as m65run uses it, then three spots read back); B65 BASIC reads it
 as keyboard input, writes a transcript to $8010000 and the marker "B65DONE"
 to $800FFF0 when the script ends (then it continues with the keyboard).
 The first 4 lines (banner + hardware line) are not compared.
@@ -73,6 +74,39 @@ def poke(addr, data):
         mon('s%07x %s' % (addr + i, ' '.join('%02x' % b for b in data[i:i + 16])), 0.25)
 
 
+def load_binary(addr, data):
+    """write data at a 28-bit address with the monitor's binary load
+    ('l<start> <end>' then the raw bytes, 4 KB at a time; the end is the low
+    16 bits of start + length, as m65run does it: ~190 KB/s instead of ~50
+    bytes/s through 's' lines), then compare three 256-byte spots read back"""
+    with socket.create_connection((HOST, 4510), timeout=5) as s:
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        for o in range(0, len(data), 4096):
+            chunk = data[o:o + 4096]
+            a = addr + o
+            s.setblocking(False)            # drop output already buffered
+            try:
+                while s.recv(65536):
+                    pass
+            except (BlockingIOError, InterruptedError):
+                pass
+            s.setblocking(True)
+            s.sendall(('l%x %x\r' % (a, (a + len(chunk)) & 0xFFFF)).encode() + chunk)
+            out, t0 = b'', time.time()
+            s.settimeout(3)
+            while not out.rstrip(b'\r\n ').endswith(b'\n.') and time.time() - t0 < 5:
+                try:
+                    out += s.recv(65536)
+                except socket.timeout:
+                    break
+    for o in sorted({0, max(0, len(data) // 2 - 128), max(0, len(data) - 256)}):
+        n = min(256, len(data) - o)
+        if peek(addr + o, n) != data[o:o + n]:
+            print('binary load: read-back differs at %07X, writing with s lines (slow)' % (addr + o))
+            poke(addr, data)
+            return
+
+
 def ctl(*args):
     return retry(['/usr/bin/python3', CTL] + list(args), timeout=60)
 
@@ -107,7 +141,7 @@ def run_script(path, timeout=300):
     blob = b'B65HWTS:' + script + b'\0'
     assert len(blob) < 0xFFF0
     poke(0x800FFF0, b'\0' * 8)          # clear the done marker
-    poke(0x8000000, blob)               # script (magic written last would be nicer:
+    load_binary(0x8000000, blob)        # script (magic written last would be nicer:
     load(reset=True)                    # B65 reads it at start-up)
     t0 = time.time()
     while time.time() - t0 < timeout:
