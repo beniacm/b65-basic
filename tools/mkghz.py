@@ -5,8 +5,10 @@
                            band/map data, palette and sine tables (shipped)
   tools/mkghz.py --text    build/B65GHZS.BBC: act 2's overlay (font + the
                            source of examples/ghz.bas as 40-column token lines)
-  tools/mkghz.py --local   local/ghz_assets/B65GHZ.BBC from the local asset
-                           pack (SCROLLTEST's data: never committed or shipped)
+  tools/mkghz.py --local   local/ghz_assets/B65GHZ.BBC from a local copy of
+                           SCROLLTEST (never committed or shipped): only for
+                           tests/ghzcheck.py --pack; ghz.bas itself reads the
+                           art from INTRO2.D81 at run time
 
 Pack layout (23700 bytes): palette R[256] G[256] B[256] (VIC-IV nibble
 format), waterfall R[8] G[8] B[8] (entries 25..28), sine1[256], sine2[256],

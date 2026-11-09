@@ -1,4 +1,4 @@
-REM GHZ act 1 on the board: needs B65GHZ.BBC (local pack) or B65GHZG.BBC on the SD card; 1500 frames in real time, then the time (50 fps: 3000 cs)
+REM GHZ act 1 on the board: INTRO2.D81 (the original art) or B65GHZG.BBC in the SD card root; 1500 frames in real time, then the time (50 fps: 3000 cs)
 #include examples/ghz.bas
-110 BN%=0:RN%=1500:VS%=0
+110 BN%=0:RN%=1500:VS%=0:A1%=3000:SM%=1
 RUN

@@ -1,4 +1,4 @@
-1 REM Core: any MEGA65 core. Needs B65GHZG.BBC (generated tiles, in dist/sd) or B65GHZ.BBC (your own pack) on the SD card.
+1 REM Core: any MEGA65 core. The art: SCROLLTEST from your own INTRO2.D81 in the SD card root (read at run time), else B65GHZG.BBC (generated tiles, in dist/sd). B65GHZS.BBC: act 2.
 5 REM GHZ, act 1: Maxice's SCROLLTEST scroller (INTRO2.D81) frame for frame in B65: seven parallax bands, a front layer whose speed ramps, 64 rings on sine paths, a cycling waterfall
 10 REM The VIC-IV draws 26 rows of 104 16-bit tokens (V400, 208 bytes a row):
 20 REM GOTOX + 21 band tiles + GOTOX + 21 front tiles + 30 ring slots (GOTOX
@@ -9,14 +9,16 @@
 70 REM fills that park the ring slots (step 4); then the inline-assembler
 80 REM routine RING moves 64 rings on two summed sine tables per axis and puts
 90 REM each into the slots of 3 rows (as SCROLLTEST does), and BASIC cycles the
-95 REM waterfall's palette entries 25-28. The data pack: docs/GHZ.md.
+95 REM waterfall's palette entries 25-28. The data: docs/GHZ.md.
 100 REM BN%>0: BN% frames without the intro and the frame wait (tests); RN%>0: stop after RN% frames.
 110 BN%=0:RN%=0:VS%=0:A1%=3000:SM%=1:REM A1%: the frames of act 1; SM%=0: the text in 8-pixel steps (Xemu draws no GOTOX Y offsets)
+115 DN$="INTRO2.D81":PN$="SCROLLTEST":REM the D81 in the SD card root and the program on it that has the art
 120 SC%=&50000:LS%=372:CO%=&800:CR%=&FF80000+CO%:TM%=&52600:GA%=&55800:TA%=&5A600:DL%=&5C000:FT%=&5D000:TT%=&8580000:PS%=&5F000
-130 DIM C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25)
+130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25)
 140 ON ERROR PROCback:REPORT:PRINT " at line ";ERL:END
-150 IF BN%=0 THEN CLS:PRINT TAB(26,12);"YOU HAVE SEEN THIS ON MEGA65":T%=TIME:REPEAT UNTIL TIME-T%>=300
-160 PROCload:PROCtables:PROCscreen:PROCdma:PROCasm:PROCvic
+150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(26,12);"YOU HAVE SEEN THIS ON MEGA65"
+155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,14);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
+160 PROCtables:PROCscreen:PROCdma:PROCasm:PROCvic
 170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:TL%=0:TS%=0:T0%=TIME
 200 REPEAT
 210 FOR B%=0 TO 6:C%(B%)=C%(B%)-ST%(B%):IF C%(B%)<0 THEN PROCband(B%)
@@ -35,10 +37,6 @@
 410 IF RL%(B%) THEN C%(B%)=RL%(B%) ELSE C%(B%)=C%(B%)+AD%(B%)
 420 K%(B%)=K%(B%)+1:IF K%(B%)>=W%(B%) THEN K%(B%)=0
 430 FOR R%=R0%(B%) TO R1%(B%):PROCsrc(JB%(R%),BL%(R%)+2*K%(B%)):NEXT:ENDPROC
-450 DEF PROCfront
-460 FC%=FC%+1:IF FC%=&7C THEN FC%=0:S%=(SP%+1) AND 15:IF S% THEN SP%=S%
-470 FOR R%=0 TO 25:PROCsrc(JF%(R%),FL%(R%)+2*FC%):NEXT:ENDPROC
-480 DEF PROCsrc(J%,S%):?(J%+13)=S% AND 255:?(J%+14)=(S%>>8) AND 255:?(J%+15)=S%>>16:ENDPROC
 440 REM ---- act 2: the source scrolls up over the picture (two token sets a row: line L moved up by S pixels, line L+1 down by 8-S)
 442 DEF PROCact2:AC%=2:TL%=0:TS%=0:?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:PROCtext:ENDPROC
 444 DEF PROCscroll:TS%=TS%+1:IF TS%=8 THEN TS%=0:TL%=TL%+1:PROCtext
@@ -47,16 +45,33 @@
 447 IF TS% THEN ?(V%+8)=TS%<<5:?(V%+9)=((8-TS%)<<5) OR &10 ELSE ?(V%+8)=0:?(V%+9)=2:REM (Y offset: bits 15-13 up, bit 12: down)
 448 ENDPROC
 449 DEF PROCtext:LOCAL R%:FOR R%=0 TO 25:PROCsrc(JA%(R%),&80000+80*(TL%+R%)):PROCsrc(JC%(R%),&80000+80*(TL%+R%+1)):NEXT:ENDPROC
+450 DEF PROCfront
+460 FC%=FC%+1:IF FC%=&7C THEN FC%=0:S%=(SP%+1) AND 15:IF S% THEN SP%=S%
+470 FOR R%=0 TO 25:PROCsrc(JF%(R%),FL%(R%)+2*FC%):NEXT:ENDPROC
+480 DEF PROCsrc(J%,S%):?(J%+13)=S% AND 255:?(J%+14)=(S%>>8) AND 255:?(J%+15)=S%>>16:ENDPROC
 490 DEF PROCwf:LOCAL I%:FOR I%=0 TO 3:?(&D119+I%)=?(TA%+768+W2%+I%):?(&D219+I%)=?(TA%+776+W2%+I%):?(&D319+I%)=?(TA%+784+W2%+I%):NEXT:ENDPROC
-500 REM ---- the pack (SD card): header 3796 bytes to TA%, glyphs $160.. to GA%
-510 DEF PROCload:LOCAL F%,I%
-520 F%=OPENIN "B65GHZ":IF F%=0 THEN F%=OPENIN "B65GHZG"
-530 IF F%=0 THEN ERROR 214,"B65GHZG.BBC not on the SD card (see docs/GHZ.md)"
-540 FOR I%=0 TO 3795:?(TA%+I%)=BGET#F%:NEXT
-550 FOR I%=0 TO 19903:?(GA%+I%)=BGET#F%:NEXT:CLOSE#F%
+500 REM ---- the art: tables 3796 bytes to TA%, glyphs $160.. to GA% (from SCROLLTEST on the D81, else the generated pack)
+510 DEF PROCload:LOCAL F%
+520 OK%=0:AR$="GENERATED ART":F%=OPENIN DN$:IF F% THEN PROCd81(F%):CLOSE#F%
+530 IF OK% THEN AR$="ORIGINAL ART FROM "+DN$ ELSE F%=OPENIN "B65GHZG":IF F%=0 THEN ERROR 214,"B65GHZG.BBC not on the SD card (see docs/GHZ.md)"
+540 IF OK%=0 THEN BGET#F%,TA%,3796:BGET#F%,GA%,19904:CLOSE#F%
 560 NL%=0:F%=OPENIN "B65GHZS":IF F%=0 THEN ENDPROC:REM (no overlay: no act 2)
-570 NL%=BGET#F%:NL%=NL%+256*BGET#F%:FOR I%=0 TO 6143:?(FT%+I%)=BGET#F%:NEXT
-580 FOR I%=0 TO 80*NL%-1:?(TT%+I%)=BGET#F%:NEXT:CLOSE#F%:ENDPROC
+570 NL%=BGET#F%:NL%=NL%+256*BGET#F%:BGET#F%,FT%,6144:BGET#F%,TT%,80*NL%:CLOSE#F%:ENDPROC
+580 REM D81: the directory from track 40 sector 3 (8 entries of 32 bytes a sector), the file's sectors (254 bytes each) land as loaded at $2001 (bank 5: $52001, so glyph n is at GA%)
+582 DEF PROCd81(F%):LOCAL T%,S%,E%,A%,N%,L%,I%,N$,P$:P$=PN$+STRING$(16-LEN PN$,CHR$&A0):T%=40:S%=3:A%=0
+584 REPEAT PTR#F%=((T%-1)*40+S%)*256:BGET#F%,DB%,256:FOR E%=0 TO 224 STEP 32:N$="":FOR I%=5 TO 20:N$=N$+CHR$(DB%?(E%+I%)):NEXT
+586 IF (DB%?(E%+2) AND 7)=2 AND N$=P$ THEN A%=&10000+DB%?(E%+3)+256*DB%?(E%+4)
+588 NEXT:T%=?DB%:S%=DB%?1:UNTIL T%=0 OR T%>80 OR A%
+590 IF A%=0 THEN ENDPROC
+591 T%=A% AND 255:S%=(A%>>8) AND 255:L%=0
+592 REPEAT
+593 IF T%<1 OR T%>80 OR S%>39 OR L%>34241 THEN ENDPROC
+594 PTR#F%=((T%-1)*40+S%)*256:T%=BGET#F%:S%=BGET#F%:IF T% THEN N%=254 ELSE N%=S%-1
+595 BGET#F%,&51FFF+L%,N%:L%=L%+N%:UNTIL T%=0
+596 IF L%<>34241 THEN ENDPROC
+597 S%=0:FOR I%=&51FFF TO &5A5BF STEP 16:S%=S%+?I%:NEXT:IF S%<>132577 THEN ENDPROC:REM (every 16th byte; another SCROLLTEST build gets the generated art)
+598 OK%=1:PROCcp(&52FF4,TA%,768):PROCcp(&52D00,TA%+768,24):PROCcp(&52DEB,TA%+792,512):PROCcp(&53300,TA%+1304,2492):ENDPROC
+599 DEF PROCcp(S%,D%,N%):PROCjob(DL%,0,N%,S%,D%,1):?(DL%+10)=0:?&D702=DL% DIV 65536:?&D704=0:?&D701=(DL% DIV 256) AND 255:?&D705=DL% AND 255:ENDPROC
 600 REM ---- token maps (16-bit tokens: glyph $160.. is char $1560..) and the band table
 610 DEF PROCtables:LOCAL B%,T%,R%,A%,N%,X%,O%,V%
 620 RESTORE 690:FOR B%=0 TO 6:READ R0%(B%),R1%(B%),ST%(B%),AD%(B%),RL%(B%),W%(B%),SH%(B%):C%(B%)=3:K%(B%)=0:NEXT:C%(0)=1:C%(1)=10

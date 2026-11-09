@@ -5,15 +5,25 @@ from INTRO2.D81, the Green Hill scroller by Maxice, frame for frame), "...BUT IN
 BASIC?" (its source scrolls over the running picture) and "...AND WITH THE
 VIC-IV EXTENSIONS" (the K325T's list-mode objects). Acts 1 (S1) and 2 (S2) are done.
 
-## The data pack (never the original art in the repository)
+## The art (none of it in the repository or the shipped files)
 
-`ghz.bas` reads 23700 bytes from the SD card: `B65GHZ.BBC` if present (your
-own pack: `tools/mkghz.py --local` makes it from a local copy of SCROLLTEST,
-`local/ghz_assets/`, which is never committed or shipped), else
-`B65GHZG.BBC`, an original generated tileset with the same layout (`make dist`
-puts it in `dist/sd`). Layout: palette R/G/B (768, VIC-IV nibble order),
-waterfall R/G/B 8 each (entries 25-28), sine1, sine2 (256 each), band 1 (5 x
-50), band 2 (3 x 49), bands 3-7 (5 x 42), front map (13 x 145), glyphs
+`ghz.bas` takes the art from your own copy of SCROLLTEST at run time:
+`INTRO2.D81` in the SD card root (every MEGA65 card from the filehost has
+it; the name is `DN$` in line 115 if yours differs). It opens the D81 as a
+plain file (OPENIN reads it into attic RAM, about 0.5 s), finds SCROLLTEST
+in the directory (track 40 sector 3 on), follows its sector chain with
+`PTR#` and block `BGET#` (254 bytes a sector) into bank 5 as if loaded at
+$2001 ($52001: glyph n then sits at its tile address, GA% = $55800), checks
+the length (34241) and the sum of every 16th byte, and copies the tables to
+TA% with four DMA jobs: palette $2FF4 (R/G/B, 768), waterfall $2D00 (24),
+sines $2DEB (512), band tables and front map $3300 (2492). The intro
+prints "ORIGINAL ART FROM INTRO2.D81" (about 0.8 s in Xemu).
+
+On any failure (no D81, no SCROLLTEST, another build) it loads
+`B65GHZG.BBC`, an original generated tileset with the same layout ("GENERATED
+ART"; `make dist` puts it in `dist/sd`): palette R/G/B (768, VIC-IV nibble
+order), waterfall R/G/B 8 each (entries 25-28), sine1, sine2 (256 each), band
+1 (5 x 50), band 2 (3 x 49), bands 3-7 (5 x 42), front map (13 x 145), glyphs
 $160-$296 (NCM, 64 bytes each).
 
 ## What SCROLLTEST does each frame (decoded from its 45GS02 code)
@@ -87,11 +97,15 @@ the smooth scroll needs the board.
 ## Tests
 
 - `tests/ghzcheck.py [frames] [--local]`: B65 runs N frames in Xemu (MEGA65
-  ROM boot, a private card copy with the pack); the screen in the memory dump
-  must equal the model's (all tokens' low bytes, GOTOX fine X, ring slots).
-  Generated pack: 40, 300, 600 frames OK; local SCROLLTEST pack: 965 and 1000
-  frames OK. `--shot file.png` keeps the picture for a screenshot; `--act2 N`
-  starts act 2 at frame N (with the overlay file, in 8-pixel steps).
-- Board: `tests/board.py run tests/board_ghz.txt` (needs the pack on the SD
-  card): 1500 frames in real time, then "frames 1500 ... in N cs" (3000 at
-  50 fps).
+  ROM boot, a private card copy); the screen in the memory dump must equal the
+  model's (all tokens' low bytes, GOTOX fine X, ring slots), and the art line
+  must say which art was used. `--local`: INTRO2.D81 on the card copy, the art
+  read from it (300 and 965 frames OK); default: the generated pack, with a
+  D81 whose SCROLLTEST has one checked byte changed, so the program must fall
+  back (600 frames OK). `--shot file.png` keeps the picture for a screenshot;
+  `--act2 N` starts act 2 at frame N (with the overlay file, in 8-pixel
+  steps).
+- Board: `tests/board.py run tests/board_ghz.txt`: 1500 frames of act 1 in
+  real time, then "frames 1500 ... in N cs" (3000 at 50 fps);
+  `tests/board_ghz2.txt`: act 2 from frame 200 to the end of the source
+  (2700 frames, 5400 cs at 50 fps; the smooth scroll).

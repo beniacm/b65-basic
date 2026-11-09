@@ -49,20 +49,27 @@ until then this file grows with every change.
   (about 6 ms a frame). Decoded from the original's machine code into a
   Python model (`tests/ghzmodel.py`) that reproduces a memory dump of the
   real demo after 965 frames; B65 matches the model (`tests/ghzcheck.py`).
-  The art is loaded from the SD card: your own pack (`B65GHZ.BBC`, made
-  locally from SCROLLTEST) or the original generated `B65GHZG.BBC` shipped
-  in dist/sd.
+  The art comes from your own copy at run time (S1b): the program opens
+  `INTRO2.D81` in the SD card root, finds SCROLLTEST in its directory,
+  follows the sector chain and checks it ("ORIGINAL ART FROM INTRO2.D81",
+  under a second); without it, the original generated tileset
+  `B65GHZG.BBC` from dist/sd ("GENERATED ART"). Nothing of the original art
+  is in the repository or the release.
 - Act 2 (S2): "...BUT IN BASIC?" and then the program's own source scrolls
   up over the running scene (two text token sets per row with GOTOX Y
   offsets, one pixel a frame; the text from attic RAM through the same DMA
   list).
 - Files: GHZ.BAS and its data files (B65GHZG.BBC, B65GHZS.BBC) go to the
-  SD card root: B65 reads data files from the SD card's root directory
-  only, not from a D81.
+  SD card root, next to INTRO2.D81: B65 reads data files from the SD card's
+  root directory only, not from a mounted D81.
 
 ## B65
 
 - Version string v0.3-dev (`*INFO` tells it from the release).
+- `BGET#c,addr,n`: a block read, n bytes from `PTR#` (fewer at the end of
+  the file) to memory at addr (28-bit; below &10000 bank 0), `PTR#` moves
+  on; about 0.5 ms a KB instead of a BASIC `BGET#` loop
+  (`tests/hw/03_chan.txt`).
 
 ## Build and tests
 
