@@ -16,6 +16,7 @@ GLY = 0x54000                           # full colour glyphs: chars $1500..
 CSET = 0x55000                          # CHARPTR: mono glyphs 0..
 TOK = 0x56000                           # token lists: object i at TOK + 64 i
 COL = 0x7000                            # colour offsets: COL + 64 i
+DX, DY = 3, -2                          # the moved pairs: HITPIX(a,b,DX,DY)
 D054 = 4                                # chars > 255 full colour (seeds 3, 6, ..: 0, all mono)
 
 def scene(rnd, n, d054):
@@ -83,6 +84,7 @@ def basic(mem, n, d054):
     for a, bs in runs:
         add('A%%=&%X:D$="%s":PROCp' % (a, ''.join('%02X' % v for v in bs)))
     add('FOR I%%=0 TO %d:S$="":FOR J%%=0 TO %d:S$=S$+CHR$(48-HITPIX(I%%,J%%)):NEXT:PRINT "H";I%%;" ";S$:NEXT' % (n - 1, n - 1))
+    add('FOR I%%=0 TO %d:S$="":FOR J%%=0 TO %d:S$=S$+CHR$(48-HITPIX(I%%,J%%,%d,%d)):NEXT:PRINT "M";I%%;" ";S$:NEXT' % (n - 1, n - 1, DX, DY))
     add('END')
     add('DEF PROCp:LOCAL I%:FOR I%=0 TO LEN(D$)/2-1:?(A%+I%)=EVAL("&"+MID$(D$,2*I%+1,2)):NEXT:ENDPROC')
     return '\n'.join(L) + '\nRUN\n'
@@ -101,7 +103,8 @@ def main():
                          capture_output=True, text=True).stdout
     os.unlink(fn)
     got = {int(m.group(1)): m.group(2) for m in re.finditer(r'^H\s*(\d+) ([01]+)', out, re.M)}
-    if len(got) != n:
+    gotm = {int(m.group(1)): m.group(2) for m in re.finditer(r'^M\s*(\d+) ([01]+)', out, re.M)}
+    if len(got) != n or len(gotm) != n:
         print(out[-2000:]); print('hitcheck: no complete result'); return 2
     rd = lambda a: mem.get(a, 0)
     bad = hits = boxes = 0
@@ -116,7 +119,12 @@ def main():
         if want != got[i]:
             bad += 1
             print('object %d: model %s b65 %s' % (i, want, got[i]))
-    print('hitcheck seed %d ($D054 %d): %d objects, %d pairs, %d boxes overlap, %d hits, %s' % (seed, d054, n, n * n, boxes, hits, 'OK' if not bad else '%d rows differ' % bad))
+        wm = ''.join('1' if hitmodel.hitpix(rd, BASE, i, j, d054, CSET, DX, DY) else '0' for j in range(n))
+        hits += wm.count('1')
+        if wm != gotm[i]:
+            bad += 1
+            print('object %d moved: model %s b65 %s' % (i, wm, gotm[i]))
+    print('hitcheck seed %d ($D054 %d): %d objects, %d pairs (and moved), %d boxes overlap, %d hits, %s' % (seed, d054, n, n * n, boxes, hits, 'OK' if not bad else '%d rows differ' % bad))
     return 1 if bad else 0
 
 if __name__ == '__main__':

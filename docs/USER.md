@@ -197,7 +197,7 @@ also into `&FFD728A-B`). The program still switches list mode on (XCTL
     OBJUPDATE                    : REM one step now; the frame interrupt stops
     OBJUPDATE ON                 : REM the frame interrupt moves the objects again
     OBJX(n) OBJY(n) OBJVX(n) OBJVY(n) OBJEVENT(n) OBJEVENT(-1)
-    HITPIX(a,b)                  : REM TRUE if their pixels touch
+    HITPIX(a,b[,dx,dy])          : REM TRUE if their pixels touch (a moved by dx,dy)
     ON OBJEVENT PROCname / ON OBJEVENT OFF
 
 `tokens` is the 20-bit screen address of the object's token list, `colour`
@@ -219,7 +219,10 @@ event, -1 if none. RUN and the prompt remove all objects.
 **HITPIX(a,b)** is TRUE if a pixel of object a that is not transparent lies
 on such a pixel of object b, FALSE if not: the confirmation of a box
 collision for shapes that are not boxes (the jumper's player lands on a
-platform when its pixels touch it, not when its box does). It looks at
+platform when its pixels touch it, not when its box does). With dx,dy
+object a is taken as if it were moved by them: `HITPIX(0,P%,0,1)` is
+TRUE while a platform pixel is right under one of the player's (it
+stands; FALSE: it falls off the edge). It looks at
 the intersection of the two boxes only (X..X+W-1, Y..Y+8H-1, as the
 collision engine's) and reads the glyphs as the VIC-IV draws them: object
 row r's tokens at the token list address + r * stride (colour bytes at

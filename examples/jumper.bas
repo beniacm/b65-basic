@@ -5,10 +5,11 @@
 40 REM kept); fire: OBJVEL 0,,-7 -- a second jump in mid-air is allowed
 50 REM (the double jump), then only after landing. Objects 1..NP% are
 60 REM platforms (static); the collision engine reports player/platform
-70 REM boxes (groups: player 2 with 1, platforms 1 with 2) and PROChit puts
-80 REM the player on top when it falls onto one and HITPIX finds their
-85 REM pixels touching (without the K325T core: HITPIX against every
-90 REM platform each frame). Joystick in port 2.
+70 REM boxes (groups: player 2 with 1, platforms 1 with 2) and PROChit lands
+80 REM the player when it falls onto one and HITPIX finds their pixels
+85 REM touching (without the K325T core: HITPIX against every platform each
+88 REM frame). It stands while a pixel of the platform is under one of its
+90 REM own (HITPIX one pixel lower), else it falls. Joystick in port 2.
 100 REM BN%>0: stop after BN% frames with scripted input (tests).
 120 BN%=0:RS%=1:NP%=6
 130 K%=(?&6E1=&FF):GA%=&60000:OA%=&89000:OC%=&7800:S%=&80000:CR%=&FF84000
@@ -19,13 +20,14 @@
 170 OBJLIMITS 0,0,-512,632,384,2+8+32:OBJBOUNDS 0,0
 180 RESTORE 900:FOR I%=1 TO NP%:READ X%,Y%:OBJECT I%,X%,Y%,OA%+16,OC%+16,0,1,255,1,2:NEXT
 190 IF K% THEN ON COLLISION PROChit
-200 JC%=0:F%=0:T%=TIME
+200 JC%=0:F%=0:SP%=0:T%=TIME
 210 REPEAT
 220 WAIT:EI:IF BN% THEN Z%=FNscript(F%) ELSE Z%=?&DC00 AND 31
 230 IF (Z% AND 4)=0 THEN OBJVEL 0,-3 ELSE IF (Z% AND 8)=0 THEN OBJVEL 0,3 ELSE OBJVEL 0,0
-240 IF (Z% AND 16)=0 THEN IF FR%=0 THEN FR%=1:IF JC%<2 THEN JC%=JC%+1:OBJVEL 0,,-7
+240 IF (Z% AND 16)=0 THEN IF FR%=0 THEN FR%=1:IF JC%<2 THEN JC%=JC%+1:OBJVEL 0,,-7,0,0.35:SP%=0
 250 IF Z% AND 16 THEN FR%=0
-255 IF K%=0 THEN PROCsoft
+255 IF SP% THEN IF HITPIX(0,SP%,0,1)=0 THEN OBJVEL 0,,0,0,0.35:SP%=0:REM nothing under its pixels: it falls
+257 IF K%=0 AND SP%=0 THEN PROCsoft
 260 IF OBJY(0)>=384 THEN JC%=0
 270 DI:F%=F%+1:UNTIL F%=BN%
 280 T%=TIME-T%:IF RS% THEN PROCtext:PRINT BN%;" frames in ";T%;" cs"
@@ -34,10 +36,12 @@
 1000 DEF PROChit:LOCAL Q%
 1010 Q%=COLLIDE(0):IF Q%>0 THEN PROCland(Q%)
 1020 ENDPROC
-1030 DEF PROCland(Q%):IF OBJVY(0)<=0 THEN ENDPROC
+1030 DEF PROCland(Q%):LOCAL D%:IF SP% OR OBJVY(0)<=0 THEN ENDPROC
 1040 IF HITPIX(0,Q%)=0 THEN ENDPROC:REM the boxes overlap, the pixels do not (yet)
-1050 OBJECT 0,OBJX(0),OBJY(Q%)-8,OA%,OC%,0,1,255,2,1:OBJVEL 0,0,0,0,0.35:OBJBOUNDS 0,0:JC%=0
-1060 ENDPROC
+1050 D%=0:REPEAT:D%=D%+1:UNTIL HITPIX(0,Q%,0,-D%)=0 OR D%>OBJVY(0)+1:REM up until the pixels just touch
+1055 IF D%>OBJVY(0)+1 THEN ENDPROC:REM deeper than this frame's fall: a side contact
+1060 OBJECT 0,OBJX(0),OBJY(0)-D%,OA%,OC%,0,1,255,2,1:OBJVEL 0,0,0:OBJBOUNDS 0,0:JC%=0:SP%=Q%
+1065 ENDPROC
 1070 DEF PROCsoft:LOCAL Q%:FOR Q%=1 TO NP%:PROCland(Q%):NEXT:ENDPROC
 1100 DEF FNscript(F%):REM test input: right, a jump, a double jump, left
 1110 IF F%<20 THEN =31-8

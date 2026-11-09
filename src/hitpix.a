@@ -2,6 +2,7 @@
 ; (overlay 2; tests/hitmodel.py is a model of it, tests/hitcheck.py
 ; compares the two)
 ;
+; HITPIX(a,b[,dx,dy]): with dx/dy, object a as if moved by them.
 ; TRUE if a pixel of object a that is not transparent (full colour: index
 ; 0, mono: bit 0) lies on such a pixel of object b, in the intersection of
 ; their boxes (X..X+W-1, Y..Y+8H-1 as the collision engine's); FALSE if
@@ -37,6 +38,7 @@ hla0    = HB+$189               ; a's first and last pixel AND 7
 hla1    = HB+$18a
 hqo     = HB+$18b               ; (Xa - Xb) >> 3: b's glyph for a's glyph 0
 hs      = HB+$18c               ; (Xa - Xb) AND 7
+hdx     = HB+$18d               ; dx, dy (16 bits each)
 hT      = fp64                  ; far: an object row's tokens
 hC      = fp64+4                ; far: their colour bytes
 hG      = fnum                  ; far: a glyph row
@@ -53,7 +55,7 @@ hrc     = fc_                   ; rows left (2: fc_, fd_)
 hlo     = fe_
 hhi     = ff_
 o_hitpix:
-        jsr expri
+        jsr expri               ; (all arguments first: one may call HITPIX)
         jsr .nacc               ; (range check)
         lda objn
         pha
@@ -61,8 +63,43 @@ o_hitpix:
         pha
         jsr comma
         jsr expri
-        jsr braket
         jsr .nacc
+        lda objn
+        pha
+        lda objn+1
+        pha
+        jsr nxt                 ; ,dx,dy: a moved by them
+        cmp #','
+        beq +
+        lda #0
+        pha
+        pha
+        pha
+        pha
+        bra ++
++       inw tp
+        jsr expri
+        lda acc
+        pha
+        lda acc+1
+        pha
+        jsr comma
+        jsr expri
+        lda acc
+        pha
+        lda acc+1
+        pha
+++      jsr braket
+        ldx #3
+-       pla
+        sta hdx,x               ; (hdx, then hdy: 16 bits each)
+        dex
+        bpl -
+        pla
+        sta objn+1
+        pla
+        sta objn
+        jsr .ent
         ldx #24
         jsr .hrec
         pla
@@ -72,6 +109,20 @@ o_hitpix:
         jsr .ent
         ldx #0
         jsr .hrec
+        clc
+        lda HR
+        adc hdx
+        sta HR
+        lda HR+1
+        adc hdx+1
+        sta HR+1
+        clc
+        lda HR+2
+        adc hdx+2
+        sta HR+2
+        lda HR+3
+        adc hdx+3
+        sta HR+3
         lda HR+16
         lbeq .hno
         lda HR+24+16

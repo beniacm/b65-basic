@@ -50,8 +50,10 @@ def row(mem, o, ly, lx0, n, d054, cset):
         px += 8
     return out
 
-def hitpix(mem, base, a, b, d054, cset):
+def hitpix(mem, base, a, b, d054, cset, dx=0, dy=0):
     A, B = record(mem, base, a), record(mem, base, b)
+    A['x'] += dx
+    A['y'] += dy
     if not A['mask'] or not B['mask']:
         return False
     x0, x1 = max(A['x'], B['x']), min(A['x'] + A['w'], B['x'] + B['w'])
