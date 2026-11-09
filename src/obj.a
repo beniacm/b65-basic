@@ -251,7 +251,45 @@ objstep:
         sta oM
         and #$0f
         beq .nx
-        cmp #1
+        cmp #4
+        bne .n1
+        ldy #19                 ; ---- fast (inline): x += the step's high byte
+        lda (oP),y
+        sta oT
+        ldy #0
+        clc
+        adc (oP),y
+        sta (oP),y
+        iny
+        lda (oP),y              ; bits 9..8 (+ carry, - 1 for a negative
+        adc #0                  ; step); the flag bits are cleared
+        bit oT
+        bpl +
+        dec
++       and #3
+        sta (oP),y
+        ldy #21                 ; y += the step's high byte
+        lda (oP),y
+        sta oT
+        ldy #2
+        clc
+        adc (oP),y
+        sta (oP),y
+        iny
+        lda (oP),y
+        adc #0
+        bit oT
+        bpl +
+        dec
++       and #3
+        sta (oP),y
+        ldy #17
+        lda (oP),y
+        and #$1f
+        beq .nx
+        jsr .lim
+        bra .nx
+.n1     cmp #1
         bne +
         jsr .cart
         bra .nx
@@ -268,7 +306,7 @@ objstep:
         ora oL+1
         beq .done
         inc oW                  ; the next 8 KB
-        bra .win
+        lbra .win
 .done   lda #0
         jsr .hold
         lda curovl
@@ -295,61 +333,10 @@ objstep:
 
 ; one object: oP -> its entry, oM = its mode byte
 .one    and #$0f
-        cmp #4
-        beq .fast
         cmp #2
         lbeq .polar
         cmp #3
         lbeq .orbit
-        rts
-; ---- fast (mode 4, chosen by OBJVEL for bullets): integer steps (the
-; high bytes of VX/VY) added to the integer position; the fractions stay ----
-.fast   ldy #19
-        lda (oP),y
-        sta oT+2                ; step X
-        asl
-        lda #0
-        sbc #0
-        eor #$ff
-        sta oT+3                ; its sign
-        ldy #0
-        lda (oP),y
-        clc
-        adc oT+2
-        sta (oP),y
-        iny
-        lda (oP),y
-        sta oT
-        adc oT+3
-        eor oT
-        and #3
-        eor oT
-        sta (oP),y
-        ldy #21
-        lda (oP),y
-        sta oT+2                ; step Y
-        asl
-        lda #0
-        sbc #0
-        eor #$ff
-        sta oT+3
-        ldy #2
-        lda (oP),y
-        clc
-        adc oT+2
-        sta (oP),y
-        iny
-        lda (oP),y
-        sta oT
-        adc oT+3
-        eor oT
-        and #3
-        eor oT
-        sta (oP),y
-        ldy #17
-        lda (oP),y
-        and #$1f
-        lbne .bnd
         rts
 ; ---- cartesian: v += a (or the harmonic pull), position += v ----
 .cart   ldy #17
@@ -399,7 +386,7 @@ objstep:
         jsr .pos
         lda oA
         and #$1f                ; no limits, no lifetime: done
-        lbne .bnd
+        lbne .lim
         rts
 ; ---- polar: speed += dspeed, heading += turn, v from the sine table ----
 .polar  ldy #22                 ; speed += dspeed
@@ -426,7 +413,7 @@ objstep:
         sta (oP),y
         jsr .vang               ; oVX/oVY = speed * (cos, sin) heading
         jsr .pos
-        jmp .bnd
+        jmp .lim
 ; .VANG: oVX = r * cos(a), oVY = r * sin(a); r = +18 (8.8), a = +20
 .vang   ldy #20
         lda (oP),y
@@ -597,7 +584,7 @@ objstep:
         ora oT
         sta (oP),y
         ldz #0
-        jmp .bnd
+        jmp .lim
 ; .ANCH: oQ = objbase + (+28) * 32 (far)
 .anch   ldy #28
         lda (oP),y
@@ -756,6 +743,71 @@ objstep:
         eor oT
         sta (oP),y
         rts
+; .LIM: +17 bits 3..0 = 0 (only a lifetime) or the object inside its
+; limit set: straight to the lifetime; else the full limits routine
+.lim    ldy #17
+        lda (oP),y
+        and #$0f
+        lbeq .life
+        lda oM                  ; X = set * 9
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        and #3
+        sta oT
+        asl
+        asl
+        asl
+        adc oT
+        tax
+        ldy #0                  ; x0 <= x <= x1 (x 0..1023)
+        lda (oP),y
+        sta oT
+        iny
+        lda (oP),y
+        and #3
+        sta oT+1
+        lda oT
+        cmp objlim,x
+        lda oT+1
+        sbc objlim+1,x
+        bvc +
+        eor #$80
++       bmi .bnd
+        lda objlim+4,x
+        cmp oT
+        lda objlim+5,x
+        sbc oT+1
+        bvc +
+        eor #$80
++       bmi .bnd
+        iny                     ; y0 <= y <= y1 (y signed)
+        lda (oP),y
+        sta oT
+        iny
+        lda (oP),y
+        and #3
+        cmp #2
+        bcc +
+        ora #$fc
++       sta oT+1
+        lda oT
+        cmp objlim+2,x
+        lda oT+1
+        sbc objlim+3,x
+        bvc +
+        eor #$80
++       bmi .bnd
+        lda objlim+6,x
+        cmp oT
+        lda objlim+7,x
+        sbc oT+1
+        bvc +
+        eor #$80
++       bmi .bnd
+        jmp .life
 ; ---- limits (+17 action, mode bits 6..5 set), then the lifetime ----
 .bnd    ldy #17
         lda (oP),y

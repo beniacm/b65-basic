@@ -75,7 +75,7 @@ def step(tab, lim, base_events=None):
                 t = e[lo] + st
                 e[lo] = t & 255
                 h = (e[lo + 1] + sign + (t >> 8)) & 3
-                e[lo + 1] = (e[lo + 1] & 0xfc) | h
+                e[lo + 1] = h               # (the flag bits are cleared)
         elif mode == 2:
             w16(e, 18, u16(e, 18) + u16(e, 22))
             w16(e, 20, u16(e, 20) + u16(e, 24))

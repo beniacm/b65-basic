@@ -127,7 +127,7 @@ assem:  lda #3                  ; default OPT 3
         lbra .stmt
 .mn     jsr getmn
         jsr direct              ; OPT / EQUx ?
-        bcs .done
+        lbcs .done
         jsr findmn
         jsr operand
         jsr choose
