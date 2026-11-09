@@ -189,8 +189,13 @@ objevfirst:
 ; handler saves B and runs with B = 0). The table is mapped 8 KB at a time
 ; at $E000 (MAP, as the overlays), the previous overlay is mapped back at
 ; the end. K325T: HOLD around the writes.
+!ifdef OBJFAR {                 ; (measurement build: tools/mkobjfar.py)
+ZPB     = >objzpg
+oP      = $e8                   ; 4 entry (32-bit pointer)
+} else {
 ZPB     = $1f
 oP      = $ec                   ; 2 entry in the window
+}
 oQ      = $ee                   ; 4 far pointer (parent / anchor, sine table, HOLD)
 oX      = $f2                   ; entries left in the window (0 = 256)
 oA      = $f3                   ; +17 of the object
@@ -200,6 +205,7 @@ oVY     = $f8                   ; 2 step Y
 oT      = $fa                   ; 4 temporaries
 oW      = $fe                   ; window
 oM      = $ff                   ; mode byte
+!ifndef OBJFAR {
 !zone objstep
 objstep:
         php                     ; interrupts off: while the table is mapped at
@@ -1198,4 +1204,10 @@ objstep:
         lda #$20
         tsb evpend
 +       rts
+} ; (OBJFAR: the far-pointer integrator instead)
+!ifdef OBJFAR {
+!src "src/objfar.a"
+        !align 255, 0
+objzpg  !fill 256, 0
+}
 !zone obj_end

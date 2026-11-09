@@ -62,12 +62,62 @@ addr,a,x,y,z` passes them, results with `RREG`):
 The statements' unit conversions (degrees to 1/65536 turn, pixels to
 8.8) stay in BASIC: the recipes give one-line formulas.
 
+## Placement (settled)
+
+The MEGA65 Book's BASIC 65 memory map: 0.1600-0.1EFF is guaranteed unused
+by the KERNAL and BASIC (2304 bytes) and survives NEW and RUN; 0.1F00-
+0.1FFF is BASIC's bitmap-graphics base page; banks 4/5 hold BASIC's
+bitmap graphics and utilities; `SYS` reaches bank-0 code only at $0000-
+$1FFF (`SYS TO ... O()` maps $2000-$7FFF to any of the first 384 KB).
+So:
+
+- the core (integrator about 1.9 KB, the entry table, the IRQ stub, the
+  event bits) at 0.1600-0.1EFF, its private zero page in the top bytes
+  of the $1E page (base page $1E, bytes $E8-$FF);
+- the sine table (2 KB) through a 32-bit pointer in attic RAM (the K325T,
+  a stock R3 and Xemu have it; a far read costs the same there as from
+  chip RAM);
+- HITPIX (about 1.5 KB) as a second module in banks 4/5, called with
+  `SYS TO addr,O(...)`; it clashes with BASIC's bitmap SCREEN graphics,
+  which an object game in text/RRB mode does not use.
+
+## Cost of the 32-bit pointer (measured)
+
+`tools/mkobjfar.py` generates `src/objfar.a` from B65's integrator: Y as
+the field index of `(oP),y` becomes Z with `[oP],z` (Y stays where an
+absolute `,y` table uses it), the 8 KB MAP windows become a 32-bit
+pointer walk, the sine table is read far. Built into B65 with
+`ACMEFLAGS=-DOBJFAR=1` it passes `tests/objcheck.py` (seeds 1, 5, 15, 16,
+21 with 40 objects, 2, 3, 7, 9 with 70) byte for byte. Xemu,
+`tests/bench/objstep.txt`, 1023 objects, ms per frame, B65 (MAP) / far
+pointer:
+
+| mode | B65 | far | |
+|---|---|---|---|
+| static | 0.8 | 2.0 | (loop overhead: the 32-bit step) |
+| fast | 4.4 | 6.0 | 1.36x |
+| fast + wrap | 10.0 | 12.8 | 1.28x |
+| cartesian | 8.8 | 11.6 | 1.32x |
+| cartesian + accel | 11.2 | 15.2 | 1.36x |
+| cartesian + wrap | 16.4 | 22.0 | 1.34x |
+| polar straight + wrap | 14.4 | 18.0 | 1.25x |
+| polar curving (k = 5) + wrap | 23.6 | 29.2 | 1.24x |
+| exact polar + wrap | 24.8 | 31.6 | 1.27x |
+| orbit + wrap | 28.8 | 34.4 | 1.19x |
+| spring + wrap | 32.0 | 38.4 | 1.20x |
+
+(The board numbers of both builds are to come: Xemu's cycle model of
+`[zp],z` may differ from the board's 10 cycles.)
+
+**Go.** With half a frame (10 ms) for the motion, OBJ65 moves about 1700
+fast (whole-pixel) objects, 800 fast with wrap limits, 880 cartesian,
+460 cartesian with limits, 570 straight polar, 330 curving or exact
+polar, 300 orbiting; 1000 fast bullets take 6 ms (30 % of a frame). So
+the 1000-bullet case fits only in the fast mode (no limits: lifetimes
+instead); with limits or sub-pixel steps about 450-800.
+
 ## Open points (to settle before code)
 
-- Where the library lives in bank 0 under BASIC 65 (code about 3.5 KB,
-  plus 2 KB sine table, plus a page of base page and buffers): the
-  BASIC 65 memory map has to be checked (candidates: the area below
-  `$2001`, or high in bank 0 with the program kept below it).
 - Whether the KERNAL IRQ path preserves B and Z for the chained handler
   (the stub saves and restores both, as B65's handler does).
 - Xemu with the MEGA65 ROM (`tests/run.py --prg`) is the test bed: an

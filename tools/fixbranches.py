@@ -2,6 +2,8 @@
 """Run ACME repeatedly; turn short branches that are out of range into
 45GS02 16-bit branches (lbxx)."""
 import os, re, subprocess, sys
+# src/objfar.a is generated from src/obj.a (the OBJ65 / OBJFAR integrator)
+subprocess.run([sys.executable, 'tools/mkobjfar.py'], check=True, stdout=subprocess.DEVNULL)
 for it in range(20):
     r = subprocess.run(['acme'] + os.environ.get('ACMEFLAGS', '').split() + ['src/b65.a'], capture_output=True, text=True)
     errs = re.findall(r'File (\S+), line (\d+) \(Zone [^)]*\): Target out of range', r.stderr)
