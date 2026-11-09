@@ -1,0 +1,6 @@
+10 REM the frame interrupt's polar objects use the multiplier: a program's * and DIV must still be right
+15 OBJUPDATE ON:FOR I%=0 TO 200:OBJECT I%,0,0,0:OBJMOVE I%,1,I%,1,0.01:NEXT
+20 E%=0:FOR I%=1 TO 20000:A%=I%*7919:IF A% DIV 7919<>I% THEN E%=E%+1
+30 IF I% MOD 4000=0 THEN B=I%*1.5:IF B<>I%+I%/2 THEN E%=E%+1
+40 NEXT:PRINT "errors ";E%
+RUN

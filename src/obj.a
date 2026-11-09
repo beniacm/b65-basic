@@ -23,6 +23,7 @@ objn    !word 0                 ; object number being worked on
 evtxt   !word 0                 ; (EVCHECK: the handler text)
 objt    !byte 0
 objp    !fill 4, 0
+objmul  !fill 8, 0              ; the integrator saves $D770-$D777 here
 objv    !fill 32, 0
 objevb  !fill OBJMAX/8, 0       ; event bits (object n: byte n/8, bit n AND 7)
 
@@ -204,6 +205,11 @@ objstep:
         sta oL+1
         ora oL
         lbeq .out
+        ldx #7                  ; the multiplier inputs of the interrupted
+-       lda $d770,x             ; program (restored at the end)
+        sta objmul,x
+        dex
+        bpl -
         lda #0
         sta oW
         sta $d772               ; multiplier high bytes: 0 for .SIN
@@ -315,6 +321,14 @@ objstep:
         jsr .hold
         lda curovl
         jsr ovmap
+        ldx #7                  ; the program's multiplier and divider inputs
+-       lda objmul,x            ; back (it may be between writing them and
+        sta $d770,x             ; reading the result)
+        dex
+        bpl -
+-       bit $d70f               ; and their results ready again
+        bmi -
+        bvs -
 .out    pla
         tab
         plp
