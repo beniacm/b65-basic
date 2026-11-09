@@ -95,6 +95,9 @@ drive 0 (read-only). A file that is not a tokenised program is read as
 text and entered line by line, exactly as if typed (lines without a
 number get the highest number so far + 10). Text files need attic RAM.
 
+BASIC 65 programs can use the K325T's objects too: `docs/OBJ65.md` (POKE
+recipes, and OBJ65, B65's object motion and HITPIX as a library on the D81).
+
 Examples (`examples/`; the first line of each, `1 REM Core: ...`, says
 which core it needs): `rrblist_b65.bas` and `rrblist_b65v2.bas` (RRB
 list mode v1/v2; K325T core only), `parallax.bas` (three overlapping RRB

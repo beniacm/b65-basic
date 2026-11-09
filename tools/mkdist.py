@@ -131,6 +131,10 @@ def main():
     disk = D81('B65 BASIC ' + version())
     disk.add('B65', prg, 2)
     shutil.copy(os.path.join(ROOT, 'build/b65.prg'), os.path.join(out, 'sd', 'B65.PRG'))
+    for name in ('obj65', 'obj65x'):    # the BASIC 65 object library (docs/OBJ65.md)
+        lib = open(os.path.join(ROOT, 'build', name + '.prg'), 'rb').read()
+        disk.add(name.upper(), lib, 2)
+        open(os.path.join(out, 'sd', name.upper() + '.PRG'), 'wb').write(lib)
     for f in ex:
         name = os.path.splitext(f)[0].upper().replace('_', '')[:12] + '.BAS'
         text = open(os.path.join(ROOT, 'examples', f), 'rb').read().replace(b'\r\n', b'\n')

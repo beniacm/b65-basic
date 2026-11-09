@@ -336,9 +336,9 @@ objstep:
         clc
         adc #>SINTAB
         sta oQ+1
-        lda #^SINTAB
+        lda #(SINTAB >> 16) & $ff
         sta oQ+2
-        lda #0
+        lda #SINTAB >> 24
         sta oQ+3
         ldz #0                  ; (far; the multiplier's high bytes are
         lda [oQ],z              ; 0 for the whole step)
@@ -723,7 +723,7 @@ objstep:
 +       bpl .by
         lda #1                  ; high side
         jsr .act
-        bcs .killed
+        lbcs .killed
 .by     ldz #2                  ; y (signed 10 bits)
         lda [oP],z
         sta oT
@@ -958,9 +958,3 @@ objstep:
         lda #$20
         tsb evpend
 +       rts
-} ; (OBJFAR: the far-pointer integrator instead)
-!ifdef OBJFAR {
-!src "src/objfar.a"
-        !align 255, 0
-objzpg  !fill 256, 0
-}

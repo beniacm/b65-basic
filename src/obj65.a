@@ -1,0 +1,222 @@
+; OBJ65 - v3 objects for BASIC 65: B65's frame integrator as a SYS library
+; (see docs/OBJ65.md). Assembled on its own: acme src/obj65.a (tools/
+; fixbranches.py does it after B65) -> build/obj65.prg, loaded at $1600
+; (BLOAD "OBJ65" from BASIC 65), up to $1FE7; its zero page is $1FE8-$1FFF
+; (base page $1F while it runs: BASIC 65's bitmap graphics base page, so
+; OBJ65 and BASIC's bitmap graphics do not go together). The sine table
+; builder, EVENT and HITPIX are in the second module OBJ65X (src/obj65x.a).
+; The integrator is src/objfar.a, generated from B65's src/obj.a by
+; tools/mkobjfar.py: the same motion, checked by the same model.
+!cpu m65
+!to "build/obj65.prg", cbm
+!sl "build/obj65.sym"
+
+OBJ65   = 1
+OBJMAX  = 1024
+ZPB     = $1f
+oP      = $e8                   ; 4 entry (32-bit pointer)
+oQ      = $ee                   ; 4 far pointer (parent / anchor, sine table, HOLD)
+oX      = $f2
+oA      = $f3                   ; +17 of the object
+oL      = $f4                   ; 2 objects left
+oVX     = $f6                   ; 2 step X (8.8)
+oVY     = $f8                   ; 2 step Y
+oT      = $fa                   ; 4 temporaries
+oW      = $fe
+oM      = $ff                   ; mode byte
+SINTAB  = $87ff800              ; 2 KB in attic RAM (built by OBJ65X's INIT)
+IRQVEC  = $0314                 ; the KERNAL's IRQ vector
+
+        * = $1600
+; ---- entry points: SYS $1600 + 3 * k ----
+        jmp install             ; 0: A = table bits 19..16, X = bits 15..8, Y/Z = count (motion off)
+        jmp remove              ; 1: unhook the frame interrupt
+        jmp step1               ; 2: one step now; the interrupt's steps stop
+        jmp setauto             ; 3: A = 1: the interrupt moves the objects, 0: not
+        jmp setcount            ; 4: X/Y = number of objects (also the registers)
+; ---- data (fixed offsets: docs/OBJ65.md; src/obj65x.a checks them) ----
+objbase !32 0                   ; $160F: table address (page aligned)
+objcnt  !word 0                 ; $1613
+objauto !byte 0                 ; $1615: bit 7: step in the interrupt
+hw_k325t !byte 0                ; $1616: $FF on the K325T core
+objfeat !byte 0                 ; $1617: feature level
+objlim  !fill 36, 0             ; $1618: limit sets 0..3, 9 bytes each
+objevb  !fill OBJMAX/8, 0       ; $163C: event bits (object n: byte n/8, bit n AND 7)
+oldirq  !word 0                 ; the KERNAL's IRQ vector before INSTALL
+objmul  !fill 8, 0
+objevon !byte 0                 ; (no ON OBJEVENT in BASIC 65)
+evpend  !byte 0
+bitmask8 !byte 1, 2, 4, 8, 16, 32, 64, 128
+
+; ---- INSTALL ----
+install:
+        php
+        sei
+        sta objbase+2
+        stx objbase+1
+        lda #0
+        sta objbase
+        sta objbase+3
+        sty objcnt
+        stz objcnt+1
+        tba
+        pha
+        lda #ZPB
+        tab
+        lda #0
+        sta hw_k325t
+        sta objfeat
+        lda $d629               ; the K325T core: model $62 and XCTL bit 0
+        cmp #$62                ; reads back (it is left set: 1 MB chip RAM)
+        bne +
+        jsr xctlp
+        ldz #0
+        lda [oQ],z
+        ora #1
+        sta [oQ],z
+        lda [oQ],z
+        and #1
+        beq +
+        lda #$ff
+        sta hw_k325t
+        ldz #$0d                ; feature level $FFD71FD
+        lda [oQ],z
+        sta objfeat
++       ldz #0
+        ldx #OBJMAX/8-1         ; no events
+        lda #0
+-       sta objevb,x
+        dex
+        bpl -
+        jsr regs
+        lda IRQVEC              ; hook the frame interrupt (once)
+        cmp #<irq
+        bne +
+        lda IRQVEC+1
+        cmp #>irq
+        beq ++
++       lda IRQVEC
+        sta oldirq
+        lda IRQVEC+1
+        sta oldirq+1
+        lda #<irq
+        sta IRQVEC
+        lda #>irq
+        sta IRQVEC+1
+++      lda #0                  ; motion off until AUTO (SYS base+9,1)
+        sta objauto
+        pla
+        tab
+        ldz #0
+        plp
+        rts
+xctlp   lda #$f0                ; oQ = $FFD71F0
+        sta oQ
+        lda #$71
+        sta oQ+1
+        lda #$fd
+        sta oQ+2
+        lda #$0f
+        sta oQ+3
+        rts
+
+; ---- REMOVE ----
+remove: php
+        sei
+        lda IRQVEC
+        cmp #<irq
+        bne +
+        lda IRQVEC+1
+        cmp #>irq
+        bne +
+        lda oldirq
+        sta IRQVEC
+        lda oldirq+1
+        sta IRQVEC+1
++       lda #0
+        sta objauto
+        plp
+        rts
+
+; ---- STEP / AUTO / COUNT ----
+step1:  lda #0
+        sta objauto
+        phz
+        jsr objstep
+        plz
+        rts
+setauto:
+        cmp #0
+        beq +
+        lda #$80
++       sta objauto
+        rts
+setcount:
+        php
+        sei
+        stx objcnt
+        sty objcnt+1
+        plp
+        tba
+        pha
+        lda #ZPB
+        tab
+        jsr regs
+        pla
+        tab
+        ldz #0
+        rts
+; REGS: K325T: table address and count into the list-mode registers
+regs:   bit hw_k325t
+        bpl .rx
+        jsr xctlp
+        lda #$f8
+        sta oQ
+        ldz #0
+        lda objbase
+        sta [oQ],z
+        inz
+        lda objbase+1
+        sta [oQ],z
+        inz
+        lda objbase+2
+        sta [oQ],z
+        inz
+        lda objcnt              ; count low byte (255 for more on a v2 core)
+        ldx objcnt+1
+        beq +
+        ldx objfeat
+        cpx #3
+        bcs +
+        lda #$ff
++       sta [oQ],z
+        lda objfeat
+        cmp #3
+        bcc .rx
+        lda #$72                ; $FFD728A-B: the 10-bit count
+        sta oQ+1
+        lda #$8a
+        sta oQ
+        ldz #0
+        lda objcnt
+        sta [oQ],z
+        inz
+        lda objcnt+1
+        sta [oQ],z
+.rx     ldz #0
+        rts
+
+; ---- the frame interrupt: one step per raster frame, then the KERNAL ----
+irq:    lda $d019               ; only the raster interrupt (the frame)
+        and #1
+        beq +
+        bit objauto
+        bpl +
+        phz
+        jsr objstep
+        plz
++       jmp (oldirq)
+
+!src "src/objfar.a"
+obj65_end:
+!if obj65_end > $1fe8 { !error "OBJ65 runs into its zero page at $1FE8" }

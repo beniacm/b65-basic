@@ -1,0 +1,248 @@
+; OBJ65X - the second module of OBJ65 (docs/OBJ65.md): the sine table
+; builder, EVENT and (later) HITPIX. Assembled for $2000 (acme
+; src/obj65x.a -> build/obj65x.prg, load address $2000), kept anywhere in
+; banks 1..5 at a page with offset $2000 below a 64 KB boundary, called with
+; SYS TO $2000+3*k,O(offset) (offset = (load address - $2000) / 256; the
+; D81's OBJ65X is loaded at $52000: O($500)). Base page $7F while it runs
+; (inside the module), the core's data through its fixed addresses in
+; bank 0 (build/obj65.inc, from the core's symbols).
+!cpu m65
+!to "build/obj65x.prg", cbm
+!sl "build/obj65x.sym"
+!src "build/obj65.inc"
+OBJMAX  = 1024
+ZPB     = $7f
+oP      = $e8
+oL      = $f4
+oT      = $fa
+oW      = $fe
+objevb  = c_objevb
+bitmask8 = c_bitmask8
+objbase = c_objbase
+OBJMAX_ = OBJMAX
+; B65's zero page names that HITPIX uses (here on the module's base page)
+acc     = $04
+fptr    = $55
+fp64    = $b0
+fnum    = $b8
+fq      = $c0
+fr      = $c4
+fa_     = $c8
+fb_     = $c9
+fc_     = $ca
+fd_     = $cb
+fe_     = $cc
+ff_     = $cd
+fg_     = $ce
+fh_     = $cf
+SINTAB  = $87ff800
+!if c_objbase != $160f { !error "OBJ65's data moved: update docs/OBJ65.md" }
+
+        * = $2000
+        jmp init                ; 0: the sine table in attic RAM (once, before INSTALL)
+        jmp event0              ; 1: X/Y = object (or $FFFF: the first): A = 1/0, X/Y
+        jmp hitpix0             ; 2: HITPIX of the parameter block: A = 1 / 0 ($FF: bad number)
+hpa     !word 0                 ; +9: object a
+hpb     !word 0                 ; +11: object b
+hpdx    !word 0                 ; +13: a moved by dx, dy (signed)
+hpdy    !word 0                 ; +15
+
+hitpix0:
+        phz
+        tba
+        pha
+        lda #ZPB
+        tab
+        jsr hit65
+        sta .res
+        pla
+        tab
+        lda .res
+        plz
+        rts
+init:   tba
+        pha
+        lda #ZPB
+        tab
+        jsr sinit
+        pla
+        tab
+        ldz #0
+        rts
+event0: phz
+        tba
+        pha
+        lda #ZPB
+        tab
+        jsr event
+        sta .res                ; (A, X, Y are the result)
+        pla
+        tab
+        lda .res
+        plz
+        rts
+.res    !byte 0
+; EVENT: X/Y = n: A = 1 if its event bit was set (cleared); n =
+; $FFFF: the lowest object with an event in X/Y (A = 1), or A = 0 ----
+event:  cpy #$ff
+        bne .one
+        cpx #$ff
+        bne .one
+        ldx #0
+-       lda objevb,x
+        bne .f
+        inx
+        cpx #OBJMAX/8
+        bne -
+        lda #0
+        rts
+.f      ldy #0
+-       lsr
+        bcs +
+        iny
+        bra -
++       stx oT                  ; n = byte * 8 + bit
+        lda #0
+        sta oT+1
+        ldx #3
+-       asl oT
+        rol oT+1
+        dex
+        bne -
+        tya
+        ora oT
+        tax
+        ldy oT+1
+        lda #1
+        rts
+.one    stx oT                  ; byte n / 8, bit n AND 7
+        sty oT+1
+        txa
+        and #7
+        tay
+        lda bitmask8,y
+        sta oT+2
+        ldy #3
+-       lsr oT+1
+        ror oT
+        dey
+        bne -
+        ldx oT
+        php
+        sei
+        lda objevb,x
+        and oT+2
+        beq +
+        lda oT+2
+        eor #$ff
+        and objevb,x
+        sta objevb,x
+        lda #1
++       plp
+        cmp #0
+        beq +
+        lda #1
++       rts
+
+; ---- SINIT: the quarter-wave sine table (as B65's BOOT) ----
+sinit:  lda #<SINTAB
+        sta oP
+        lda #>SINTAB
+        sta oP+1
+        lda #(SINTAB >> 16) & $ff
+        sta oP+2
+        lda #SINTAB >> 24
+        sta oP+3
+        lda #0
+        sta oL
+        lda #>1024
+        sta oL+1
+        ldx #7
+-       lda .y0,x
+        sta .ya,x
+        dex
+        bpl -
+.sl     lda .ya+1               ; ya >> 14
+        sta oT
+        lda .ya+2
+        sta oT+1
+        lda .ya+3
+        sta oT+2
+        ldx #6
+-       lsr oT+2
+        ror oT+1
+        ror oT
+        dex
+        bne -
+        ldz #0
+        lda oT
+        sta [oP],z
+        inz
+        lda oT+1
+        sta [oP],z
+        ldz #0
+        inw oP
+        inw oP
+        ldx #3                  ; C * yb
+-       lda .yb,x
+        sta $d770,x
+        lda .c,x
+        sta $d774,x
+        dex
+        bpl -
+-       bit $d70f
+        bvs -
+        lda $d77b               ; + 2^29
+        clc
+        adc #$20
+        sta oT
+        lda $d77c
+        adc #0
+        sta oT+1
+        lda $d77d
+        adc #0
+        sta oT+2
+        lda $d77e
+        adc #0
+        sta oT+3
+        lda $d77f
+        adc #0
+        sta oW
+        ldx #2                  ; >> 30
+-       asl oT
+        rol oT+1
+        rol oT+2
+        rol oT+3
+        rol oW
+        dex
+        bne -
+        sec                     ; n = that - ya; ya = yb; yb = n
+        ldx #0
+-       lda oT+1,x
+        sbc .ya,x
+        pha
+        lda .yb,x
+        sta .ya,x
+        pla
+        sta .yb,x
+        inx
+        txa
+        eor #4
+        bne -
+        dew oL
+        lda oL
+        ora oL+1
+        lbne .sl
+        rts
+.c      !32 $7ffff621
+.y0     !32 $000c90fe
+        !32 $0025b2f7
+.ya     !32 0
+.yb     !32 0
+
+!src "src/hit65.a"
+objn    !word 0
+obj65x_end:
+hrec65  = obj65x_end            ; HITPIX's records (48 bytes) and buffers (400)
+hbuf65  = obj65x_end + 48
+!if hbuf65 + $190 > $7f00 { !error "OBJ65X runs into its base page $7F00" }
