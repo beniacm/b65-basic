@@ -62,19 +62,23 @@ ring was being placed).
 
 ## How B65 does it
 
-Per frame BASIC moves the seven band counters and the front layer and starts
-one chained DMA list of 86 jobs: 52 row copies (21 tokens from token maps in
-chip RAM made at start, the source moved when a column advances), 8 fills of
-the GOTOX fine X bytes (destination step 208), 26 fills that park the ring
-slots (step 4). Then an inline-assembler routine (`RING`, 64 rings: the
-motion and the slot placement, 192 slot writes) runs with `CALL`, and BASIC
-cycles the waterfall. Glyph $n of SCROLLTEST is char $n + $1400 here (the
+Per frame BASIC moves the seven band counters and the front layer (counter,
+fine X, coarse column: one byte each for the routine) and cycles the
+waterfall. Then one inline-assembler routine (`RING`, run with `CALL`) sets
+the sources of the DMA list's row copies (52 from token maps in chip RAM
+made at start: a row's base + 2 x its band's column; 52 text rows for act
+2), starts the chained list (130 jobs: those copies and 26 fills that park
+the ring slots, step 4), writes every row's GOTOX bytes (fine X, the text
+sets' Y offsets: a DMA fill cannot step 372 bytes) and does the 64 rings
+(the motion and the slot placement, 192 slot writes). Glyph $n of SCROLLTEST is char $n + $1400 here (the
 glyphs at $55800: bank 5, free under B65); screen $50000, colour RAM
 $FF80800, token maps $52000, DMA list $5C000.
 
-Budget (Xemu, tests/ghzcheck.py, without the frame wait): 5.2 ms a frame
-before the rings start, about 6 ms with the 64 rings: 50 frames per second
-with two thirds of the frame free.
+Budget (Xemu, tests/ghzcheck.py, without the frame wait): 3.2 ms a frame on
+average with the 64 rings. With the frame wait every frame makes it in 20 ms
+except two at the start (the first calls of the procedures): 1000 frames in
+2010 cs. (When BASIC still set the 52 job sources itself, 8% of the frames
+missed: the front layer's 26 sources every 4 frames, plus band reloads.)
 
 ## Act 2: the source over the picture
 
@@ -108,4 +112,4 @@ the smooth scroll needs the board.
 - Board: `tests/board.py run tests/board_ghz.txt`: 1500 frames of act 1 in
   real time, then "frames 1500 ... in N cs" (3000 at 50 fps);
   `tests/board_ghz2.txt`: act 2 from frame 200 to the end of the source
-  (2700 frames, 5400 cs at 50 fps; the smooth scroll).
+  (3600 frames, 7200 cs at 50 fps; the smooth scroll).

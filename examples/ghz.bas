@@ -4,12 +4,12 @@
 20 REM GOTOX + 21 band tiles + GOTOX + 21 front tiles + 30 ring slots (GOTOX
 30 REM with a Y offset + a ring glyph). Tiles are NCM (16 x 8 pixels, 4 bits).
 40 REM Per frame BASIC moves the bands and the front layer (counters, fine X,
-50 REM coarse columns) and starts one chained DMA list: 52 row copies from the
-60 REM token maps, 8 fills for the fine X of the GOTOX tokens (step 208), 26
-70 REM fills that park the ring slots (step 4); then the inline-assembler
-80 REM routine RING moves 64 rings on two summed sine tables per axis and puts
-90 REM each into the slots of 3 rows (as SCROLLTEST does), and BASIC cycles the
-95 REM waterfall's palette entries 25-28. The data: docs/GHZ.md.
+50 REM coarse columns) and cycles the waterfall's palette entries 25-28; then
+60 REM the inline-assembler routine RING sets the sources of the DMA list's
+70 REM row copies (52 from the token maps, 52 text rows), starts the chained
+80 REM list (with 26 fills that park the ring slots), writes the rows' GOTOX
+90 REM bytes, moves 64 rings on two summed sine tables per axis and puts each
+95 REM into the slots of 3 rows (as SCROLLTEST does). The data: docs/GHZ.md.
 100 REM BN%>0: BN% frames without the intro and the frame wait (tests); RN%>0: stop after RN% frames.
 110 BN%=0:RN%=0:VS%=0:A1%=3000:SM%=1:REM A1%: the frames of act 1; SM%=0: the text in 8-pixel steps (Xemu draws no GOTOX Y offsets)
 115 DN$="INTRO2.D81":PN$="SCROLLTEST":REM the D81 in the SD card root and the program on it that has the art
@@ -27,8 +27,7 @@
 230 W1%=W1%+1:IF W1%=8 THEN W1%=0:W2%=(W2%+1) AND 3:PROCwf
 240 FX%=FX%-SP%:IF FX%<0 THEN FX%=FX%+16:PROCfront
 250 ?(V%+7)=FX%:?(V%+6)=SP%:IF AC%=2 THEN PROCscroll ELSE IF F%=A1% AND NL% THEN PROCact2
-260 ?&D702=DL% DIV 65536:?&D704=0:?&D701=(DL% DIV 256) AND 255:?&D705=DL% AND 255
-270 CALL RING%
+270 CALL RING%:REM the job sources, the DMA list, the GOTOX bytes, the rings
 280 F%=F%+1:IF BN%=0 THEN WAIT
 285 IF BN%=0 THEN IF F%=RN% OR INKEY(0)>=0 THEN EX%=1
 290 UNTIL F%=BN% OR EX%
@@ -37,7 +36,7 @@
 400 DEF PROCband(B%)
 410 IF RL%(B%) THEN C%(B%)=RL%(B%) ELSE C%(B%)=C%(B%)+AD%(B%)
 420 K%(B%)=K%(B%)+1:IF K%(B%)>=W%(B%) THEN K%(B%)=0
-430 FOR R%=R0%(B%) TO R1%(B%):PROCsrc(JB%(R%),BL%(R%)+2*K%(B%)):NEXT:ENDPROC
+430 ?(V%+17+B%)=2*K%(B%):ENDPROC:REM (RING moves the rows' job sources)
 440 REM ---- act 2: the source scrolls up over the picture (two token sets a row: line L moved up by S pixels, line L+1 down by 8-S)
 442 DEF PROCact2:AC%=2:TL%=0:TS%=0:?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:PROCtext:ENDPROC
 444 DEF PROCscroll:TS%=TS%+1:IF TS%=8 THEN TS%=0:TL%=TL%+1:PROCtext
@@ -45,10 +44,10 @@
 446 IF SM%=0 THEN ?(V%+8)=0:?(V%+9)=2:ENDPROC
 447 IF TS% THEN ?(V%+8)=TS%<<5:?(V%+9)=((8-TS%)<<5) OR &10 ELSE ?(V%+8)=0:?(V%+9)=2:REM (Y offset: bits 15-13 up, bit 12: down)
 448 ENDPROC
-449 DEF PROCtext:LOCAL R%:FOR R%=0 TO 25:PROCsrc(JA%(R%),&80000+80*(TL%+R%)):PROCsrc(JC%(R%),&80000+80*(TL%+R%+1)):NEXT:ENDPROC
+449 DEF PROCtext:LOCAL T%:T%=&80000+80*TL%:?(V%+25)=T% AND 255:?(V%+26)=(T%>>8) AND 255:?(V%+27)=T%>>16:ENDPROC
 450 DEF PROCfront
 460 FC%=FC%+1:IF FC%=&7C THEN FC%=0:S%=(SP%+1) AND 15:IF S% THEN SP%=S%
-470 FOR R%=0 TO 25:PROCsrc(JF%(R%),FL%(R%)+2*FC%):NEXT:ENDPROC
+470 ?(V%+24)=2*FC%:ENDPROC
 480 DEF PROCsrc(J%,S%):?(J%+13)=S% AND 255:?(J%+14)=(S%>>8) AND 255:?(J%+15)=S%>>16:ENDPROC
 490 DEF PROCwf:LOCAL I%:FOR I%=0 TO 3:?(&D119+I%)=?(TA%+768+W2%+I%):?(&D219+I%)=?(TA%+776+W2%+I%):?(&D319+I%)=?(TA%+784+W2%+I%):NEXT:ENDPROC
 500 REM ---- the art: tables 3796 bytes to TA%, glyphs $160.. to GA% (from SCROLLTEST on the D81, else the generated pack)
@@ -109,14 +108,22 @@
 895 ?(J%+10)=C%+4:?(J%+11)=N% AND 255:?(J%+12)=N%>>8:PROCsrc(J%,S%):PROCsrc(J%+3,D%):?(J%+19)=0:?(J%+20)=0:?(J%+21)=0:ENDPROC
 900 REM ---- RING: 64 rings (SCROLLTEST's $2A41 motion and $2B69 placement)
 910 DEF PROCasm:LOCAL P%,I%,O%
-920 DIM V% 1000:S1%=V%+32:S2%=S1%+256:TX%=S2%+256:TH%=TX%+65:TY%=TH%+65:TG%=TY%+65:CN%=TG%+65:PL%=CN%+28:PH%=PL%+28
+920 DIM V% 1200:S1%=V%+32:S2%=S1%+256:TX%=S2%+256:TH%=TX%+65:TY%=TH%+65:TG%=TY%+65:CN%=TG%+65:PL%=CN%+28:PH%=PL%+28
 930 FOR I%=0 TO 255:?(S1%+I%)=?(TA%+792+I%):?(S2%+I%)=?(TA%+1048+I%):NEXT
 940 ?V%=0:?(V%+1)=&3F:?(V%+2)=0:?(V%+3)=&3F:?(V%+4)=&84:?(V%+5)=0:?(V%+6)=4
 950 FOR I%=2 TO 27:O%=SC%+LS%*(I%-2)+88:?(PL%+I%)=O% AND 255:?(PH%+I%)=(O%>>8) AND 255:NEXT
 955 RM%=PH%+28:?(V%+8)=2:?(V%+9)=2:FOR I%=0 TO 25:B%=0:WHILE I%>R1%(B%):B%=B%+1:ENDWHILE:?(RM%+I%)=B%:NEXT
-960 DIM RING% 400:FOR I%=0 TO 2 STEP 2:P%=RING%
+956 REM job sources: band row = BB(row) + 2 x column (V%+17+band), front row = FB(row) + 2 x column (V%+24), text rows from V%+25..27 (80 bytes a line)
+957 BB%=RM%+26:FB%=BB%+78:FOR I%=0 TO 25:FOR O%=0 TO 2:?(BB%+26*O%+I%)=(BL%(I%)>>(8*O%)) AND 255:?(FB%+26*O%+I%)=(FL%(I%)>>(8*O%)) AND 255:NEXT:NEXT
+958 FOR I%=17 TO 24:?(V%+I%)=0:NEXT:?(V%+25)=0:?(V%+26)=0:?(V%+27)=8
+960 DIM RING% 700:FOR I%=0 TO 2 STEP 2:P%=RING%
 970 [OPT I%
-975 .ring LDA #(SC%>>16):STA &C2:LDA #0:STA &C3:LDY #25
+971 .ring LDA #(DL%>>16):STA &C2:LDA #0:STA &C3:LDA #((DL%+13) AND 255):STA &C0:LDA #(((DL%+13)>>8) AND 255):STA &C1:LDY #0
+972 .s1 LDX RM%,Y:LDA BB%,Y:CLC:ADC V%+17,X:LDZ #0:STA [&C0],Z:LDA BB%+26,Y:ADC #0:INZ:STA [&C0],Z:LDA BB%+52,Y:ADC #0:INZ:STA [&C0],Z:JSR nx:INY:CPY #26:BNE s1:LDY #0
+973 .s2 LDA FB%,Y:CLC:ADC V%+24:LDZ #0:STA [&C0],Z:LDA FB%+26,Y:ADC #0:INZ:STA [&C0],Z:LDA FB%+52,Y:ADC #0:INZ:STA [&C0],Z:JSR nx:INY:CPY #26:BNE s2
+974 LDA V%+25:STA &B0:LDA V%+26:STA &B1:LDA V%+27:STA &B2:JSR tx:LDA V%+25:CLC:ADC #80:STA &B0:LDA V%+26:ADC #0:STA &B1:LDA V%+27:ADC #0:STA &B2:JSR tx
+975 LDA #(DL%>>16):STA &D702:LDA #0:STA &D704:LDA #((DL%>>8) AND 255):STA &D701:LDA #(DL% AND 255):STA &D705
+976 LDA #(SC%>>16):STA &C2:LDA #0:STA &C3:LDY #25
 977 .f1 LDA PL%+2,Y:SEC:SBC #88:STA &C0:LDA PH%+2,Y:SBC #0:STA &C1:LDX RM%,Y:LDA V%+10,X:LDZ #0:STA [&C0],Z
 978 LDA V%+7:LDZ #44:STA [&C0],Z:LDA V%+8:LDZ #209:STA [&C0],Z:LDA V%+9:LDZ #291-256:INC &C1:STA [&C0],Z:LDZ #0:DEY:BPL f1
 980 INC V%:INC V%+1:INC V%+5:LDA V%+5:CMP #10:BNE r1:LDA #0:STA V%+5:LDA V%+4:CLC:ADC #3:CMP #&96:BNE r0:LDA #&84
@@ -142,6 +149,11 @@
 1180 .ps INC &B9:INC &BA:DEC &BB:BNE p2
 1190 .pn DEX:LBNE p1
 1200 .pd RTS
+1202 .nx LDA &C0:CLC:ADC #22:STA &C0:BCC nr:INC &C1
+1203 .nr LDZ #0:RTS
+1204 .tx LDY #26
+1205 .t1 LDZ #0:LDA &B0:STA [&C0],Z:INZ:LDA &B1:STA [&C0],Z:INZ:LDA &B2:STA [&C0],Z:JSR nx:LDA &B0:CLC:ADC #80:STA &B0:BCC t2:INC &B1:BNE t2:INC &B2
+1206 .t2 DEY:BNE t1:RTS
 1210 ]:NEXT:ENDPROC
 1300 REM ---- the VIC-IV as SCROLLTEST sets it (V400, 26 rows of 104 tokens, CHR16 + FCLRHI), our palette
 1310 DEF PROCvic:LOCAL I%:VS%=1
