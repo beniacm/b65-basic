@@ -46,10 +46,12 @@ painting).
   |---|---|---|---|---|---|
   | bounce | $D9 | $01 | 326 | 0 | 0 |
   | bounce | $D9 | $00 | 578 | 0 | 0 |
+  | swarm2 (moving) | $D9 | $01 | 651 | 0 | 0 |
+  | swarm2 (moving) | $D9 | $00 | 1592 | 0 | 0 |
 
-  The swarm2 pair from the same session (387 against 844) is not quoted:
-  that run was the frozen-snapshot case (see "Fixed" below) and is to be
-  measured again with the integrator fix. The core's diagnostic counter 26
+  The swarm2 pair was measured with the integrator fix (see "Fixed"
+  below), the swarm moving; an earlier pair (387 against 844) came from
+  the frozen-snapshot case and is void. The core's diagnostic counter 26
   (line start to the first object part) does not count in 4-pixel mode on
   this core (fixed in the next core build; diagnostic only).
 
@@ -113,19 +115,39 @@ ab024b7 (same binaries as 118aa99):
 | 2 | 1500 | 0 | 1602 | 0 |
 | 3 | 1401 | 27 | 1635 | 0 |
 
-0 one-frame glitches in the 105 s video. 668bf11 (S9) then removed the
-waterfall magenta of the first 19 frames (the palette is complete before
-the display goes on, at frame 12) and the static run at act 1 -> 2 (the act
-changes' code runs once at the start, display off). Its board take had both
-fixed, but act 2 18 and act 3 294 late frames (HUD 38 FPS around ring
-1000): S9's warm-up also ran one frame of act 3's code, and that alone put
-the program into a state with long stalls (3-18 frames each, mostly in act
-3). Xemu with the K325T path forced (`K3%=1` on line 959, same line length)
-reproduces the board figures to within a few frames (S8: 29 against 27; S9:
-19 / 296 against 18 / 294), and without that one statement 0 / 17. S10
-drops act 3's warm-up and keeps the rest: in Xemu 3 / 0 / 29 late frames
-on the K325T path, 3 / 0 / 0 stock, 3 / 0 / 2 with the K325T routine on the
-stock core.
+0 one-frame glitches in the 105 s video. 668bf11 (S9) removed the waterfall
+magenta of the first 19 frames (the palette is complete before the display
+goes on, at frame 12) and the static run at act 1 -> 2 (the act changes'
+code runs once at the start, display off). The S9 and S10 board takes then
+reported act 3 with 294 and 283 late frames although their videos show no
+lost frame: a counting fault. BASIC read the frame counter `$D7FA` after
+RING returned, and in act 3 RING returns right at the frame top, where the
+counter steps. When one frame's read fell just after the step and the
+next one's just before, the difference was 0 and `(Q%-LQ%-1) AND 255`
+added 255 (283 = 255 + 28; in Xemu with the K325T path forced 296 = 255 +
+41, 541 = 2 x 255 + 31, 800 = 3 x 255 + 35). Which side a read fell on
+moved with a few cycles of interpreter timing, so any change to the
+program or the interpreter could flip it. S11 (see below) takes the count
+at a fixed raster position. S10 also dropped S9's run of one act-3 frame
+in the warm-up: it moved a stall of about 15-19 frames (a cache flush and
+recompile) from act 3's start to the end of act 2 (S9's 16-frame stall at
+64 s), no gain.
+
+**Late frames and the HUD's FPS (S11).** RING reads the VIC-IV frame
+counter `$D7FA` when its wait for raster line 254 ends, below the picture,
+and keeps it at OV%+131. From each act's 11th frame, every pass adds that
+count minus the previous pass's count minus 1 (mod 256) to the act's late
+frames: the frames in which RING did not run, i.e. the picture did not
+move. The HUD (every 25 passes) shows FPS = 1250 / (frames since its last
+update) from the same count. S11 in Xemu: act 1 / 2 / 3 4 / 0 / 14 late
+frames with the K325T path forced, 4 / 0 / 2 stock, 3 / 0 / 18 with the
+K325T routine on the stock core. S11 also does act 3's switch below the
+picture: S10 turned list mode on mid-frame, and as the VIC-IV takes its
+table snapshot only at a frame top with list mode on, the rows below the
+switch were painted from a stale snapshot for one frame (black blocks and
+stray glyphs at the act 2 -> 3 change). PROCact3 now waits for line 254,
+writes CHRCOUNT and the list-mode registers and runs RING at once, so the
+next frame is act 3's throughout.
 
 50 fps throughout (late frames are counted from each act's 11th frame
 through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
@@ -133,9 +155,7 @@ through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
 front) had 0 one-frame glitches in 105 s, the listing legible over the
 scene and both act-3 captions free of rings; 238201f then moved act 3's
 set-up to the start so the scene does not stop between the acts. In Xemu
-the shipped demo (S10) has 3 / 0 / 0 late frames on the stock path, 3 / 0 /
-2 with the K325T routine on the stock core and 3 / 0 / 29 with the K325T
-path forced.
+the shipped demo (S11) has the late frames given above.
 
 **Programming note: the RRB row budget.** Every token of a row costs painting
 time wherever its X is, also when it is parked off the screen (a
@@ -212,12 +232,9 @@ change only `docs/` give the same files.
 
 ## Known
 
-- GHZ's late frames depend on the program's history and layout in a
-  chaotic way: in Xemu one statement run once at the start, a probe line,
-  or a few bytes more in the interpreter move act 3 between about 17 and
-  800 late frames (long multi-frame stalls; compiles and cache flushes
-  stay few, the exact trigger is not pinned down yet). Changes to ghz.bas
-  are measured in Xemu with the K325T path forced before a board take.
+- GHZ still has short static runs at the act changes (on the board 9
+  frames at act 1 -> 2, 12 and 9 frames in act 3's set-up): first compiles
+  and a cache flush and recompile there (see the next entry).
 - B65's expression cache (overlay 4, about 2.7 KB of compiled code) is
   flushed when it is full, and the next pass recompiles every hot
   expression at once: a short stall (in Xemu up to about 14 frames). In GHZ

@@ -36,9 +36,9 @@ Then `LOAD "GHZ"`, `RUN` in B65.
 **Verified:**
 - K325T rig with the step-7 core (feature level 4):
   - smoke 34 of 34, the v3 object board test 20 PASS / 0 FAIL, SELFTEST 14 PASS / 0 FAIL (batch 4 core);
-  - demos at 50 fps: jumper 600 frames in 1198 cs, swarm2 1500 in 3056 cs, bounce 1500 in 3004 cs (850 pairs), parallax 600 in 1200 cs;
+  - demos at 50 fps: jumper 600 frames in 1198 cs, swarm2 1500 in 3024 cs (moving: the integrator fix below), bounce 1500 in 3004 cs (850 pairs), parallax 600 in 1200 cs;
   - the SD card fsck-clean before and after the file tests;
-  - 4-pixel painting (XCTL2 bit 0, with XCTL $D9): in a steady bounce window the longest line painting is 326 cycles against 578 without it, with no port collisions and no late pixels in either mode;
+  - 4-pixel painting (XCTL2 bit 0, with XCTL $D9): in a steady window the longest line painting is 326 cycles against 578 without it (bounce) and 651 against 1592 (swarm2, 1000 moving bullets), with no port collisions and no late pixels in either mode;
   - GHZ (2026-11-10): 1500 / 1500 / 1401 frames in its three acts at 50 fps, no late pixels, no one-frame glitches in the video.
 - Xemu: smoke, the check scripts, the GHZ, object and HITPIX models, and the card tests (fsck clean).
 

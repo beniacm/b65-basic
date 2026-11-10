@@ -243,17 +243,37 @@ second, from first compiles) are what 668bf11 addresses: the palette is
 complete before the display goes on (frame 12), and PROCwarm runs the act
 changes' code once at the start with the display off.
 
-The S9 take (329888f): no magenta, no static runs, but act 2 18 and act 3
-294 late frames (the HUD at 38 FPS around ring 1000, a 16-frame stall at
-the end of act 2). PROCwarm had also run one frame of act 3 (PROCa3); that
-alone put the program into a state with long stalls. Xemu with the K325T
-path forced (`K3%=1` on line 959, the line kept at its length) reproduces
-the board within a few frames (S9: 19 / 296), without the act-3 warm-up 0 /
-17. S10 drops it: Xemu 3 / 0 / 29 late frames on the K325T path (S8's take
-had 27), 3 / 0 / 0 stock, 3 / 0 / 2 with XT%=1. The late frames are
-sensitive to layout and history (a probe line or a few bytes more in the
-interpreter move act 3 between about 17 and 800): measure a change this
-way before a board take.
+The S9 (329888f) and S10 (2d2fe06) takes: no magenta, no static run at
+act 1 -> 2; act 3 reported 294 and 283 late frames although the videos
+show no lost frame (S10's ground-layer shifts frame by frame equal S7's).
+That was a counting fault: BASIC read `$D7FA` after RING returned, which
+in act 3 is right at the frame top where the counter steps; a read just
+after the step followed by one just before gave a difference of 0, and
+`(Q%-LQ%-1) AND 255` added 255 (283 = 255 + 28). A few cycles of
+interpreter timing decided the side, so the figure jumped with any change
+(Xemu, K325T path forced: 17, 296 = 255 + 41, 541 = 2 x 255 + 31, 800 = 3 x
+255 + 35 for small variations of the same program). S9's 16-frame stall at
+the end of act 2 was real: a cache flush and recompile, which its warm-up
+of one act-3 frame had moved there from act 3's start; S10 dropped that
+warm-up.
+
+**How late frames and FPS are counted (S11).** RING reads `$D7FA` when its
+wait for raster line 254 ends (below the picture) and keeps it at
+OV%+131. From each act's 11th frame, each pass of the frame loop adds
+that count minus the previous pass's minus 1 (mod 256): the frames in
+which RING did not run and the picture did not move. The HUD (every 25
+passes) shows FPS = 1250 / (frames since the last HUD update), from the
+same count. Xemu (S11): 4 / 0 / 14 late frames with the K325T path forced
+(`K3%=1` on line 959, the line kept at its length), 4 / 0 / 2 stock, 3 /
+0 / 18 with XT%=1.
+
+The act 2 -> 3 switch (S11): list mode is turned on below the picture.
+S10 turned it on mid-frame; the VIC-IV takes its table snapshot only at a
+frame top with list mode on, so the rest of that frame was painted from a
+stale snapshot (one frame of black blocks and stray glyphs). PROCact3 now
+waits for line 254, writes CHRCOUNT and the list-mode registers and runs
+RING at once (one extra ring-motion step, in tests/ghzcheck.py's model
+too), so the next frame is act 3's throughout.
 
 Acts 1 and 2 use only standard VIC-IV features and should look the same on
 a standard MEGA65 (not tested: reports to
