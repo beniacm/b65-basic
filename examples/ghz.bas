@@ -290,10 +290,9 @@
 1708 IF P3%=2 THEN PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
 1710 IF P3%>2 THEN IF K3%+XT% THEN PROCobjs(P3%)
 1712 P3%=P3%+1:ENDPROC
-1720 REM ---- warm-up: the code of the act changes and of act 3's first frames runs once now, with the display off, so its first compiles do not stall the picture later; then everything back
+1720 REM ---- warm-up: the act changes' code runs once now, display off, so its first compiles do not stall the picture; then all back (not act 3's frames: that cost act 3 ~300 frames)
 1722 DEF PROCwarm:LOCAL I%:IF NL%=0 THEN ENDPROC
 1724 F%=0:SP%=4:P2%=0:TL%=0:TS%=0:H2%=0:PROCa1:PROClist:PROCscroll:TL%=0:TS%=0:PROCtext:?&D05E=104:?(V%+31)=0:?(V%+8)=2:?(V%+9)=2:?(V%+28)=&FF:?(V%+29)=&FF
-1726 IF K3% THEN N3%=64:H3%=0:QH%=?&D7FA:F3%=199:PROCa3:F3%=0:N3%=64:?OV%=64:?(OV%+1)=0:?(OV%+2)=0:?(OV%+3)=0:?(OV%+4)=0
 1728 FOR I%=1 TO 3:LM%(I%)=0:LP%(I%)=0:NEXT:ENDPROC
 9000 DEF PROCxctl2(B%):REM XCTL2 bit 0 (4-pixel painting, with XCTL bits 4 and 7) from feature level 4
 9010 IF ?&FFD71FD>=4 THEN ?&FFD71F1=(?&FFD71F1 AND &FE) OR B%
