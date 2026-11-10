@@ -146,6 +146,17 @@ fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
   with OBJ65's far-pointer integrator) from a clean checkout, checked
   against the model.
 
+## Reproducible build
+
+From a clean checkout (`git worktree add <dir> <commit>`, then in it `make
+dist`; ACME 0.97, Python 3), twice, with the same result: `dist/b65.d81`
+md5 `c7c6c331e62f068d6401811f0eb3d135`, `build/b65.prg` (= `dist/sd/B65.PRG`)
+md5 `5d4c90a6f20a48a4aef2cda890fc3a10`; `dist/sd/B65GHZG.BBC`
+`c37d54079e465f606db0c14cd56b9314`, `dist/sd/B65GHZS.BBC`
+`6cca2ed6ba95f58aa01e71a5a7ca6dfd`, `dist/sd/GHZ.BAS`
+`c548062828363a88c812f79c321cffc6`. Built from 118aa99; commits that
+change only `docs/` give the same files.
+
 ## Known
 
 - B65's expression cache (overlay 4, about 2.7 KB of compiled code) is
