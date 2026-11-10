@@ -55,11 +55,13 @@ video: (link follows)
   (`tests/ghzmodel.py`) that reproduces a memory dump of the real demo after
   965 frames; B65 matches the model frame for frame in Xemu
   (`tests/ghzcheck.py`).
-- **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?" (a fixed top line): the scene
-  turns into a BASIC screen, a blue panel with a LIST of the program's frame
-  loop, DMA list and ring routines scrolling under the caption, one pixel a
-  frame, while the scene goes on below it; then "B65 BASIC. n LINES." /
-  "50 FRAMES PER SECOND.".
+- **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?" (a fixed top line): a LIST of
+  the program's frame loop, DMA list and ring routines scrolls up pixel by
+  pixel straight over the running scene, white with a black shadow on a
+  transparent background; then "B65 BASIC. n LINES." / "50 FRAMES PER
+  SECOND.". Text is always in front: in acts 1-2 the text is the last token
+  set of every row; in act 3 the rings are kept out of a caption's row while
+  it shows, as row 0 is kept free for the HUD.
 - **Act 3** "NOW WITH THE K325T VIC-IV": the rings move into the K325T's
   list-mode object table and ramp 64 -> 300 -> 1000, with 8 clouds behind
   and 12 bushes in front as objects too (10 layers), a HUD row with RINGS,
@@ -98,10 +100,13 @@ feature level 4; art from INTRO2.D81; `LOAD "GHZ"` / `RUN` from the card):
 | 3 | 1401 | 15 | 1689 | 0 |
 
 50 fps throughout (late frames are counted from each act's 11th frame
-through the VIC-IV's frame counter `$D7FA`; the video shows no repeated
-frame in act 2 and no one-frame glitch apart from the panel leaving at the
-end of act 2); the act-3 HUD reached RINGS 1000. In Xemu (stock core path)
-the shipped demo has 3 / 1 / 5 late frames.
+through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
+1000. The take of the final layout (79a66ee, act 2 transparent, text in
+front) had 0 one-frame glitches in 105 s, the listing legible over the
+scene and both act-3 captions free of rings; 238201f then moved act 3's
+set-up to the start so the scene does not stop between the acts. In Xemu
+the shipped demo has 3 / 3 / 0 late frames on the stock path, 3 / 0 / 0
+with the K325T routine.
 
 **Programming note: the RRB row budget.** Every token of a row costs painting
 time wherever its X is, also when it is parked off the screen (a
@@ -140,6 +145,17 @@ fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
 - `tests/smoke.sh` ends with `tests/farcheck.sh`: the OBJFAR build (B65
   with OBJ65's far-pointer integrator) from a clean checkout, checked
   against the model.
+
+## Known
+
+- B65's expression cache (overlay 4, about 2.7 KB of compiled code) is
+  flushed when it is full, and the next pass recompiles every hot
+  expression at once: a short stall (in Xemu up to about 14 frames). In GHZ
+  on the stock-core path one flush falls on the act 1 -> 2 change (about
+  20 frames of gaps there in Xemu); the K325T path shows none. One cause is
+  the inline assembler: its operand expressions go through the same cache
+  (GHZ assembles about 1.5 KB at the start, hundreds of one-shot operands).
+  Next: evaluate assembler operands without caching them, after v0.3.
 
 ## To come before the release
 

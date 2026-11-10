@@ -85,40 +85,47 @@ missed: the front layer's 26 sources every 4 frames, plus band reloads.)
 
 ## Act 2: the listing
 
-After act 1 (A1% = 1500 frames, 30 s) the picture turns into a BASIC screen:
-a blue panel (rows 0..21: their band and front row copies read a line of
-empty glyphs, so the band layer's opaque GOTOX group paints the screen
-colour `$D021`, blue; the front group is transparent; the rings are
-parked; light blue text on top, as on a C64/MEGA65 screen; both text sets
-stay transparent: an opaque group would paint the background colour over
-its masked rows, docs/rrb_gotox_hw.md in the harness) with the fixed top
-line "BUT HAVE YOU SEEN IT IN BASIC?", and below it (rows 2..21) a LIST of
-parts of this program as B65's LIST shows them: ">LIST 200-290" (the frame
-loop), ">LIST 800-895" (the DMA list), ">LIST 971-1010" (RING), ">LIST
-1212-1238" (act 3's ring routine), wrapped at 40 columns, scrolling up SV%
-pixels a frame (line 115: 1); the scene goes on in rows 22..25. The listing
-ends with the prompt and a cursor, stays 2 s, then the panel goes and "B65
-BASIC. n LINES." / "50 FRAMES PER SECOND." stand over the scene for 3 s.
-About 28 s.
+After act 1 (A1% = 1500 frames, 30 s) the program's own listing scrolls up
+pixel by pixel straight over the running, scrolling scene, white with a
+black shadow on a transparent background, under the fixed top line "BUT
+HAVE YOU SEEN IT IN BASIC?" (rows 0-1 never move). The listing is parts of
+this program as B65's LIST shows them: ">LIST 200-290" (the frame loop),
+">LIST 800-895" (the DMA list), ">LIST 971-1010" (RING), ">LIST 1212-1238"
+(act 3's ring routine), wrapped at 40 columns, in rows 2..25, scrolling SV%
+pixels a frame (line 115: 1). It ends with the prompt and a cursor, stays
+2 s, then "B65 BASIC. n LINES." / "50 FRAMES PER SECOND." stand over the
+scene for 3 s. 30 s in all.
 
 `B65GHZS.BBC` (made by `tools/mkghz.py --text` from examples/ghz.bas, in
-dist/sd) holds the 8x8 font as 96 full-colour glyphs (text colour 250, a
-shadow 251 right of and below each pixel; on the panel 251 is the panel's
-blue) and the text as 40-column token lines. Each screen row has two text
-sets after SCROLLTEST's 104 tokens: a GOTOX and 40 characters of line L
-moved up by S pixels, a GOTOX and 40 characters of line L+1 moved down by
-8 - S (GOTOX Y offset: bits 15-13 up, bit 12 down), each with a row mask
-(colour byte 0 bit 3, the mask in byte 1): set 1 draws pixel rows 0..7-S,
-set 2 rows 8-S..7 (without the masks the VIC-IV paints the neighbouring
-glyphs' rows there: the board showed it as flicker every 4 frames). The
-rows are 186 tokens (line step 372); the text sets start at X 16, the
-first visible pixel. The text comes from attic RAM ($8580000) through the
-frame's DMA list (52 row copies); the routine RING writes each row's GOTOX
-bytes and masks every frame (a DMA fill cannot step 372 bytes), ANDed
-with a per-row table (PF%: the panel's rows), and keeps the first V%+31
-rows fixed (no offset, the caption line's text: the routine FIX points
-their text jobs at it). Xemu does not draw GOTOX Y offsets or row masks,
-so `SM%=0` scrolls in 8-pixel steps for the tests.
+dist/sd) holds the 8x8 font as 96 full-colour glyphs (text colour 250,
+white; a shadow 251, black, right of and below each pixel: the shadow is
+part of each glyph, so it costs no painting time) and the text as
+40-column token lines. Each screen row has two text sets after
+SCROLLTEST's 104 tokens: a GOTOX and 40 characters of line L moved up by
+S pixels, a GOTOX and 40 characters of line L+1 moved down by 8 - S (GOTOX
+Y offset: bits 15-13 up, bit 12 down), both transparent, each with a row
+mask (colour byte 0 bit 3, the mask in byte 1): set 1 draws pixel rows
+0..7-S, set 2 rows 8-S..7 (without the masks the VIC-IV paints the
+neighbouring glyphs' rows there: the board showed it as flicker every 4
+frames). The rows are 186 tokens (line step 372); the text sets start at X
+16, the first visible pixel. The text comes from attic RAM ($8580000)
+through the frame's DMA list (52 row copies); the routine RING writes each
+row's GOTOX bytes and masks every frame (a DMA fill cannot step 372
+bytes), ANDed with a per-row table (PF%), and keeps the first V%+31 rows
+fixed (no offset, the caption line's text: the routine FIX points their
+text jobs at it). Xemu does not draw GOTOX Y offsets or row masks, so
+`SM%=0` scrolls in 8-pixel steps for the tests.
+
+**Text is always in front.** In acts 1 and 2 the text sets are the last
+tokens of every row (band 0-21, front 22-43, ring slots 44-103, text
+104-185), so they paint over everything. In act 3 the list-mode objects
+are appended after a row's tokens and would paint over the text, so the
+rings are kept out of a caption's row while it shows: A3% hides a ring
+whose y lies in a band (OV%+129..130, set by BASIC: row 11 for "NOW WITH
+THE K325T VIC-IV", row 12 for "1000 RINGS. 10 LAYERS. STILL BASIC."), as
+row 0 is kept free for the HUD; the clouds (rows 1-4) and bushes (rows
+22-25) never reach those rows. A ring in a caption's row is hidden, not
+removed: the count stays 1000.
 
 ## Frame timing
 
@@ -184,8 +191,15 @@ bit 0):
 
 Any other core (and Xemu): the caption and "THIS CORE: 64 RINGS, PLAIN RRB",
 act 1's 64 rings in their RRB slots, the HUD with RINGS and FPS, 400 frames.
-`XT%=1` runs the K325T path's routine on a scratch table in bank 1
-(`&17000`, above the program) for the tests.
+`XT%=1` runs the K325T path's routine on a scratch table in bank 1 (from
+TOP, rounded up to a page; the run prints its address) for the tests.
+
+Act 3's set-up (palette entries 192-223 and 250/251, the HUD page in attic
+RAM and its captions, the object token lists, the template, the 1000 ring
+entries, the clouds and bushes) runs at the start, while the intro is
+shown (PROCprep, line 160): none of it is visible before act 3, and
+PROCact3 only switches the text page, CHRCOUNT, the caption band and the
+object registers, so the scene never stops between the acts.
 
 Budget (Xemu, the routine on the scratch table): 1000 rings about 8 ms a
 frame; in real time act 3 misses only its caption frames (3 in 1000). The
@@ -208,8 +222,17 @@ Recorded on 2026-11-10 on the QMTECH K325T board (core batch 3,
 
 Registers in act 1: `$D051` $40 (+ the X position bits), `$D031` $48,
 `$D05E` $68 (104), XCTL $91, XCTL2 $00. The HUD reached RINGS 1000. Video
-frame analysis: no one-frame glitch apart from the panel leaving at the end
-of act 2, no repeated frame in act 2. video: (link follows)
+frame analysis: no one-frame glitch apart from the act-2 panel of that build
+leaving, no repeated frame in act 2. video: (link follows)
+
+The S7 build (79a66ee: act 2 transparent over the scene, text always in
+front) was recorded the same day: act 1 registers `$D051` $41, `$D031` $48,
+`$D05E` $68, `$D054` $45, XCTL $91 (three reads); 0 one-frame brightness
+glitches in the whole 105 s take; act 2's listing white with the black
+shadow over the live scene, legible, the caption fixed; act 3's HUD and both
+captions free of rings; "1000 RINGS. 10 LAYERS. STILL BASIC." reached. It
+still held the picture briefly at the two act changes (the set-ups); 238201f
+moved those set-ups out of the frame loop.
 
 Acts 1 and 2 use only standard VIC-IV features and should look the same on
 a standard MEGA65 (not tested: reports to
