@@ -153,6 +153,7 @@ a staircase. So:
 ## Act 3: the K325T VIC-IV
 
 "NOW WITH THE K325T VIC-IV": on a K325T core of feature level 3 or more
+(recorded at level 4)
 (`?&FFD71FD`), act 3 moves the rings into the list-mode object table
 (B65's table address `&E0000`, 1020 objects, 32-byte v3 entries written by
 the program itself, XCTL bits 4, 6, 7; level 4: 4-pixel painting, XCTL2
@@ -192,6 +193,28 @@ whole demo as shipped (Xemu): act 1 3000 frames 4 late (start-up), act 2
 0 late, act 3 0 late. Finding on the way: B65's expression cache (4 ways)
 thrashed in some program layouts (up to 226 late frames in 400); it has 16
 ways now (see RELEASE_v0.3.md).
+
+## Board results
+
+Recorded on 2026-11-10 on the QMTECH K325T board (core batch 3,
+0b3eadd7b, feature level 4), art from INTRO2.D81, commit ad52e78: acts of
+30 s, 30 s and 28 s plus the closing card, 50 fps throughout.
+
+| act | frames | late frames | longest painting | late pixels |
+|---|---|---|---|---|
+| 1 | 1500 | 3 | 1076 | 0 |
+| 2 | 1492 | 17 | 1602 | 0 |
+| 3 | 1401 | 15 | 1689 | 0 |
+
+Registers in act 1: `$D051` $40 (+ the X position bits), `$D031` $48,
+`$D05E` $68 (104), XCTL $91, XCTL2 $00. The HUD reached RINGS 1000. Video
+frame analysis: no one-frame glitch apart from the panel leaving at the end
+of act 2, no repeated frame in act 2. video: (link follows)
+
+Acts 1 and 2 use only standard VIC-IV features and should look the same on
+a standard MEGA65 (not tested: reports to
+https://github.com/beniacm/b65-basic/issues); act 3 needs the K325T list
+mode.
 
 ## Tests
 

@@ -157,6 +157,17 @@ BASIC 65 programs on the K325T must set XCTL bit 0 (`POKE $FFD71F0,
 PEEK($FFD71F0) OR 1`, 1 MB chip RAM) before they use memory above 384 KB
 (`$60000` and up): without it writes there are dropped (B65 sets it).
 
+**RRB row budget.** Every token of a 16-bit character row costs painting time,
+wherever its X is (also when parked off the screen): about 16 pixel cycles a
+full-colour or NCM glyph on a standard VIC-IV, 2592 cycles per line. Long
+RRB rows need DBLRR (`$D051` bit 6: two lines per painting, 5184 cycles; a
+write to `$D051` with bit 6 clear switches it off, the register also holds
+the raster-X compare MSB) or a shorter CHRCOUNT (`$D05E`): set it to the
+tokens actually used, LINESTEP stays. On a K325T, XCTL bits 4 and 7 (fast
+RRB and token paths) roughly halve the cost. A row over budget is cut where
+the painter stands when the next painting starts (examples/ghz.bas and
+docs/GHZ.md: 186-token rows).
+
 **K325T collision engine** (list mode v2, K325T core only). Objects that
 share a bit in their collision group mask (object table `+7`) are compared
 once per frame; the box is X..X+W-1 by Y..Y+8*H-1 (`+14` = width W, 0 = 8;

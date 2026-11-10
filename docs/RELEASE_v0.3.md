@@ -42,8 +42,11 @@ until then this file grows with every change.
 
 ## GHZ: SCROLLTEST in B65 (examples/ghz.bas, docs/GHZ.md)
 
-A three-act showpiece, 30 s an act, about 90 s, all of it a B65 BASIC program with
-small inline-assembler routines:
+A three-act showpiece, all of it one B65 BASIC program with small
+inline-assembler routines, 50 frames per second throughout. Acts of 30 s,
+30 s and 28 s, then a closing card.
+
+video: (link follows)
 
 - **Act 1** "YOU HAVE SEEN THIS ON MEGA65": Maxice's SCROLLTEST (the Green
   Hill scroller of INTRO2.D81) frame for frame: seven parallax bands, the
@@ -52,49 +55,67 @@ small inline-assembler routines:
   (`tests/ghzmodel.py`) that reproduces a memory dump of the real demo after
   965 frames; B65 matches the model frame for frame in Xemu
   (`tests/ghzcheck.py`).
-- **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?" (the fixed top line): the
-  scene turns into a BASIC screen (the band layer paints a blue panel), a LIST of the
-  program's frame loop, DMA list and ring routines scrolling under the
-  caption (two text token sets per row with GOTOX Y offsets and row masks,
-  1 pixel a frame), the scene going on below; then "B65 BASIC. n LINES." /
+- **Act 2** "BUT HAVE YOU SEEN IT IN BASIC?" (a fixed top line): the scene
+  turns into a BASIC screen, a blue panel with a LIST of the program's frame
+  loop, DMA list and ring routines scrolling under the caption, one pixel a
+  frame, while the scene goes on below it; then "B65 BASIC. n LINES." /
   "50 FRAMES PER SECOND.".
-- **Act 3** "NOW WITH THE K325T VIC-IV" (K325T core, feature level 3 or
-  more): the rings move into the list-mode object table and ramp
-  64 -> 300 -> 1000, with 8 clouds behind and 12 bushes in front as objects
-  too (10 layers), 4-pixel painting at level 4, a HUD row with RINGS, FPS,
-  OBJECTS and the VIC-IV's longest painting: "1000 RINGS. 10 LAYERS. STILL
-  BASIC." Other cores: a one-line note and act 1's 64 rings. Then the
-  closing card ("B65 BASIC FOR MEGA65 AND K325T",
-  github.com/beniacm/b65-basic) and one line per act with its frames and
-  late frames (on a K325T also the longest painting and the late pixels).
+- **Act 3** "NOW WITH THE K325T VIC-IV": the rings move into the K325T's
+  list-mode object table and ramp 64 -> 300 -> 1000, with 8 clouds behind
+  and 12 bushes in front as objects too (10 layers), a HUD row with RINGS,
+  FPS, OBJECTS and the VIC-IV's longest painting, and "1000 RINGS. 10
+  LAYERS. STILL BASIC." Then the closing card ("B65 BASIC FOR MEGA65 AND
+  K325T", github.com/beniacm/b65-basic) and one line per act with its
+  frames and late frames (on a K325T also the longest painting and the
+  late pixels).
 - **The art comes from your own copy** at run time: the program opens
   `INTRO2.D81` in the SD card root (every card from the filehost has it),
   finds SCROLLTEST in its directory, follows its sector chain with `PTR#`
   and the new block `BGET#`, checks it and takes the tiles, palette and
   tables from it ("ORIGINAL ART FROM INTRO2.D81", under a second). Without
-  it the original generated tileset `B65GHZG.BBC` ("GENERATED ART").
+  it, the original generated tileset `B65GHZG.BBC` ("GENERATED ART").
   Nothing of the original art is in the repository or the release; act 3's
   rings, clouds and bushes are original art in `B65GHZS.BBC`.
 - **Files:** GHZ.BAS, `B65GHZG.BBC` and `B65GHZS.BBC` (dist/sd) go to the
   SD card root, next to INTRO2.D81: B65 reads data files from the SD card's
   root directory only, not from a mounted D81.
+- **Which machine:** acts 1 and 2 use only VIC-IV features of a standard
+  MEGA65 (RRB rows with GOTOX, row masks, DBLRR, DMA); act 3 needs the K325T
+  core's list mode (feature level 3 or more; recorded at level 4, which adds
+  4-pixel painting). On another core act 3 shows a one-line note and act 1's
+  64 rings. **A standard MEGA65 has not been tested:** acts 1 and 2 should
+  look the same there. If you have one, please run GHZ and paste the closing
+  lines (frames and late frames per act), `*INFO` and the SELFTEST output
+  into an issue at https://github.com/beniacm/b65-basic/issues.
 
-Board figures (QMTECH K325T, step-7 core, level 4; art from INTRO2.D81;
-`LOAD "GHZ"` / `RUN` from the card):
+Recorded on 2026-11-10 on the QMTECH K325T board (core batch 3, 0b3eadd7b,
+feature level 4; art from INTRO2.D81; `LOAD "GHZ"` / `RUN` from the card):
 
-| run | result |
-|---|---|
-| act 1, 1500 frames (c4dca80) | 3010 cs (3000 at 50 fps; the extra frames are the start-up) |
-| act 2, 3600 frames (c4dca80) | 7212 cs |
-| the whole demo (ddfdaa5), 175 s | act 1: 3000 frames, 3 late; act 2: 2970 frames, 0 late; act 3: 1001 frames, 3 late (the caption frames) |
-| act 3 HUD at 1000 rings | RINGS 1000, FPS 50, OBJECTS 1020, LINE 1895 (pixel cycles of 5184, DBLRR) |
-| before the job sources moved into the assembler routine (4c88bae) | act 1, 1500 frames: 3192 cs (6% late) |
+| act | frames | late frames | longest painting (pixel cycles) | late pixels |
+|---|---|---|---|---|
+| 1 | 1500 | 3 | 1076 | 0 |
+| 2 | 1492 | 17 | 1602 | 0 |
+| 3 | 1401 | 15 | 1689 | 0 |
 
-CHRCOUNT follows the act (104 tokens in act 1, so a stock core paints
-SCROLLTEST's row with room to spare) and DBLRR is set every frame. All screen updates run in the vertical blank (RING waits for raster
-line 254); the scroll speed ramps in act 1 only. Late frames are counted from each act's 11th frame through the VIC-IV's
-frame counter `$D7FA`. In Xemu (stock core path): act 1 4 late (start-up),
-act 2 0, act 3 0.
+50 fps throughout (late frames are counted from each act's 11th frame
+through the VIC-IV's frame counter `$D7FA`; the video shows no repeated
+frame in act 2 and no one-frame glitch apart from the panel leaving at the
+end of act 2); the act-3 HUD reached RINGS 1000. In Xemu (stock core path)
+the shipped demo has 3 / 1 / 5 late frames.
+
+**Programming note: the RRB row budget.** Every token of a row costs painting
+time wherever its X is, also when it is parked off the screen (a
+full-colour or NCM glyph 16 pixel cycles on a standard VIC-IV). A row of
+186 tokens (GHZ act 2: two layers, 30 ring slots and two 40-character
+text layers) needs 3200-3580 cycles: that fits DBLRR's two lines per
+painting ($D051 bit 6, 5184 cycles) but not one line (2592); without DBLRR
+every row is cut where the painter stands. Any write to `$D051` with bit 6
+clear switches DBLRR off (the register also holds the raster-X compare
+MSB). So: keep DBLRR set (GHZ writes `$D051=&40` every frame), set
+CHRCOUNT (`$D05E`) to the tokens an act really uses (GHZ: 104 in act 1, 186
+in act 2, 145 in act 3; LINESTEP stays, no data moves), and on a K325T the
+fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
+1209-1686 cycles.
 
 ## B65
 
