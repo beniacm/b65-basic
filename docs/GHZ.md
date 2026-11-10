@@ -116,6 +116,13 @@ fixed (no offset, the caption line's text: the routine FIX points their
 text jobs at it). Xemu does not draw GOTOX Y offsets or row masks, so
 `SM%=0` scrolls in 8-pixel steps for the tests.
 
+**Act 1's caption (S13).** "YOU HAVE SEEN THIS ON MEGA65" stays on row 0 for
+the whole of act 1 (before, it stood only on the title screen during the
+load): line 164 switches text set 1 on (CHRCOUNT 145), fixes row 0 (V%+31 =
+1) on the text pack's last line and shows the blank page below it. Act 2's
+caption then takes its place on the same row. Without B65GHZS.BBC (no font)
+act 1 runs without it.
+
 **Text is always in front.** In acts 1 and 2 the text sets are the last
 tokens of every row (band 0-21, front 22-43, ring slots 44-103, text
 104-185), so they paint over everything. In act 3 the list-mode objects

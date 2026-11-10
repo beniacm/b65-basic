@@ -182,6 +182,7 @@ def text_pack():
     lines of examples/ghz.bas in LISTS as B65's LIST shows them (wrapped at
     40 columns), '>' and a cursor; then a page with 'B65 BASIC. n LINES.' (n:
     the program's lines) and '50 FRAMES PER SECOND.' on rows 11 and 13; then
+    one more line, act 1's fixed caption 'YOU HAVE SEEN THIS ON MEGA65'; then
     act 3's art"""
     font = []
     for ln in open(os.path.join(ROOT, 'src', 'font.a')):
@@ -219,6 +220,7 @@ def text_pack():
     lines.append('>' + chr(127))
     le = len(lines) - 1
     lines += [''] * 11 + [('B65 BASIC. %d LINES.' % nlines).center(40), '', '50 FRAMES PER SECOND.'.center(40)] + [''] * 12
+    lines.append('YOU HAVE SEEN THIS ON MEGA65'.center(40))     # the last line: act 1's fixed caption (row 0)
     toks = bytearray()
     for ln in lines:
         for ch in ln.ljust(40)[:40]:

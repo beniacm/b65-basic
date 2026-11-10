@@ -20,7 +20,9 @@
 155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,16);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
 160 P3%=1:PROCtables:PROCscreen:PROCdma:PROCasm:WHILE P3%<=25:PROCprep:ENDWHILE:PROCvic:P3%=0:PROCprep:P3%=26:REM act 3's set-up now: none of it shows before act 3
 163 PROCwarm
+164 IF NL% THEN ?&D05E=145:?(V%+31)=1:I%=&80000+80*(NL%-1):?(OV%+124)=I% AND 255:?(OV%+125)=(I%>>8) AND 255:?(OV%+126)=I%>>16:TL%=0:PROCtext:?(V%+8)=0:?(V%+28)=&FF
 165 IF BN%=0 THEN REPEAT UNTIL INKEY(0)<0:REM keys pending from before do not end the demo
+166 REM (164: act 1's caption "YOU HAVE SEEN THIS ON MEGA65" fixed on row 0: the text pack's last line in text set 1, the rows below blank)
 170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:?(OV%+131)=?&D7FA:LQ%=?(OV%+131):Q%=LQ%:T0%=TIME
 200 REPEAT
 210 FOR B%=0 TO 6:C%(B%)=C%(B%)-ST%(B%):IF C%(B%)<0 THEN PROCband(B%)
@@ -241,7 +243,7 @@
 1510 DEF PROCact3:LOCAL I%:REM the set-up (PROCprep: palette, HUD page, object table) ran at the start; here only the switch
 1512 IF A2% THEN PROCctr(2)
 1513 AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?(OV%+131):WHILE P3%<=25:PROCprep:ENDWHILE
-1514 PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
+1514 PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:?(V%+31)=0:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
 1519 ?(OV%+129)=96:?(OV%+130)=111:REM text is always in front: rings stay out of a caption's row while it shows (objects are painted after the row's text)
 1520 IF K3%+XT% THEN ?(V%+30)=1
 1521 REPEAT UNTIL ?&D011>127 OR ?&D012>=RW%:?&D05E=145:IF K3% THEN PROCxon
