@@ -1,6 +1,6 @@
 # GHZ: Maxice's SCROLLTEST in B65 (examples/ghz.bas)
 
-The v0.3 showpiece, in three acts: "YOU HAVE SEEN THIS ON MEGA65" (SCROLLTEST
+The v0.3 showpiece, in three acts: "YOU HAVE SEEN THIS ON MEGA65 ALREADY" (SCROLLTEST
 from INTRO2.D81, the Green Hill scroller by Maxice, frame for frame), "BUT
 HAVE YOU SEEN IT IN BASIC?" (its source scrolls over the running picture) and
 "NOW WITH THE K325T VIC-IV" (1000 rings, clouds and bushes as list-mode
@@ -116,12 +116,21 @@ fixed (no offset, the caption line's text: the routine FIX points their
 text jobs at it). Xemu does not draw GOTOX Y offsets or row masks, so
 `SM%=0` scrolls in 8-pixel steps for the tests.
 
-**Act 1's caption (S13).** "YOU HAVE SEEN THIS ON MEGA65" stays on row 0 for
-the whole of act 1 (before, it stood only on the title screen during the
-load): line 164 switches text set 1 on (CHRCOUNT 145), fixes row 0 (V%+31 =
-1) on the text pack's last line and shows the blank page below it. Act 2's
-caption then takes its place on the same row. Without B65GHZS.BBC (no font)
-act 1 runs without it.
+**Act 1's caption (S13).** "YOU HAVE SEEN THIS ON MEGA65 ALREADY" stays on
+row 0 for the whole of act 1 (before, a shorter text stood only on the title
+screen during the load): PROCwarm leaves text set 1 on (CHRCOUNT 145), row 0
+fixed (V%+31 = 1) on the text pack's last line and the blank page below it.
+Act 2's caption then takes its place on the same row. Without B65GHZS.BBC
+(no font) act 1 runs without it.
+
+**The warm-up runs in the loop (S13).** PROCwarm (the act changes' code run
+once, so that its first compiles do not stall the picture) ran before the
+frame loop. On the board the cache then stood at about 2.6 KB of its 2.9 KB
+(the set-up's one-shot expressions), the loop's own first compiles flushed
+it and the warm-up was lost: 9 static frames at act 1 -> 2 in the first S13
+take. Now the loop calls PROCwarm in frames 4 and 8, with the display still
+off (it comes on in frame 12): after the loop's code is in the cache, and
+twice, so a flush during the first pass is made good by the second.
 
 **Text is always in front.** In acts 1 and 2 the text sets are the last
 tokens of every row (band 0-21, front 22-43, ring slots 44-103, text

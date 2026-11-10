@@ -16,13 +16,11 @@
 120 SC%=&50000:LS%=372:CO%=&800:CR%=&FF80000+CO%:TM%=&52600:GA%=&55800:TA%=&5A600:DL%=&5C000:FT%=&5D000:TT%=&8580000:PS%=&5F000:OG%=&5E800:OP%=&5F400:OL%=&5F500:JS%=&5F600:EL%=&5F700:C3%=&3000:HU%=&85A0000
 130 DIM DB% 255,C%(6),ST%(6),AD%(6),RL%(6),W%(6),SH%(6),K%(6),R0%(6),R1%(6),BL%(25),FL%(25),JB%(25),JF%(25),JA%(25),JC%(25),FR%(3),LA%(3),LM%(3),LP%(3)
 140 ON ERROR E$=REPORT$:E%=ERL:PROCback:PRINT E$;" at line ";E%:END
-150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(26,11);"YOU HAVE SEEN THIS ON MEGA65":PRINT TAB(23,13);"SCROLLTEST BY MAXICE, INTRO DISK 2"
+150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(22,11);"YOU HAVE SEEN THIS ON MEGA65 ALREADY":PRINT TAB(23,13);"SCROLLTEST BY MAXICE, INTRO DISK 2"
 155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,16);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
 160 P3%=1:PROCtables:PROCscreen:PROCdma:PROCasm:WHILE P3%<=25:PROCprep:ENDWHILE:PROCvic:P3%=0:PROCprep:P3%=26:REM act 3's set-up now: none of it shows before act 3
-163 PROCwarm
-164 IF NL% THEN ?&D05E=145:?(V%+31)=1:I%=&80000+80*(NL%-1):?(OV%+124)=I% AND 255:?(OV%+125)=(I%>>8) AND 255:?(OV%+126)=I%>>16:TL%=0:PROCtext:?(V%+8)=0:?(V%+28)=&FF
+163 REM (the warm-up PROCwarm runs in the loop, in frames 4 and 8 with the display still off: line 284)
 165 IF BN%=0 THEN REPEAT UNTIL INKEY(0)<0:REM keys pending from before do not end the demo
-166 REM (164: act 1's caption "YOU HAVE SEEN THIS ON MEGA65" fixed on row 0: the text pack's last line in text set 1, the rows below blank)
 170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:?(OV%+131)=?&D7FA:LQ%=?(OV%+131):Q%=LQ%:T0%=TIME
 200 REPEAT
 210 FOR B%=0 TO 6:C%(B%)=C%(B%)-ST%(B%):IF C%(B%)<0 THEN PROCband(B%)
@@ -36,6 +34,7 @@
 280 F%=F%+1:FR%(AN%)=FR%(AN%)+1:IF BN%=0 THEN Q%=?(OV%+131):IF F%-AS%>10 THEN LA%(AN%)=LA%(AN%)+((Q%-LQ%-1) AND 255)
 282 LQ%=Q%:IF KH% THEN IF F%-AS%=11 THEN ?&FFD71E3=0:REM (K325T: the VIC-IV's counters from each act's 11th frame)
 283 IF F%=12 THEN ?&D011=&10:REM the display on: the first frames (first compiles) are not shown
+284 IF F%=4 OR F%=8 THEN PROCwarm:REM (display off) the act changes compiled now, after the loop itself
 285 IF BN%=0 THEN IF F%=RN% OR INKEY(0)>=0 THEN EX%=1
 290 UNTIL F%=BN% OR EX%
 300 T0%=TIME-T0%:PROCctr(AN%):PROCback:IF BN%+RN%=0 THEN PROCcard
@@ -294,9 +293,11 @@
 1708 IF P3%=2 THEN PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
 1710 IF P3%>2 THEN IF K3%+XT% THEN PROCobjs(P3%)
 1712 P3%=P3%+1:ENDPROC
-1720 REM ---- warm-up: the act changes' code runs once now, display off, so its first compiles do not stall the picture; then all back (not act 3's frames: that cost act 3 ~300 frames)
+1720 REM ---- warm-up: the act changes' code runs once in frames 4 and 8 (display off until 12), so its first compiles do not stall the picture. In the loop, not before it: the loop's own first compiles fill
+1721 REM the expression cache and flush it, which threw a warm-up before the loop away (9 static frames at act 1 -> 2). Twice: a flush in the first pass is made good by the second. Then act 1's state:
 1722 DEF PROCwarm:LOCAL I%:IF NL%=0 THEN ENDPROC
-1724 F%=0:SP%=4:P2%=0:TL%=0:TS%=0:H2%=0:PROCa1:PROClist:PROCscroll:TL%=0:TS%=0:PROCtext:?&D05E=104:?(V%+31)=0:?(V%+8)=2:?(V%+9)=2:?(V%+28)=&FF:?(V%+29)=&FF
+1724 P2%=0:TL%=0:TS%=0:H2%=0:PROCa1:PROClist:PROCscroll:TL%=0:TS%=0:PROCtext:AC%=1:AN%=1:AS%=0:I%=&80000+80*(NL%-1):?(OV%+124)=I% AND 255:?(OV%+125)=(I%>>8) AND 255:?(OV%+126)=I%>>16
+1726 ?&D05E=145:?(V%+31)=1:?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:?(V%+29)=&FF:REM the caption "YOU HAVE SEEN THIS ON MEGA65 ALREADY" fixed on row 0 (text set 1, the text pack's last line), blank rows below
 1728 FOR I%=1 TO 3:LM%(I%)=0:LP%(I%)=0:NEXT:ENDPROC
 9000 DEF PROCxctl2(B%):REM XCTL2 bit 0 (4-pixel painting, with XCTL bits 4 and 7) from feature level 4
 9010 IF ?&FFD71FD>=4 THEN ?&FFD71F1=(?&FFD71F1 AND &FE) OR B%
