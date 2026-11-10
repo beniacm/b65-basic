@@ -275,6 +275,11 @@ waits for line 254, writes CHRCOUNT and the list-mode registers and runs
 RING at once (one extra ring-motion step, in tests/ghzcheck.py's model
 too), so the next frame is act 3's throughout.
 
+The end (S12): PROCback sets `$D011` to 0 first, restores the registers
+and the palette, and writes the saved `$D011` last, so the scene goes
+straight to the end card (before, three frames showed it in the wrong
+mode and colours).
+
 Acts 1 and 2 use only standard VIC-IV features and should look the same on
 a standard MEGA65 (not tested: reports to
 https://github.com/beniacm/b65-basic/issues); act 3 needs the K325T list

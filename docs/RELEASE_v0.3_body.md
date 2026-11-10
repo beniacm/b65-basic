@@ -39,7 +39,7 @@ Then `LOAD "GHZ"`, `RUN` in B65.
   - demos at 50 fps: jumper 600 frames in 1198 cs, swarm2 1500 in 3024 cs (moving: the integrator fix below), bounce 1500 in 3004 cs (850 pairs), parallax 600 in 1200 cs;
   - the SD card fsck-clean before and after the file tests;
   - 4-pixel painting (XCTL2 bit 0, with XCTL $D9): in a steady window the longest line painting is 326 cycles against 578 without it (bounce) and 651 against 1592 (swarm2, 1000 moving bullets), with no port collisions and no late pixels in either mode;
-  - GHZ (2026-11-10): 1500 / 1500 / 1401 frames in its three acts at 50 fps, no late pixels, no one-frame glitches in the video.
+  - GHZ (2026-11-10): 1500 / 1532 / 1401 frames in its three acts at 50 fps (3 / 0 / 12 late frames), no late pixels, no one-frame glitches in the video.
 - Xemu: smoke, the check scripts, the GHZ, object and HITPIX models, and the card tests (fsck clean).
 
 **A standard MEGA65 has not been tested yet.** B65 is written to run on one. Everything works there except drawing the list-mode objects, which still move logically. GHZ's acts 1 and 2 use only standard VIC-IV features; act 3 then shows a one-line note. If you have a standard MEGA65, please type `*INFO`, run SELFTEST (`LOAD "SELFTEST"`, `RUN`) and GHZ, and paste the outputs (GHZ prints frames and late frames per act at the end) into an issue at https://github.com/beniacm/b65-basic/issues. Reports of any kind are welcome.

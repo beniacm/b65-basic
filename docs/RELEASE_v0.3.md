@@ -107,15 +107,17 @@ video: (link follows)
 
 Recorded on 2026-11-10 on the QMTECH K325T board (feature level 4; art from
 INTRO2.D81; `LOAD "GHZ"` / `RUN` from the card), the release build
-ab024b7 (same binaries as 118aa99):
+1e1d5de (the S12 take):
 
 | act | frames | late frames | longest painting (pixel cycles) | late pixels |
 |---|---|---|---|---|
 | 1 | 1500 | 3 | 1076 | 0 |
-| 2 | 1500 | 0 | 1602 | 0 |
-| 3 | 1401 | 27 | 1635 | 0 |
+| 2 | 1532 | 0 | 1602 | 0 |
+| 3 | 1401 | 12 | 1641 | 0 |
 
-0 one-frame glitches in the 105 s video. 668bf11 (S9) removed the waterfall
+0 one-frame glitches in the 105 s video. Two short static runs remain at
+act 3's set-up (12 and 9 frames, see Known). The earlier take of ab024b7
+(S8) had 1500 / 3, 1500 / 0 and 1401 / 27. 668bf11 (S9) removed the waterfall
 magenta of the first 19 frames (the palette is complete before the display
 goes on, at frame 12) and the static run at act 1 -> 2 (the act changes'
 code runs once at the start, display off). The S9 and S10 board takes then
@@ -147,7 +149,11 @@ table snapshot only at a frame top with list mode on, the rows below the
 switch were painted from a stale snapshot for one frame (black blocks and
 stray glyphs at the act 2 -> 3 change). PROCact3 now waits for line 254,
 writes CHRCOUNT and the list-mode registers and runs RING at once, so the
-next frame is act 3's throughout.
+next frame is act 3's throughout. S12 (1e1d5de) does the same for the end:
+PROCback restored `$D011` in the middle of its register list and the
+palette after it, which showed the scene for three frames in the wrong
+mode and colours before the end card; it now blanks the display first
+and switches it on last.
 
 50 fps throughout (late frames are counted from each act's 11th frame
 through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
@@ -223,11 +229,11 @@ fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
 
 From a clean checkout (`git worktree add <dir> <commit>`, then in it `make
 dist`; ACME 0.97, Python 3), twice, with the same result: `dist/b65.d81`
-md5 `bdfcb8f4066ec572ae655aaed4bdaa77`, `build/b65.prg` (= `dist/sd/B65.PRG`)
+md5 `280bdfec406510bc528ca58884bce5a6`, `build/b65.prg` (= `dist/sd/B65.PRG`)
 md5 `2bb7d9a0d8ad3b830ad92c76d1a41461`; `dist/sd/B65GHZG.BBC`
 `c37d54079e465f606db0c14cd56b9314`, `dist/sd/B65GHZS.BBC`
 `8eb437889108a126918b1ad052e453f5`, `dist/sd/GHZ.BAS`
-`72f1a8606876bb7e599d5c08213f75db`. Built from 591f237; commits that
+`3c3c46dcb429c2ee170ee9bf83489ccb`. Built from 1e1d5de; commits that
 change only `docs/` give the same files.
 
 ## Known
