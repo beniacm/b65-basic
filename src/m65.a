@@ -163,11 +163,11 @@ irqinit:
         sta $fffa
         lda #>nmihandler
         sta $fffb
-        lda $d011               ; raster line 251 (below the text area)
-        and #$7f
-        sta $d011
-        lda #251
-        sta $d012
+        lda $d011               ; raster line 16: just after the frame top (PAL
+        and #$7f                ; raster 0, NTSC 7), so the object integrator
+        sta $d011               ; runs after the VIC-IV's table snapshot and its
+        lda #16                 ; HOLD never covers a frame top (at line 251 an
+        sta $d012               ; update over ~3.9 ms held it there: frozen)
         lda #$01
         sta $d01a
         lda #$ff
