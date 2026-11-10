@@ -243,6 +243,18 @@ second, from first compiles) are what 668bf11 addresses: the palette is
 complete before the display goes on (frame 12), and PROCwarm runs the act
 changes' code once at the start with the display off.
 
+The S9 take (329888f): no magenta, no static runs, but act 2 18 and act 3
+294 late frames (the HUD at 38 FPS around ring 1000, a 16-frame stall at
+the end of act 2). PROCwarm had also run one frame of act 3 (PROCa3); that
+alone put the program into a state with long stalls. Xemu with the K325T
+path forced (`K3%=1` on line 959, the line kept at its length) reproduces
+the board within a few frames (S9: 19 / 296), without the act-3 warm-up 0 /
+17. S10 drops it: Xemu 3 / 0 / 29 late frames on the K325T path (S8's take
+had 27), 3 / 0 / 0 stock, 3 / 0 / 2 with XT%=1. The late frames are
+sensitive to layout and history (a probe line or a few bytes more in the
+interpreter move act 3 between about 17 and 800): measure a change this
+way before a board take.
+
 Acts 1 and 2 use only standard VIC-IV features and should look the same on
 a standard MEGA65 (not tested: reports to
 https://github.com/beniacm/b65-basic/issues); act 3 needs the K325T list

@@ -323,6 +323,19 @@ with wrap limits: polar straight (mode 5) 14.4 / 570, polar curving
 32 / 1267 (for 50 fps: a few
 hundred moving objects, more in the fast mode without limits).
 
+The frame interrupt comes at raster line 16, just after the top of the
+frame (PAL raster 0, NTSC raster 7) and so after the K325T's table
+snapshot: an update has the rest of the frame (PAL about 18.9 ms, NTSC
+about 15.8 ms) and has released HOLD before the next snapshot. An update
+that takes longer than that (1000 curving polar objects: 23.6 ms) is
+still running at the next frame top, so that snapshot is skipped; the
+next interrupt is then already due, the next update starts at once, the
+integrator takes nearly all the time and the picture stands still. Keep
+the cost per frame (above) under a frame. EVERY/AFTER, the sound, the
+keyboard and the mouse are in the same interrupt and keep their rates;
+their work now falls near the top of the picture instead of below it, so
+draw after `WAIT` rather than in an EVERY handler if the moment matters.
+
 ## Examples
 
 The first line of every example says which core it needs: `1 REM Core:

@@ -38,7 +38,20 @@ painting).
   XCTL2.
 - In the GHDL mirrors of the step-7 core, 4-pixel painting cuts the
   longest line painting from 1524 to 784 cycles (swarm2) and from 474 to
-  292 (bounce); board figures follow.
+  292 (bounce).
+- On the board (batch 4 core, one 3-5 s window per run, the counters
+  cleared with the demo running):
+
+  | demo | XCTL | XCTL2 | longest painting (cycles) | port collisions | late pixels |
+  |---|---|---|---|---|---|
+  | bounce | $D9 | $01 | 326 | 0 | 0 |
+  | bounce | $D9 | $00 | 578 | 0 | 0 |
+
+  The swarm2 pair from the same session (387 against 844) is not quoted:
+  that run was the frozen-snapshot case (see "Fixed" below) and is to be
+  measured again with the integrator fix. The core's diagnostic counter 26
+  (line start to the first object part) does not count in 4-pixel mode on
+  this core (fixed in the next core build; diagnostic only).
 
 ## GHZ: SCROLLTEST in B65 (examples/ghz.bas, docs/GHZ.md)
 
@@ -100,11 +113,19 @@ ab024b7 (same binaries as 118aa99):
 | 2 | 1500 | 0 | 1602 | 0 |
 | 3 | 1401 | 27 | 1635 | 0 |
 
-0 one-frame glitches in the 105 s video. 668bf11 (S9) then removed the last
-blemishes of that take: the waterfall magenta for the first 19 frames (the
-palette is now complete before the display goes on, at frame 12) and the
-short static runs at act 1 -> 2 and in act 3's first second (first compiles,
-now done in a warm-up at the start; act 3's late frames came from there).
+0 one-frame glitches in the 105 s video. 668bf11 (S9) then removed the
+waterfall magenta of the first 19 frames (the palette is complete before
+the display goes on, at frame 12) and the static run at act 1 -> 2 (the act
+changes' code runs once at the start, display off). Its board take had both
+fixed, but act 2 18 and act 3 294 late frames (HUD 38 FPS around ring
+1000): S9's warm-up also ran one frame of act 3's code, and that alone put
+the program into a state with long stalls (3-18 frames each, mostly in act
+3). Xemu with the K325T path forced (`K3%=1` on line 959, same line length)
+reproduces the board figures to within a few frames (S8: 29 against 27; S9:
+19 / 296 against 18 / 294), and without that one statement 0 / 17. S10
+drops act 3's warm-up and keeps the rest: in Xemu 3 / 0 / 29 late frames
+on the K325T path, 3 / 0 / 0 stock, 3 / 0 / 2 with the K325T routine on the
+stock core.
 
 50 fps throughout (late frames are counted from each act's 11th frame
 through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
@@ -112,8 +133,9 @@ through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
 front) had 0 one-frame glitches in 105 s, the listing legible over the
 scene and both act-3 captions free of rings; 238201f then moved act 3's
 set-up to the start so the scene does not stop between the acts. In Xemu
-the shipped demo has 3 / 3 / 0 late frames on the stock path, 3 / 0 / 0
-with the K325T routine.
+the shipped demo (S10) has 3 / 0 / 0 late frames on the stock path, 3 / 0 /
+2 with the K325T routine on the stock core and 3 / 0 / 29 with the K325T
+path forced.
 
 **Programming note: the RRB row budget.** Every token of a row costs painting
 time wherever its X is, also when it is parked off the screen (a
@@ -144,6 +166,30 @@ fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
   program goes on) instead of ending the session (on the board a polling
   program was abandoned after its first INKEY).
 
+## Fixed
+
+- The v3 object integrator (B65's frame interrupt) held the VIC-IV's table
+  snapshot across the frame top when an update took more than about 3.9
+  ms: the interrupt came at raster line 251, set HOLD for the whole
+  update, and a longer update was still holding at the next frame start,
+  where the snapshot is taken only with HOLD 0. On the K325T the objects
+  stood still (the program, TIME and the frame counter ran on); swarm2's
+  1000 bullets (about 10 ms a frame) never moved on the board. v0.2 has
+  the same fault, its 1000-object demo included. The frame interrupt now
+  comes at raster line 16, just after the frame top (PAL raster 0, NTSC
+  7) and after the snapshot, so an update has the rest of the frame
+  (about 18.9 ms PAL, 15.8 ms NTSC). TIME, EVERY/AFTER, sound, keyboard
+  and mouse keep their rates (one interrupt a frame); WAIT uses the frame
+  counter `$D7FA` and is unchanged. An update longer than the frame (1000
+  curving polar objects: 23.6 ms) still freezes the picture, as the next
+  update starts at once (docs/USER.md, "The motion"); releasing HOLD
+  between the 8 KB windows near the frame top is a follow-up after v0.3.
+- OBJ65 (BASIC 65) has the same exposure: it steps from the KERNAL's
+  raster interrupt, which comes at line 255 (measured in Xemu), so an
+  update over about 3.5 ms freezes the picture on the K325T. Its
+  examples move few objects and stay far below that; docs/OBJ65.md says
+  so. A frame interrupt of its own after the frame top is a follow-up.
+
 ## Build and tests
 
 - `tools/fixbranches.py` builds OBJ65 and OBJ65X too and creates
@@ -166,6 +212,12 @@ change only `docs/` give the same files.
 
 ## Known
 
+- GHZ's late frames depend on the program's history and layout in a
+  chaotic way: in Xemu one statement run once at the start, a probe line,
+  or a few bytes more in the interpreter move act 3 between about 17 and
+  800 late frames (long multi-frame stalls; compiles and cache flushes
+  stay few, the exact trigger is not pinned down yet). Changes to ghz.bas
+  are measured in Xemu with the K325T path forced before a board take.
 - B65's expression cache (overlay 4, about 2.7 KB of compiled code) is
   flushed when it is full, and the next pass recompiles every hot
   expression at once: a short stall (in Xemu up to about 14 frames). In GHZ
@@ -174,8 +226,3 @@ change only `docs/` give the same files.
   the inline assembler: its operand expressions go through the same cache
   (GHZ assembles about 1.5 KB at the start, hundreds of one-shot operands).
   Next: evaluate assembler operands without caching them, after v0.3.
-
-## To come before the release
-
-- Board figures for XCTL2 (swarm2, bounce: XCTL $D9 against $D9 + XCTL2
-  $01).

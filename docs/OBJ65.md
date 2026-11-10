@@ -142,6 +142,15 @@ Python models):
   area `$1600-$1EFF` and uses `$1F00-$1FFF`, BASIC's bitmap-graphics base
   page, so it does not go with BASIC's bitmap graphics (SCREEN, LINE,
   ...); text and RRB screens are fine. NEW and RUN keep it.
+  The KERNAL's raster interrupt comes at line 255, below the picture,
+  and on the K325T the step sets HOLD while it runs: a step that takes
+  more than about 3.5 ms is still holding at the next frame top, the
+  VIC-IV skips its snapshot and the objects stand still. Keep the step
+  short: with the costs in docs/USER.md ("The motion": 1023 objects 4.0
+  ms in the fast mode, 8.4 ms cartesian, B65's figures; OBJ65's far
+  pointers cost a little more) that is roughly 400 cartesian objects or
+  900 in the fast mode, fewer with limits or polar motion (jumper65 moves
+  7). B65 itself steps after the frame top and has the whole frame.
 - **OBJ65X** (1.8 KB, loaded at `$52000`, using bank 5 up to `$57FFF`):
   the sine table builder, events and HITPIX, called with `BANK 5:SYS
   $2000+3*k:BANK 128` (bank 5's `$2000-$7FFF` is mapped while it runs).

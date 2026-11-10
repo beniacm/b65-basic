@@ -19,6 +19,7 @@ B65 BASIC is a BBC BASIC (Z80 v5 derived) interpreter for the MEGA65, rewritten 
   - `BGET#c,addr,n` reads a block from a file into memory (34 KB in about 20 ms).
   - The compiled-expression cache has 16 ways instead of 4. Before, a loop could slow down for no visible reason when its lines moved in memory; benchmarks are unchanged.
   - INKEY at the end of a test script returns "no key" instead of ending the session.
+- **Fixed, objects standing still on the K325T:** when an update of the moving objects took more than about 3.9 ms (swarm2's 1000 bullets), B65's frame interrupt still held the VIC-IV's table snapshot at the next frame top, so the picture never changed. v0.2 had the same fault. The interrupt now runs just after the frame top, so an update has almost the whole frame. OBJ65 steps from BASIC 65's own interrupt below the picture: keep its updates under about 3.5 ms (docs/OBJ65.md).
 - **Programming note, the RRB row budget:** every token of a row costs painting time, even when it is parked off the screen. On a standard VIC-IV a row of 186 tokens needs DBLRR ($D051 bit 6). Set CHRCOUNT ($D05E) to the tokens a screen really uses. docs/USER.md and docs/GHZ.md have the details.
 
 **Files for the SD card** (all in the SD card's root directory; B65 reads data files only from there, not from a mounted D81):
@@ -37,7 +38,7 @@ Then `LOAD "GHZ"`, `RUN` in B65.
   - smoke 34 of 34, the v3 object board test 20 PASS / 0 FAIL, SELFTEST 14 PASS / 0 FAIL (batch 4 core);
   - demos at 50 fps: jumper 600 frames in 1198 cs, swarm2 1500 in 3056 cs, bounce 1500 in 3004 cs (850 pairs), parallax 600 in 1200 cs;
   - the SD card fsck-clean before and after the file tests;
-  - 4-pixel painting: (4PX FIGURES);
+  - 4-pixel painting (XCTL2 bit 0, with XCTL $D9): in a steady bounce window the longest line painting is 326 cycles against 578 without it, with no port collisions and no late pixels in either mode;
   - GHZ (2026-11-10): 1500 / 1500 / 1401 frames in its three acts at 50 fps, no late pixels, no one-frame glitches in the video.
 - Xemu: smoke, the check scripts, the GHZ, object and HITPIX models, and the card tests (fsck clean).
 
