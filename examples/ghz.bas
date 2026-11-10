@@ -21,7 +21,7 @@
 160 P3%=1:PROCtables:PROCscreen:PROCdma:PROCasm:WHILE P3%<=25:PROCprep:ENDWHILE:PROCvic:P3%=0:PROCprep:P3%=26:REM act 3's set-up now: none of it shows before act 3
 163 PROCwarm
 165 IF BN%=0 THEN REPEAT UNTIL INKEY(0)<0:REM keys pending from before do not end the demo
-170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:LQ%=?&D7FA:Q%=LQ%:T0%=TIME
+170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:?(OV%+131)=?&D7FA:LQ%=?(OV%+131):Q%=LQ%:T0%=TIME
 200 REPEAT
 210 FOR B%=0 TO 6:C%(B%)=C%(B%)-ST%(B%):IF C%(B%)<0 THEN PROCband(B%)
 220 ?(V%+10+B%)=C%(B%)>>SH%(B%):NEXT
@@ -31,7 +31,7 @@
 255 IF AC%=4 THEN IF K3%+XT% THEN CALL A3%:REM act 3: 1000 rings, clouds and bushes in the object table (mid-frame: the VIC-IV copies the table at the top of the frame)
 260 REM (BN%=0: RING waits for the picture, then for raster line RW% below it: one pass a frame, all screen and slot writes in the vertical blank)
 270 CALL RING%:REM the job sources, the DMA list, the GOTOX bytes, the rings
-280 F%=F%+1:FR%(AN%)=FR%(AN%)+1:IF BN%=0 THEN Q%=?&D7FA:IF F%-AS%>10 THEN LA%(AN%)=LA%(AN%)+((Q%-LQ%-1) AND 255)
+280 F%=F%+1:FR%(AN%)=FR%(AN%)+1:IF BN%=0 THEN Q%=?(OV%+131):IF F%-AS%>10 THEN LA%(AN%)=LA%(AN%)+((Q%-LQ%-1) AND 255)
 282 LQ%=Q%:IF KH% THEN IF F%-AS%=11 THEN ?&FFD71E3=0:REM (K325T: the VIC-IV's counters from each act's 11th frame)
 283 IF F%=12 THEN ?&D011=&10:REM the display on: the first frames (first compiles) are not shown
 285 IF BN%=0 THEN IF F%=RN% OR INKEY(0)>=0 THEN EX%=1
@@ -148,7 +148,7 @@
 970 [OPT I%
 971 .ring LDA OV%+127:BEQ rs:LDA OV%+128:STA &C1
 972 .rv LDA &D011:BMI rv:LDA &D012:CMP &C1:BCS rv:.rw LDA &D011:BMI rs:LDA &D012:CMP &C1:BCC rw
-973 .rs LDA #&40:STA &D051:LDA #(DL%>>16):STA &C2:LDA #0:STA &C3:LDA #((DL%+13) AND 255):STA &C0:LDA #(((DL%+13)>>8) AND 255):STA &C1:LDY #0
+973 .rs LDA &D7FA:STA OV%+131:LDA #&40:STA &D051:LDA #(DL%>>16):STA &C2:LDA #0:STA &C3:LDA #((DL%+13) AND 255):STA &C0:LDA #(((DL%+13)>>8) AND 255):STA &C1:LDY #0
 974 .s1 LDX RM%,Y:LDA BB%,Y:CLC:ADC V%+17,X:LDZ #0:STA [&C0],Z:LDA BB%+26,Y:ADC #0:INZ:STA [&C0],Z:LDA BB%+52,Y:ADC #0:INZ:STA [&C0],Z:JSR nx:INY:CPY #26:BNE s1:LDY #0
 975 .s2 LDA FB%,Y:CLC:ADC V%+24:LDZ #0:STA [&C0],Z:LDA FB%+26,Y:ADC #0:INZ:STA [&C0],Z:LDA FB%+52,Y:ADC #0:INZ:STA [&C0],Z:JSR nx:INY:CPY #26:BNE s2
 976 LDA V%+25:STA &B0:LDA V%+26:STA &B1:LDA V%+27:STA &B2:JSR tx:LDA V%+25:CLC:ADC #80:STA &B0:LDA V%+26:ADC #0:STA &B1:LDA V%+27:ADC #0:STA &B2:JSR tx
@@ -240,11 +240,13 @@
 1502 REM written each frame by the routine A3%), 8 clouds behind and 12 bushes in front (objects too), 4-pixel painting; a HUD row; any other core: 64 rings (plain RRB)
 1510 DEF PROCact3:LOCAL I%:REM the set-up (PROCprep: palette, HUD page, object table) ran at the start; here only the switch
 1512 IF A2% THEN PROCctr(2)
-1513 ?&D05E=145:AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA:WHILE P3%<=25:PROCprep:ENDWHILE
+1513 AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?(OV%+131):WHILE P3%<=25:PROCprep:ENDWHILE
 1514 PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
 1519 ?(OV%+129)=96:?(OV%+130)=111:REM text is always in front: rings stay out of a caption's row while it shows (objects are painted after the row's text)
-1520 IF K3%+XT%=0 THEN ENDPROC
-1522 ?(V%+30)=1:IF K3%=0 THEN ENDPROC
+1520 IF K3%+XT% THEN ?(V%+30)=1
+1521 REPEAT UNTIL ?&D011>127 OR ?&D012>=RW%:?&D05E=145:IF K3% THEN PROCxon
+1522 ?(OV%+127)=0:CALL RING%:?(OV%+127)=(BN%=0) AND 1:ENDPROC:REM the switch below the picture, then RING at once: the next frame is act 3's (on mid-frame, list mode painted one frame from a stale snapshot)
+1523 DEF PROCxon
 1524 ?&FFD71F8=RT% AND 255:?&FFD71F9=(RT%>>8) AND 255:?&FFD71FA=(RT%>>16) AND 15:?&FFD71FB=NO% AND 255:?&FFD728A=NO% AND 255:?&FFD728B=NO%>>8
 1526 ?&FFD71F0=?&FFD71F0 OR &D0:PROCxctl2(1):ENDPROC
 1530 DEF PROCa3:F3%=F3%+1
@@ -257,7 +259,7 @@
 1544 IF F3%>=1400+1000*(K3%+XT%=0) THEN EX%=1
 1546 ENDPROC
 1550 DEF PROChud:LOCAL E%,L%,M%,S$
-1552 E%=(?&D7FA-QH%) AND 255:QH%=?&D7FA:IF E%=0 THEN E%=25
+1552 E%=(?(OV%+131)-QH%) AND 255:QH%=?(OV%+131):IF E%=0 THEN E%=25
 1554 S$="RINGS "+STR$(N3%)+" FPS "+STR$((1250+E% DIV 2) DIV E%):IF BN% THEN S$="RINGS "+STR$(N3%)
 1556 IF K3% THEN L%=FNctr(25):PROCctr(3):S$=S$+" OBJECTS "+STR$(N3%+20)+" LINE "+STR$(L%)
 1558 $DB%=LEFT$(S$+"                                        ",40):!(OV%+120)=HU%:CALL PU%:ENDPROC

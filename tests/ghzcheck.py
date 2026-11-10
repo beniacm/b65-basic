@@ -157,6 +157,15 @@ def main():
     a3m = Act3(g) if a3 is not None else None
     a1 = a3 if a3 is not None else int(sys.argv[sys.argv.index('--act2') + 1]) if '--act2' in sys.argv else 1500
     for f in range(frames):
+        if a3m and f == a3 + 1:     # PROCact3 switches below the picture and runs RING at once: the
+            g.ph[0] = (g.ph[0] + 1) & 255   # ring motion's phases one step more (bands and front: BASIC's)
+            g.ph[1] = (g.ph[1] + 1) & 255
+            g.rc += 1
+            if g.rc == 10:
+                g.rc = 0
+                g.rg += 3
+                if g.rg == 0x96:
+                    g.rg = 0x84
         if a3m and f >= a3 + 1:     # A3% runs before the frame's RING (with the last frame's ring phases)
             a3m.frame(f - a3 - 1)
         g.ramp = f <= a1            # the front layer's speed ramps in act 1 only
