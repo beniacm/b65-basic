@@ -55,13 +55,13 @@
 410 IF RL%(B%) THEN C%(B%)=RL%(B%) ELSE C%(B%)=C%(B%)+AD%(B%)
 420 K%(B%)=K%(B%)+1:IF K%(B%)>=W%(B%) THEN K%(B%)=0
 430 ?(V%+17+B%)=2*K%(B%):ENDPROC:REM (RING moves the rows' job sources)
-440 REM ---- act 2: the fixed top line "BUT HAVE YOU SEEN IT IN BASIC?" on a blue panel (rows 0..21), below it a LIST of parts of this program scrolling SV% pixels a frame (rows 2..21), then "B65 BASIC. n LINES."
-441 DEF PROCact2:?&D05E=186:AC%=2:P2%=0:H2%=0:TL%=0:TS%=0:?(V%+31)=2:?(OV%+124)=0:?(OV%+125)=0:?(OV%+126)=8:PROCtext:PROCpanel(1):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
+440 REM ---- act 2: the fixed top line "BUT HAVE YOU SEEN IT IN BASIC?", below it a LIST of this program's main parts scrolling SV% pixels a frame over the running scene (rows 2..25), then "B65 BASIC. n LINES."
+441 DEF PROCact2:?&D05E=186:AC%=2:P2%=0:H2%=0:TL%=0:TS%=0:?(V%+31)=2:?(OV%+124)=0:?(OV%+125)=0:?(OV%+126)=8:PROCtext:PROCpanel(0):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
 442 DEF PROClist:H2%=H2%+1:IF P2%=1 THEN PROCscroll:ENDPROC
 443 IF P2%=0 THEN IF H2%>=50 THEN P2%=1:ENDPROC
 444 IF P2%=2 THEN IF H2%>=100 THEN ?&D05E=145:?(V%+31)=0:PROCpanel(0):TL%=LE%+1:PROCtext:AC%=3:H2%=0
 445 ENDPROC
-446 DEF PROCscroll:TS%=TS%+SV%:IF TS%>=8 THEN TS%=0:TL%=TL%+1:PROCtext:IF TL%>=LE%-21 THEN P2%=2:H2%=0
+446 DEF PROCscroll:TS%=TS%+SV%:IF TS%>=8 THEN TS%=0:TL%=TL%+1:PROCtext:IF TL%>=LE%-25 THEN P2%=2:H2%=0
 447 IF SM%=0 OR TS%=0 THEN ?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
 448 ?(V%+8)=TS%<<5:?(V%+9)=((8-TS%)<<5) OR &10:?(V%+28)=&FF>>TS%:?(V%+29)=(&FF<<(8-TS%)) AND &FF:ENDPROC:REM (set 1: line L up S pixels, rows 0..7-S; set 2: line L+1 down 8-S, rows 8-S..7)
 449 DEF PROCtext:PROCtb(&80000+80*TL%):ENDPROC
@@ -141,6 +141,7 @@
 961 IF K3%=0 AND XT% AND TOP>RT% THEN ERROR 215,"Program too long for the test table"
 962 DIM OV% 140:?(OV%+127)=(BN%=0) AND 1:?(OV%+128)=RW%:FOR I%=0 TO 3:?(OV%+70+I%)=((RT%+256)>>(8*I%)) AND 255:?(OV%+74+I%)=((RT%+32*1008)>>(8*I%)) AND 255:?(OV%+78+I%)=(RT%>>(8*I%)) AND 255:NEXT
 963 ?OV%=64:?(OV%+1)=0:?(OV%+2)=0:CL%=FB%+78:CH%=CL%+26:FOR I%=0 TO 25:O%=CO%+LS%*I%:?(CL%+I%)=O% AND 255:?(CH%+I%)=O%>>8:NEXT:?(V%+28)=&FF:?(V%+29)=&FF:PF%=CH%+26:FOR I%=0 TO 25:?(PF%+I%)=&FF:NEXT:PROCfill(EL%,300,&40,&17)
+964 ?(OV%+129)=255:?(OV%+130)=255:REM no caption band (A3%: rings with band lo <= y < hi are hidden)
 965 DIM RING% 900,A3% 900:FOR I%=0 TO 2 STEP 2:P%=RING%
 970 [OPT I%
 971 .ring LDA OV%+127:BEQ rs:LDA OV%+128:STA &C1
@@ -189,7 +190,8 @@
 1216 .a3g LDA V%:CLC:ADC &B7:STA &BD:LDA V%+1:CLC:ADC &B8:STA &BE:LDA &B9:STA &BF:LDA &BA:STA &C0
 1218 LDA &B5:CLC:ADC OV%+2:AND #3:ASL A:ASL A:STA &C1:LDX #16
 1220 .a3k LDY &BD:LDA S1%,Y:LDY &BF:CLC:ADC S1%,Y:STA &C2:LDA #0:ROL A:STA &C3:LDA &C2:CLC:ADC #4:LDZ #0:STA [&B0],Z:LDA &C3:ADC #0:INZ:STA [&B0],Z
-1222 LDY &BE:LDA S2%,Y:LDY &C0:CLC:ADC S2%,Y:CMP #23:BCC a3h:CMP #223:BCS a3h:SEC:SBC #15:LDZ #2:STA [&B0],Z:LDA #0:SBC #0:AND #3:INZ:STA [&B0],Z:LDA #&FF:BRA a3v
+1222 LDY &BE:LDA S2%,Y:LDY &C0:CLC:ADC S2%,Y:CMP #23:BCC a3h:CMP #223:BCS a3h:CMP OV%+129:BCC a3w:CMP OV%+130:BCC a3h
+1223 .a3w SEC:SBC #15:LDZ #2:STA [&B0],Z:LDA #0:SBC #0:AND #3:INZ:STA [&B0],Z:LDA #&FF:BRA a3v
 1224 .a3h LDA #0
 1226 .a3v LDZ #4:STA [&B0],Z:LDA &C1:LDZ #8:STA [&B0],Z:LDZ #0
 1228 LDA &BD:CLC:ADC #16:STA &BD:LDA &BE:CLC:ADC #16:STA &BE:LDA &BF:CLC:ADC #16:STA &BF:LDA &C0:CLC:ADC #16:STA &C0
@@ -247,14 +249,15 @@
 1514 PROCfill(HU%,26*80,&40,&17):PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:PROCpanel(0):REM the text sets show the HUD page (attic HU%): row 0 counters, captions
 1516 ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:?&D1FB=0:?&D2FB=0:?&D3FB=0:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
 1518 PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
+1519 ?(OV%+129)=96:?(OV%+130)=111:REM text is always in front: rings stay out of a caption's row while it shows (objects are painted after the row's text)
 1520 IF K3%+XT%=0 THEN ENDPROC
 1522 ?(V%+30)=1:PROCobjs:IF K3%=0 THEN ENDPROC
 1524 ?&FFD71F8=RT% AND 255:?&FFD71F9=(RT%>>8) AND 255:?&FFD71FA=(RT%>>16) AND 15:?&FFD71FB=NO% AND 255:?&FFD728A=NO% AND 255:?&FFD728B=NO%>>8
 1526 ?&FFD71F0=?&FFD71F0 OR &D0:PROCxctl2(1):ENDPROC
 1530 DEF PROCa3:F3%=F3%+1
 1532 IF K3%+XT% THEN IF F3%>150 AND F3%<=268 OR F3%>700 AND N3%<1000 THEN N3%=N3%+2:?OV%=N3% AND 255:?(OV%+1)=N3%>>8
-1534 IF F3%=150 THEN PROCput(11,""):PROCput(13,"")
-1536 IF K3% AND N3%=1000 AND H3%=0 THEN H3%=F3%:PROCput(12,"1000 RINGS. 10 LAYERS. STILL BASIC.")
+1534 IF F3%=150 THEN PROCput(11,""):PROCput(13,""):?(OV%+129)=255:?(OV%+130)=255
+1536 IF K3% AND N3%=1000 AND H3%=0 THEN H3%=F3%:PROCput(12,"1000 RINGS. 10 LAYERS. STILL BASIC."):?(OV%+129)=104:?(OV%+130)=119
 1538 IF F3% MOD 10=0 THEN ?(OV%+2)=(?(OV%+2)+1) AND 3
 1540 S%=SP%*384:?(OV%+3)=S% AND 255:?(OV%+4)=S%>>8
 1542 IF F3% MOD 25=0 THEN PROChud

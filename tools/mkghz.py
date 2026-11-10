@@ -178,7 +178,7 @@ def text_pack():
     """build/B65GHZS.BBC: acts 2 and 3: lines (2 bytes), the index of the
     listing's last line (2 bytes), the font (96 FCM glyphs, ASCII 32..127,
     pixel colour 250, shadow 251), then 40 tokens a line: the fixed caption
-    'BUT HAVE YOU SEEN IT IN BASIC?', 21 blank lines, '>LIST a-b' and the
+    'BUT HAVE YOU SEEN IT IN BASIC?', 25 blank lines, '>LIST a-b' and the
     lines of examples/ghz.bas in LISTS as B65's LIST shows them (wrapped at
     40 columns), '>' and a cursor; then a page with 'B65 BASIC. n LINES.' (n:
     the program's lines) and '50 FRAMES PER SECOND.' on rows 11 and 13; then
@@ -210,9 +210,9 @@ def text_pack():
                 out.append(text[:40]); text = text[40:]
             out.append(text)
         return out
-    # 0: the fixed caption (row 0), 1..21 blank (the window, rows 2..21, starts empty);
+    # 0: the fixed caption (row 0), 1..25 blank (the window, rows 2..25, starts empty);
     # then the LIST commands and their output, '>' + cursor (LE); then the closing page
-    lines = ['BUT HAVE YOU SEEN IT IN BASIC?'.center(40)] + [''] * 21
+    lines = ['BUT HAVE YOU SEEN IT IN BASIC?'.center(40)] + [''] * 25
     for a, b in LISTS:
         lines.append('>LIST %d-%d' % (a, b))
         lines += listing(a, b)

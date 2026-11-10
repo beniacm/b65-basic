@@ -42,13 +42,20 @@ class Act3:
     objects 0..7 clouds, 8..1007 rings, 1008..1019 bushes"""
     def __init__(self, g):
         self.g, self.n, self.anim = g, 64, 0
+        self.band, self.cap = (255, 255), False   # rings hidden for band[0] <= y < band[1] (a caption's row)
         self.x = [(56 * i + 20 * (i % 3)) << 8 for i in range(8)] + [(40 * i) << 8 for i in range(12)]
     def frame(self, f3):             # f3: PROCa3's frame count (0: the PROCact3 frame)
         g = self.g
         self.ph = list(g.ph)
+        if f3 == 0:
+            self.band = (96, 111)
         if f3:
             if 150 < f3 <= 268 or (f3 > 700 and self.n < 1000):
                 self.n += 2
+            if f3 == 150:
+                self.band = (255, 255)
+            if self.n == 1000 and not self.cap:
+                self.cap, self.band = True, (104, 119)
             if f3 % 10 == 0:
                 self.anim = (self.anim + 1) & 3
             bush = g.speed * 384
@@ -69,8 +76,9 @@ class Act3:
             q2 = (g.c[0] + 32 * grp + 16 * k) & 255; q3 = (g.c[1] + 32 * grp + 16 * k) & 255
             x = s1[q0] + s1[q2] + 4
             y = (s2[q1] + s2[q3]) & 255
-            e = {0: x & 255, 1: x >> 8, 4: 0xFF if 23 <= y < 223 else 0, 8: 4 * ((grp + self.anim) & 3)}
-            if 23 <= y < 223:
+            vis = 23 <= y < 223 and not (self.band[0] <= y < self.band[1])
+            e = {0: x & 255, 1: x >> 8, 4: 0xFF if vis else 0, 8: 4 * ((grp + self.anim) & 3)}
+            if vis:
                 yy = (y - 15) & 0x3FF
                 e[2], e[3] = yy & 255, yy >> 8
             return e
