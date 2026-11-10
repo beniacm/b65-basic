@@ -19,6 +19,7 @@
 150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(26,11);"YOU HAVE SEEN THIS ON MEGA65":PRINT TAB(23,13);"SCROLLTEST BY MAXICE, INTRO DISK 2"
 155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,16);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
 160 P3%=1:PROCtables:PROCscreen:PROCdma:PROCasm:WHILE P3%<=25:PROCprep:ENDWHILE:PROCvic:P3%=0:PROCprep:P3%=26:REM act 3's set-up now: none of it shows before act 3
+163 PROCwarm
 165 IF BN%=0 THEN REPEAT UNTIL INKEY(0)<0:REM keys pending from before do not end the demo
 170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:LQ%=?&D7FA:Q%=LQ%:T0%=TIME
 200 REPEAT
@@ -32,6 +33,7 @@
 270 CALL RING%:REM the job sources, the DMA list, the GOTOX bytes, the rings
 280 F%=F%+1:FR%(AN%)=FR%(AN%)+1:IF BN%=0 THEN Q%=?&D7FA:IF F%-AS%>10 THEN LA%(AN%)=LA%(AN%)+((Q%-LQ%-1) AND 255)
 282 LQ%=Q%:IF KH% THEN IF F%-AS%=11 THEN ?&FFD71E3=0:REM (K325T: the VIC-IV's counters from each act's 11th frame)
+283 IF F%=12 THEN ?&D011=&10:REM the display on: the first frames (first compiles) are not shown
 285 IF BN%=0 THEN IF F%=RN% OR INKEY(0)>=0 THEN EX%=1
 290 UNTIL F%=BN% OR EX%
 300 T0%=TIME-T0%:PROCctr(AN%):PROCback:IF BN%+RN%=0 THEN PROCcard
@@ -226,7 +228,7 @@
 1340 FOR I%=0 TO 255:?(&D100+I%)=?(TA%+I%):?(&D200+I%)=?(TA%+256+I%):?(&D300+I%)=?(TA%+512+I%):NEXT
 1350 ?&D05D=?&D05D AND &7F:?&D031=(?&D031 OR 8) AND &5F:?&D051=&40:?&D05B=0:?&D054=(?&D054 AND &C0) OR 5:?&D058=LS% AND 255:?&D059=LS%>>8:?&D05E=104:?&D07B=&1A:IF KH% THEN ?&FFD71F0=?&FFD71F0 OR &90
 1360 ?&D060=SC% AND 255:?&D061=(SC%>>8) AND 255:?&D062=SC%>>16:?&D063=0:?&D064=CO% AND 255:?&D065=CO%>>8
-1370 ?&D016=0:?&D011=&10:?&D04C=&30:?&D020=0:?&D021=0:ENDPROC
+1370 ?&D016=0:?&D011=0:?&D04C=&30:?&D020=0:?&D021=0:W2%=0:PROCwf:ENDPROC:REM display off ($D011 DEN) until frame 12; the waterfall entries 25-28 set now
 1390 DATA &D031,&D051,&D054,&D058,&D059,&D05B,&D05D,&D05E,&D060,&D061,&D062,&D063,&D064,&D065,&D07B,&D016,&D011,&D04C,&D020,&D021,&D070
 1400 DEF PROCback:LOCAL I%:IF VS%=0 THEN ENDPROC
 1405 IF KH% THEN ?&FFD71F0=?&FFD71F0 AND &27:PROCxctl2(0):?&FFD71FB=0:?&FFD728A=0:?&FFD728B=0
@@ -288,6 +290,11 @@
 1708 IF P3%=2 THEN PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
 1710 IF P3%>2 THEN IF K3%+XT% THEN PROCobjs(P3%)
 1712 P3%=P3%+1:ENDPROC
+1720 REM ---- warm-up: the code of the act changes and of act 3's first frames runs once now, with the display off, so its first compiles do not stall the picture later; then everything back
+1722 DEF PROCwarm:LOCAL I%:IF NL%=0 THEN ENDPROC
+1724 F%=0:SP%=4:P2%=0:TL%=0:TS%=0:H2%=0:PROCa1:PROClist:PROCscroll:TL%=0:TS%=0:PROCtext:?&D05E=104:?(V%+31)=0:?(V%+8)=2:?(V%+9)=2:?(V%+28)=&FF:?(V%+29)=&FF
+1726 IF K3% THEN N3%=64:H3%=0:QH%=?&D7FA:F3%=199:PROCa3:F3%=0:N3%=64:?OV%=64:?(OV%+1)=0:?(OV%+2)=0:?(OV%+3)=0:?(OV%+4)=0
+1728 FOR I%=1 TO 3:LM%(I%)=0:LP%(I%)=0:NEXT:ENDPROC
 9000 DEF PROCxctl2(B%):REM XCTL2 bit 0 (4-pixel painting, with XCTL bits 4 and 7) from feature level 4
 9010 IF ?&FFD71FD>=4 THEN ?&FFD71F1=(?&FFD71F1 AND &FE) OR B%
 9020 ENDPROC
