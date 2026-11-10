@@ -203,11 +203,11 @@ fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
 
 From a clean checkout (`git worktree add <dir> <commit>`, then in it `make
 dist`; ACME 0.97, Python 3), twice, with the same result: `dist/b65.d81`
-md5 `aebcfd5004f612f00d6901f33cc859be`, `build/b65.prg` (= `dist/sd/B65.PRG`)
-md5 `5d4c90a6f20a48a4aef2cda890fc3a10`; `dist/sd/B65GHZG.BBC`
+md5 `68943096b59218d32349da8104a7e153`, `build/b65.prg` (= `dist/sd/B65.PRG`)
+md5 `2bb7d9a0d8ad3b830ad92c76d1a41461`; `dist/sd/B65GHZG.BBC`
 `c37d54079e465f606db0c14cd56b9314`, `dist/sd/B65GHZS.BBC`
-`d439c694a7eacb0d30fcdb8b6dd7aabd`, `dist/sd/GHZ.BAS`
-`8dfc0e18365f0e1e02d4dc85717ff106`. Built from 51dba83; commits that
+`d0fa8d89f15b4d36bdcb9e845ee6543f`, `dist/sd/GHZ.BAS`
+`9c05609629d0e6ef97cc1a9971a31db1`. Built from a481b05; commits that
 change only `docs/` give the same files.
 
 ## Known
