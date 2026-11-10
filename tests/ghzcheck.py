@@ -4,7 +4,7 @@ Xemu (MEGA65 ROM boot, a private card copy with the art), the memory dump's
 screen (token low bytes, GOTOX fine X, ring slots) must equal the model's.
 usage: tests/ghzcheck.py [frames] [--local | --pack] [--act2 frame | --act3 frame] [--shot file.png] [-v]
   --act3 F  act 1 until frame F, no act 2, then act 3 with its objects in a
-           scratch table in bank 1 ($17000): the ring, cloud and bush entries
+           scratch table in bank 1 (above the program; the run prints its address): the ring, cloud and bush entries
            must equal the model's (the ring slots are parked in act 3)
   default  the generated build/B65GHZG.BBC; INTRO2.D81 with one checked byte
            of SCROLLTEST changed (or none): the program must fall back
@@ -183,7 +183,8 @@ def main():
                 if bad <= 8:
                     print('row %d byte %d: b65 %02x model %02x' % (row, i, got[i], want[i]))
     if a3m:
-        bad += a3m.check(m, 0x17000)
+        rt = [l.split(' rt ')[1].strip() for l in out.splitlines() if ' rt ' in l]
+        bad += a3m.check(m, int(rt[-1], 16) if rt else 0x17000)   # the scratch table: above the program
     tail = [l for l in out.splitlines() if l.startswith('frames')]
     art = [l for l in out.splitlines() if 'ART' in l and ' in ' in l]
     print(art[-1] if art else 'no art line')

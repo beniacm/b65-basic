@@ -18,7 +18,7 @@
 140 ON ERROR E$=REPORT$:E%=ERL:PROCback:PRINT E$;" at line ";E%:END
 150 T%=TIME:IF BN%=0 THEN CLS:PRINT TAB(26,11);"YOU HAVE SEEN THIS ON MEGA65":PRINT TAB(23,13);"SCROLLTEST BY MAXICE, INTRO DISK 2"
 155 PROCload:IF BN%=0 THEN PRINT TAB((80-LEN AR$) DIV 2,16);AR$:REPEAT UNTIL TIME-T%>=300 ELSE PRINT AR$;" in ";TIME-T%;" cs"
-160 PROCtables:PROCscreen:PROCdma:PROCasm:PROCvic
+160 P3%=1:PROCtables:PROCscreen:PROCdma:PROCasm:WHILE P3%<=25:PROCprep:ENDWHILE:PROCvic:P3%=0:PROCprep:P3%=26:REM act 3's set-up now: none of it shows before act 3
 165 IF BN%=0 THEN REPEAT UNTIL INKEY(0)<0:REM keys pending from before do not end the demo
 170 F%=0:FX%=0:FC%=0:SP%=4:W1%=0:W2%=0:EX%=0:AC%=1:AN%=1:AS%=0:TL%=0:TS%=0:LQ%=?&D7FA:Q%=LQ%:T0%=TIME
 200 REPEAT
@@ -36,7 +36,7 @@
 290 UNTIL F%=BN% OR EX%
 300 T0%=TIME-T0%:PROCctr(AN%):PROCback:IF BN%+RN%=0 THEN PROCcard
 305 IF BN%+RN% THEN PRINT "frames ";F%;" speed ";SP%;" front ";FC%;",";FX%;" in ";T0%;" cs"
-307 IF BN% THEN PRINT "ring ";RZ%;" a3 ";AZ%
+307 IF BN% THEN PRINT "ring ";RZ%;" a3 ";AZ%;" rt ";~RT%
 308 FOR I%=1 TO 3:IF FR%(I%) THEN PRINT "act ";I%;": ";FR%(I%);" frames, ";LA%(I%);" late";:IF KH% THEN PRINT ", longest painting ";LM%(I%);", late pixels ";LP%(I%) ELSE PRINT
 309 NEXT
 310 END
@@ -56,10 +56,10 @@
 420 K%(B%)=K%(B%)+1:IF K%(B%)>=W%(B%) THEN K%(B%)=0
 430 ?(V%+17+B%)=2*K%(B%):ENDPROC:REM (RING moves the rows' job sources)
 440 REM ---- act 2: the fixed top line "BUT HAVE YOU SEEN IT IN BASIC?", below it a LIST of this program's main parts scrolling SV% pixels a frame over the running scene (rows 2..25), then "B65 BASIC. n LINES."
-441 DEF PROCact2:?&D05E=186:AC%=2:P2%=0:H2%=0:TL%=0:TS%=0:?(V%+31)=2:?(OV%+124)=0:?(OV%+125)=0:?(OV%+126)=8:PROCtext:PROCpanel(0):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
+441 DEF PROCact2:?&D05E=186:AC%=2:P2%=0:H2%=0:TL%=0:TS%=0:?(V%+31)=2:?(OV%+124)=0:?(OV%+125)=0:?(OV%+126)=8:PROCtext:?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
 442 DEF PROClist:H2%=H2%+1:IF P2%=1 THEN PROCscroll:ENDPROC
 443 IF P2%=0 THEN IF H2%>=50 THEN P2%=1:ENDPROC
-444 IF P2%=2 THEN IF H2%>=100 THEN ?&D05E=145:?(V%+31)=0:PROCpanel(0):TL%=LE%+1:PROCtext:AC%=3:H2%=0
+444 IF P2%=2 THEN IF H2%>=100 THEN ?&D05E=145:?(V%+31)=0:TL%=LE%+1:PROCtext:AC%=3:H2%=0
 445 ENDPROC
 446 DEF PROCscroll:TS%=TS%+SV%:IF TS%>=8 THEN TS%=0:TL%=TL%+1:PROCtext:IF TL%>=LE%-25 THEN P2%=2:H2%=0
 447 IF SM%=0 OR TS%=0 THEN ?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:ENDPROC
@@ -137,8 +137,8 @@
 957 BB%=RM%+26:FB%=BB%+78:FOR I%=0 TO 25:FOR O%=0 TO 2:?(BB%+26*O%+I%)=(BL%(I%)>>(8*O%)) AND 255:?(FB%+26*O%+I%)=(FL%(I%)>>(8*O%)) AND 255:NEXT:NEXT
 958 FOR I%=17 TO 24:?(V%+I%)=0:NEXT:?(V%+25)=0:?(V%+26)=0:?(V%+27)=8:?(V%+30)=0:?(V%+31)=0
 959 K3%=0:KH%=(?&6E1=&FF):IF KH% THEN IF ?&FFD71FD>=3 THEN K3%=1
-960 NO%=1020:RT%=&17000:IF K3% THEN RT%=&E0000:REM the object table (K325T: B65's own table address; tests: scratch in bank 1 above the program)
-961 IF K3%=0 AND XT% AND TOP>RT% THEN ERROR 215,"Program too long for the test table"
+960 NO%=1020:RT%=(TOP+&FF) AND &FFFF00:IF K3% THEN RT%=&E0000:REM the object table (K325T: B65's own table address; tests: scratch in bank 1 above the program)
+961 IF K3%=0 AND XT% AND RT%+32*NO%>&1F800 THEN ERROR 215,"Program too long for the test table"
 962 DIM OV% 140:?(OV%+127)=(BN%=0) AND 1:?(OV%+128)=RW%:FOR I%=0 TO 3:?(OV%+70+I%)=((RT%+256)>>(8*I%)) AND 255:?(OV%+74+I%)=((RT%+32*1008)>>(8*I%)) AND 255:?(OV%+78+I%)=(RT%>>(8*I%)) AND 255:NEXT
 963 ?OV%=64:?(OV%+1)=0:?(OV%+2)=0:CL%=FB%+78:CH%=CL%+26:FOR I%=0 TO 25:O%=CO%+LS%*I%:?(CL%+I%)=O% AND 255:?(CH%+I%)=O%>>8:NEXT:?(V%+28)=&FF:?(V%+29)=&FF:PF%=CH%+26:FOR I%=0 TO 25:?(PF%+I%)=&FF:NEXT:PROCfill(EL%,300,&40,&17)
 964 ?(OV%+129)=255:?(OV%+130)=255:REM no caption band (A3%: rings with band lo <= y < hi are hidden)
@@ -233,25 +233,16 @@
 1410 RESTORE 1390:FOR I%=0 TO 20:READ VR%:?VR%=?(PS%+768+I%):NEXT
 1420 FOR I%=0 TO 255:?(&D100+I%)=?(PS%+I%):?(&D200+I%)=?(PS%+256+I%):?(&D300+I%)=?(PS%+512+I%):NEXT
 1430 MODE 0:ENDPROC
-1480 DEF PROCpanel(P%):LOCAL R%,A%,O%:REM P%=1: rows 0..21 become a blue panel (their band and front row copies read a line of empty glyphs: the opaque band group paints $D021 blue), no rings, light blue text; P%=0: the scene back
-1481 FOR R%=0 TO 25:?(PF%+R%)=&FF:IF P% AND R%>21 THEN ?(PF%+R%)=0
-1482 NEXT:FOR R%=0 TO 21:FOR O%=0 TO 2:A%=EL%:IF P%=0 THEN A%=BL%(R%)
-1483 ?(BB%+26*O%+R%)=(A%>>(8*O%)) AND 255:IF P%=0 THEN A%=FL%(R%)
-1484 ?(FB%+26*O%+R%)=(A%>>(8*O%)) AND 255:NEXT:NEXT:?(V%+30)=P%
-1485 IF P% THEN ?&D021=252:?&D1FC=&53:?&D2FC=&82:?&D3FC=&97:?&D1FA=&C6:?&D2FA=&E5:?&D3FA=&5B:?&D1FB=&53:?&D2FB=&82:?&D3FB=&97:ENDPROC
-1486 ?&D021=0:?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:?&D1FB=0:?&D2FB=0:?&D3FB=0:ENDPROC
 1490 DEF PROCtb(T%):?(V%+25)=T% AND 255:?(V%+26)=(T%>>8) AND 255:?(V%+27)=T%>>16:ENDPROC
 1500 REM ---- act 3: "NOW WITH THE K325T VIC-IV": rings 64 -> 300 -> 1000 as list-mode objects (8x8 full-colour rings on SCROLLTEST's sine paths,
 1502 REM written each frame by the routine A3%), 8 clouds behind and 12 bushes in front (objects too), 4-pixel painting; a HUD row; any other core: 64 rings (plain RRB)
-1510 DEF PROCact3:LOCAL I%,A%
+1510 DEF PROCact3:LOCAL I%:REM the set-up (PROCprep: palette, HUD page, object table) ran at the start; here only the switch
 1512 IF A2% THEN PROCctr(2)
-1513 ?&D05E=145:AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA
-1514 PROCfill(HU%,26*80,&40,&17):PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:PROCpanel(0):REM the text sets show the HUD page (attic HU%): row 0 counters, captions
-1516 ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:?&D1FB=0:?&D2FB=0:?&D3FB=0:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
-1518 PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
+1513 ?&D05E=145:AC%=4:AN%=3:AS%=F%:F3%=0:N3%=64:H3%=0:QH%=?&D7FA:WHILE P3%<=25:PROCprep:ENDWHILE
+1514 PROCtb(HU% AND &FFFFF):?(V%+8)=0:?(V%+9)=2:?(V%+28)=&FF:REM the text sets show the HUD page (attic HU%): row 0 counters, captions
 1519 ?(OV%+129)=96:?(OV%+130)=111:REM text is always in front: rings stay out of a caption's row while it shows (objects are painted after the row's text)
 1520 IF K3%+XT%=0 THEN ENDPROC
-1522 ?(V%+30)=1:PROCobjs:IF K3%=0 THEN ENDPROC
+1522 ?(V%+30)=1:IF K3%=0 THEN ENDPROC
 1524 ?&FFD71F8=RT% AND 255:?&FFD71F9=(RT%>>8) AND 255:?&FFD71FA=(RT%>>16) AND 15:?&FFD71FB=NO% AND 255:?&FFD728A=NO% AND 255:?&FFD728B=NO%>>8
 1526 ?&FFD71F0=?&FFD71F0 OR &D0:PROCxctl2(1):ENDPROC
 1530 DEF PROCa3:F3%=F3%+1
@@ -277,17 +268,26 @@
 1570 DEF PROCfill(A%,N%,B%,C%):PROCjob(JS%,3,N% DIV 2,B%,A% AND &FFFFF,2):?(JS%+3)=A%>>20:?(JS%+10)=3
 1572 PROCjob(JS%+22,3,N% DIV 2,C%,(A%+1) AND &FFFFF,2):?(JS%+25)=A%>>20:?(JS%+32)=3:?(JS%+10)=7:PROCrun(JS%):ENDPROC
 1574 DEF PROCrun(J%):?&D702=J% DIV 65536:?&D704=0:?&D701=(J% DIV 256) AND 255:?&D705=J% AND 255:ENDPROC
-1580 REM objects: 0..7 clouds (64x16, rows 0..5), 8..1007 rings (8x8; X, Y, mask and token list from A3% each frame), 1008..1019 bushes (48x16, rows 22..25)
-1582 DEF PROCobjs:LOCAL I%,A%,X%,Y%,S%,W%,O%,X3%
-1584 FOR I%=0 TO 3:!(OL%+4*I%)=&FFFF0000+&17A0+I%:NEXT:A%=OL%+16:FOR I%=0 TO 1:FOR X%=0 TO 7:PROCw(A%+20*I%+2*X%,&17A4+8*I%+X%):NEXT:PROCw(A%+20*I%+16,&FFFF):NEXT
-1586 A%=OL%+56:FOR I%=0 TO 1:FOR X%=0 TO 5:PROCw(A%+16*I%+2*X%,&17B4+6*I%+X%):NEXT:PROCw(A%+16*I%+12,&FFFF):NEXT
-1588 FOR I%=0 TO 63 STEP 4:!(&FF80000+C3%+I%)=0:NEXT
-1590 FOR I%=0 TO 31:?(OV%+86+I%)=0:NEXT:?(OV%+86+5)=1:?(OV%+86+6)=&40+(OL%>>16)+&80*RB%:?(OV%+86+9)=(OL%>>8) AND 255:?(OV%+86+10)=C3% AND 255:?(OV%+86+11)=C3%>>8
-1592 CALL AI%:REM rings: the template written to 1000 entries
-1594 FOR I%=0 TO 19:IF I%<8 THEN A%=RT%+32*I%:X%=56*I%+20*(I% MOD 3):Y%=10+(I%*13) MOD 26:S%=OL%+16:W%=20 ELSE A%=RT%+32*(1000+I%):X%=40*(I%-8):Y%=176+8*(I% MOD 3):S%=OL%+56:W%=16
+1580 REM objects: 0..7 clouds (64x16, rows 0..5), 8..1007 rings (8x8; X, Y, mask and token list from A3% each frame), 1008..1019 bushes (48x16, rows 22..25); PROCobjs(slice 3..25)
+1582 DEF PROCobjs(Q%):LOCAL I%,A%,X%,Y%,S%,W%,O%,X3%:IF Q%>5 THEN PROCobj1(Q%-6):ENDPROC
+1584 IF Q%=3 THEN FOR I%=0 TO 3:!(OL%+4*I%)=&FFFF0000+&17A0+I%:NEXT:A%=OL%+16:FOR I%=0 TO 1:FOR X%=0 TO 7:PROCw(A%+20*I%+2*X%,&17A4+8*I%+X%):NEXT:PROCw(A%+20*I%+16,&FFFF):NEXT
+1586 IF Q%=3 THEN A%=OL%+56:FOR I%=0 TO 1:FOR X%=0 TO 5:PROCw(A%+16*I%+2*X%,&17B4+6*I%+X%):NEXT:PROCw(A%+16*I%+12,&FFFF):NEXT
+1588 IF Q%=4 THEN FOR I%=0 TO 63 STEP 4:!(&FF80000+C3%+I%)=0:NEXT
+1590 IF Q%=4 THEN FOR I%=0 TO 31:?(OV%+86+I%)=0:NEXT:?(OV%+86+5)=1:?(OV%+86+6)=&40+(OL%>>16)+&80*RB%:?(OV%+86+9)=(OL%>>8) AND 255:?(OV%+86+10)=C3% AND 255:?(OV%+86+11)=C3%>>8
+1592 IF Q%=5 THEN CALL AI%:REM rings: the template written to 1000 entries
+1593 ENDPROC
+1594 DEF PROCobj1(I%):LOCAL A%,X%,Y%,S%,W%,O%,X3%:IF I%<8 THEN A%=RT%+32*I%:X%=56*I%+20*(I% MOD 3):Y%=10+(I%*13) MOD 26:S%=OL%+16:W%=20 ELSE A%=RT%+32*(1000+I%):X%=40*(I%-8):Y%=176+8*(I% MOD 3):S%=OL%+56:W%=16
 1596 FOR X3%=0 TO 31 STEP 4:!(A%+X3%)=0:NEXT:PROCw(A%,X% AND &3FF):PROCw(A%+2,Y%):?(A%+4)=&FF:?(A%+5)=2:?(A%+6)=&40+(S%>>16):PROCw(A%+8,S% AND &FFFF):PROCw(A%+10,C3%):PROCw(A%+12,W%)
-1598 O%=OV%+8+3*I%:?O%=0:PROCw(O%+1,X%):NEXT:?(OV%+5)=64:?(OV%+6)=0:?(OV%+3)=0:?(OV%+4)=0:ENDPROC
+1598 O%=OV%+8+3*I%:?O%=0:PROCw(O%+1,X%):IF I%=19 THEN ?(OV%+5)=64:?(OV%+6)=0:?(OV%+3)=0:?(OV%+4)=0
+1599 ENDPROC
 1600 DEF PROCw(A%,V%):?A%=V% AND 255:?(A%+1)=(V%>>8) AND 255:ENDPROC
+1700 REM ---- act 3's set-up in 26 steps, run at the start (line 160; step 0, the palette, after PROCvic): HUD page and captions, then (objects) the token lists, the template, the 1000 ring entries, the 20 clouds and bushes
+1702 DEF PROCprep:LOCAL I%:IF P3%>25 THEN ENDPROC
+1704 IF P3%=0 THEN ?&D1FA=&FF:?&D2FA=&FF:?&D3FA=&FF:?&D1FB=0:?&D2FB=0:?&D3FB=0:FOR I%=0 TO 31:?(&D1C0+I%)=?(OP%+I%):?(&D2C0+I%)=?(OP%+32+I%):?(&D3C0+I%)=?(OP%+64+I%):NEXT
+1706 IF P3%=1 THEN PROCfill(HU%,26*80,&40,&17)
+1708 IF P3%=2 THEN PROCput(11,"NOW WITH THE K325T VIC-IV"):IF K3%=0 THEN PROCput(13,"THIS CORE: 64 RINGS, PLAIN RRB")
+1710 IF P3%>2 THEN IF K3%+XT% THEN PROCobjs(P3%)
+1712 P3%=P3%+1:ENDPROC
 9000 DEF PROCxctl2(B%):REM XCTL2 bit 0 (4-pixel painting, with XCTL bits 4 and 7) from feature level 4
 9010 IF ?&FFD71FD>=4 THEN ?&FFD71F1=(?&FFD71F1 AND &FE) OR B%
 9020 ENDPROC
