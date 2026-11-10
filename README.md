@@ -9,7 +9,7 @@ and docs/DESIGN.md for the design.
 
 ## Features
 
-Version: **v0.3-dev** (shown in the start-up banner; the string lives only in
+Version: **v0.3** (shown in the start-up banner; the string lives only in
 `src/version.a`).
 
 | Area | Status |

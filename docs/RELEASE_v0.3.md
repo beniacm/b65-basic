@@ -1,8 +1,8 @@
-# B65 BASIC v0.3-dev (changelog, draft)
+# B65 BASIC v0.3 (release notes)
 
-Changes since v0.2 (tag v0.2 on 46cf09e). To be released with the K325T
-step-7 core (feature level 4: XCTL2 `$FFD71F1` bit 0, 4-pixel painting);
-until then this file grows with every change.
+Changes since v0.2 (tag v0.2 on 46cf09e). B65 BASIC v0.3 goes together with
+the K325T step-7 core (feature level 4: XCTL2 `$FFD71F1` bit 0, 4-pixel
+painting).
 
 ## For BASIC 65: OBJ65
 
@@ -124,7 +124,7 @@ fast RRB and token paths (XCTL bits 4 and 7) bring the same row to
 
 ## B65
 
-- Version string v0.3-dev (`*INFO` tells it from the release).
+- Version string v0.3 (banner and `*INFO`).
 - `BGET#c,addr,n`: a block read, n bytes from `PTR#` (fewer at the end of
   the file) to memory at addr (28-bit; below &10000 bank 0), `PTR#` moves
   on; about 0.5 ms a KB instead of a BASIC `BGET#` loop
