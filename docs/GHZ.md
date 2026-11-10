@@ -234,6 +234,15 @@ captions free of rings; "1000 RINGS. 10 LAYERS. STILL BASIC." reached. It
 still held the picture briefly at the two act changes (the set-ups); 238201f
 moved those set-ups out of the frame loop.
 
+The release build ab024b7 (S8, same binaries as 118aa99) the same day: act
+1 1500 frames 3 late, longest painting 1076; act 2 1500 frames 0 late,
+1602; act 3 1401 frames 27 late, 1635; late pixels 0 in all acts, 0
+one-frame glitches. Its remaining blemishes (the waterfall magenta for 19
+frames at the start, short static runs at act 1 -> 2 and in act 3's first
+second, from first compiles) are what 668bf11 addresses: the palette is
+complete before the display goes on (frame 12), and PROCwarm runs the act
+changes' code once at the start with the display off.
+
 Acts 1 and 2 use only standard VIC-IV features and should look the same on
 a standard MEGA65 (not tested: reports to
 https://github.com/beniacm/b65-basic/issues); act 3 needs the K325T list

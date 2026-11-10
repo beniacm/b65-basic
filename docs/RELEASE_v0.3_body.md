@@ -33,10 +33,12 @@ Then `LOAD "GHZ"`, `RUN` in B65.
 - `B65GHZG.BBC` and `B65GHZS.BBC`: GHZ's data files, for the SD card root.
 
 **Verified:**
-- K325T rig with the step-7 core (batch 3, 0b3eadd7b, feature level 4):
-  - smoke (SMOKE COUNT), the v3 object board test (BOARD_V3), SELFTEST (SELFTEST COUNT);
+- K325T rig with the step-7 core (feature level 4):
+  - smoke 34 of 34, the v3 object board test 20 PASS / 0 FAIL, SELFTEST 14 PASS / 0 FAIL (batch 4 core);
+  - demos at 50 fps: jumper 600 frames in 1198 cs, swarm2 1500 in 3056 cs, bounce 1500 in 3004 cs (850 pairs), parallax 600 in 1200 cs;
+  - the SD card fsck-clean before and after the file tests;
   - 4-pixel painting: (4PX FIGURES);
-  - GHZ on 2026-11-10: 1500 / 1492 / 1401 frames in its three acts at 50 fps, no late pixels, no one-frame glitches in the video.
+  - GHZ (2026-11-10): 1500 / 1500 / 1401 frames in its three acts at 50 fps, no late pixels, no one-frame glitches in the video.
 - Xemu: smoke, the check scripts, the GHZ, object and HITPIX models, and the card tests (fsck clean).
 
 **A standard MEGA65 has not been tested yet.** B65 is written to run on one. Everything works there except drawing the list-mode objects, which still move logically. GHZ's acts 1 and 2 use only standard VIC-IV features; act 3 then shows a one-line note. If you have a standard MEGA65, please type `*INFO`, run SELFTEST (`LOAD "SELFTEST"`, `RUN`) and GHZ, and paste the outputs (GHZ prints frames and late frames per act at the end) into an issue at https://github.com/beniacm/b65-basic/issues. Reports of any kind are welcome.

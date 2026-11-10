@@ -90,14 +90,21 @@ video: (link follows)
   lines (frames and late frames per act), `*INFO` and the SELFTEST output
   into an issue at https://github.com/beniacm/b65-basic/issues.
 
-Recorded on 2026-11-10 on the QMTECH K325T board (core batch 3, 0b3eadd7b,
-feature level 4; art from INTRO2.D81; `LOAD "GHZ"` / `RUN` from the card):
+Recorded on 2026-11-10 on the QMTECH K325T board (feature level 4; art from
+INTRO2.D81; `LOAD "GHZ"` / `RUN` from the card), the release build
+ab024b7 (same binaries as 118aa99):
 
 | act | frames | late frames | longest painting (pixel cycles) | late pixels |
 |---|---|---|---|---|
 | 1 | 1500 | 3 | 1076 | 0 |
-| 2 | 1492 | 17 | 1602 | 0 |
-| 3 | 1401 | 15 | 1689 | 0 |
+| 2 | 1500 | 0 | 1602 | 0 |
+| 3 | 1401 | 27 | 1635 | 0 |
+
+0 one-frame glitches in the 105 s video. 668bf11 (S9) then removed the last
+blemishes of that take: the waterfall magenta for the first 19 frames (the
+palette is now complete before the display goes on, at frame 12) and the
+short static runs at act 1 -> 2 and in act 3's first second (first compiles,
+now done in a warm-up at the start; act 3's late frames came from there).
 
 50 fps throughout (late frames are counted from each act's 11th frame
 through the VIC-IV's frame counter `$D7FA`); the act-3 HUD reached RINGS
